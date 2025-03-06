@@ -48,6 +48,7 @@ if len(sys.argv) >= 5:
             "negative_prompt": "(deformed, distorted, disfigured:1.3), poorly drawn, bad anatomy, wrong anatomy, extra limb, missing limb, floating limbs, (mutated hands and fingers:1.4), disconnected limbs, mutation, mutated, ugly, disgusting, blurry, amputation",
             "sampler_name": "DPM++ 2M",
             "scheduler": "Automatic",
+            "cfg_scale": 7.5,
             "seed": -1,
             "steps": 20,
             "width": width,

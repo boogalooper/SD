@@ -13,46 +13,52 @@ const SD_Output = 'c:\\Users\\Dmitry\\stable-diffusion-webui\\outputs',
 
 var doc = new AM('document'),
     lr = new AM('layer'),
+    apl = new AM('application'),
     s2t = stringIDToTypeID,
     t2s = typeIDToStringID,
     runMode = false;
 
-try { runMode = (d = app.playbackParameters).getBoolean(d.getKey(0)) } catch (e) { }
-if (ExternalObject.AdobeXMPScript == undefined) ExternalObject.AdobeXMPScript = new ExternalObject('lib:AdobeXMPScript')
-const myCustomNamespace = 'Selection',
-    myCustomPrefix = 'SDHelper:';
-var xmpMeta = new XMPMeta(app.activeDocument.xmpMetadata.rawData);
-if (doc.hasProperty('selection') || xmpMeta.doesPropertyExist(myCustomNamespace, 'top')) {
-    var pth = browseFolder(new Folder(SD_Output));
-    if (pth.length) {
-        pth.sort(function (x, y) {
-            return x.time < y.time ? 1 : -1
-        });
-        if (doc.hasProperty('selection')) {
-            var bounds = doc.descToObject(doc.getProperty('selection').value);
+if (apl.getProperty('numberOfDocuments')) activeDocument.suspendHistory('Paste generated image', 'main()')
+function main() {
+
+    try { runMode = (d = app.playbackParameters).getBoolean(d.getKey(0)) } catch (e) { }
+    if (ExternalObject.AdobeXMPScript == undefined) ExternalObject.AdobeXMPScript = new ExternalObject('lib:AdobeXMPScript')
+    const myCustomNamespace = 'Selection',
+        myCustomPrefix = 'SDHelper:';
+    var xmpMeta = new XMPMeta(app.activeDocument.xmpMetadata.rawData);
+    if (doc.hasProperty('selection') || xmpMeta.doesPropertyExist(myCustomNamespace, 'top')) {
+        var pth = browseFolder(new Folder(SD_Output));
+        if (pth.length) {
+            pth.sort(function (x, y) {
+                return x.time < y.time ? 1 : -1
+            });
+            if (doc.hasProperty('selection')) {
+                var bounds = doc.descToObject(doc.getProperty('selection').value);
+            }
+            else {
+                var bounds = {};
+                bounds.top = Number(xmpMeta.getProperty(myCustomNamespace, 'top').value);
+                bounds.left = Number(xmpMeta.getProperty(myCustomNamespace, 'left').value);
+                bounds.bottom = Number(xmpMeta.getProperty(myCustomNamespace, 'bottom').value);
+                bounds.right = Number(xmpMeta.getProperty(myCustomNamespace, 'right').value);
+                doc.makeSelection(bounds.top, bounds.left, bounds.bottom, bounds.right);
+            }
+            doc.place(pth[0].file)
+            var placedBounds = doc.descToObject(lr.getProperty('bounds').value);
+            var dW = (bounds.right - bounds.left) / (placedBounds.right - placedBounds.left);
+            var dH = (bounds.bottom - bounds.top) / (placedBounds.bottom - placedBounds.top)
+            lr.transform(dW * 100, dH * 100);
+            lr.rasterize();
+            lr.makeMask(MASK_MODE == 0 ? runMode : (MASK_MODE == 1 ? false : true));
+            lr.setName('SD')
+            doc.selectBrush();
+            doc.setBrushOpacity(BRUSH_OPACITY)
+            doc.resetSwatches()
+            pth[0].file.remove();
         }
-        else {
-            var bounds = {};
-            bounds.top = Number(xmpMeta.getProperty(myCustomNamespace, 'top').value);
-            bounds.left = Number(xmpMeta.getProperty(myCustomNamespace, 'left').value);
-            bounds.bottom = Number(xmpMeta.getProperty(myCustomNamespace, 'bottom').value);
-            bounds.right = Number(xmpMeta.getProperty(myCustomNamespace, 'right').value);
-            doc.makeSelection(bounds.top, bounds.left, bounds.bottom, bounds.right);
-        }
-        doc.place(pth[0].file)
-        var placedBounds = doc.descToObject(lr.getProperty('bounds').value);
-        var dW = (bounds.right - bounds.left) / (placedBounds.right - placedBounds.left);
-        var dH = (bounds.bottom - bounds.top) / (placedBounds.bottom - placedBounds.top)
-        lr.transform(dW * 100, dH * 100);
-        lr.rasterize();
-        lr.makeMask(MASK_MODE == 0 ? runMode : (MASK_MODE == 1 ? false : true));
-        lr.setName('SD')
-        doc.selectBrush();
-        doc.setBrushOpacity(BRUSH_OPACITY)
-        doc.resetSwatches()
-        pth[0].file.remove();
     }
 }
+
 function findAllFiles(srcFolder, fileObj, useSubfolders) {
     if (!srcFolder) return
     var fileFolderArray = Folder(srcFolder).getFiles(),
