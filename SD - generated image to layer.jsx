@@ -1,14 +1,15 @@
 #target photoshop
-
 /*
 // BEGIN__HARVEST_EXCEPTION_ZSTRING
 <javascriptresource> 
-<name>SD Helper</name> 
+<name>SD - generated image to layer</name> 
 <eventid>55a8fbbe-9b5e-4a82-8601-1921bcd61edd</eventid>
 </javascriptresource>
 // END__HARVEST_EXCEPTION_ZSTRING
 */
-const SD_Output = 'c:\\Users\\Dmitry\\stable-diffusion-webui\\outputs';
+const SD_Output = 'c:\\Users\\Dmitry\\stable-diffusion-webui\\outputs',
+    BRUSH_OPACITY = 50,
+    MASK_MODE = 0; //0 - auto, 1 - hide all, 2 - reveal all
 
 var doc = new AM('document'),
     lr = new AM('layer'),
@@ -17,13 +18,10 @@ var doc = new AM('document'),
     runMode = false;
 
 try { runMode = (d = app.playbackParameters).getBoolean(d.getKey(0)) } catch (e) { }
-
 if (ExternalObject.AdobeXMPScript == undefined) ExternalObject.AdobeXMPScript = new ExternalObject('lib:AdobeXMPScript')
 const myCustomNamespace = 'Selection',
     myCustomPrefix = 'SDHelper:';
-
 var xmpMeta = new XMPMeta(app.activeDocument.xmpMetadata.rawData);
-
 if (doc.hasProperty('selection') || xmpMeta.doesPropertyExist(myCustomNamespace, 'top')) {
     var pth = browseFolder(new Folder(SD_Output));
     if (pth.length) {
@@ -41,24 +39,20 @@ if (doc.hasProperty('selection') || xmpMeta.doesPropertyExist(myCustomNamespace,
             bounds.right = Number(xmpMeta.getProperty(myCustomNamespace, 'right').value);
             doc.makeSelection(bounds.top, bounds.left, bounds.bottom, bounds.right);
         }
-
         doc.place(pth[0].file)
         var placedBounds = doc.descToObject(lr.getProperty('bounds').value);
         var dW = (bounds.right - bounds.left) / (placedBounds.right - placedBounds.left);
         var dH = (bounds.bottom - bounds.top) / (placedBounds.bottom - placedBounds.top)
-
         lr.transform(dW * 100, dH * 100);
         lr.rasterize();
-        lr.makeMask(runMode);
+        lr.makeMask(MASK_MODE == 0 ? runMode : (MASK_MODE == 1 ? false : true));
         lr.setName('SD')
         doc.selectBrush();
-        doc.setBrushOpacity(50)
+        doc.setBrushOpacity(BRUSH_OPACITY)
         doc.resetSwatches()
-       // doc.exchangeSwatches()
         pth[0].file.remove();
     }
 }
-
 function findAllFiles(srcFolder, fileObj, useSubfolders) {
     if (!srcFolder) return
     var fileFolderArray = Folder(srcFolder).getFiles(),
@@ -125,13 +119,11 @@ function AM(target, order) {
         d.putBoolean(s2t("makeVisible"), false)
         executeAction(s2t("select"), d, DialogModes.NO)
     }
-
     this.place = function (pth) {
         var descriptor = new ActionDescriptor();
         descriptor.putPath(s2t("null"), pth);
         descriptor.putBoolean(s2t("linked"), true);
         executeAction(s2t("placeEvent"), descriptor, DialogModes.NO);
-
     }
     this.makeSelection = function (top, left, bottom, right) {
         (r = new ActionReference()).putProperty(s2t('channel'), s2t('selection'));
@@ -152,7 +144,6 @@ function AM(target, order) {
         d.putUnitDouble(s2t("height"), s2t("percentUnit"), dh);
         executeAction(s2t("transform"), d, DialogModes.NO);
     }
-
     this.makeMask = function (hide) {
         var mode = hide ? 'revealAll' : 'hideAll';
         (d = new ActionDescriptor()).putClass(s2t("new"), s2t("channel"));
@@ -161,7 +152,6 @@ function AM(target, order) {
         d.putEnumerated(s2t("using"), s2t("userMask"), s2t(mode));
         executeAction(s2t("make"), d, DialogModes.NO);
     }
-
     this.setName = function (title) {
         (r = new ActionReference()).putEnumerated(s2t("layer"), s2t("ordinal"), s2t("targetEnum"));
         (d = new ActionDescriptor()).putReference(s2t("null"), r);
@@ -169,59 +159,50 @@ function AM(target, order) {
         d.putObject(s2t("to"), s2t("layer"), d1);
         executeAction(s2t("set"), d, DialogModes.NO);
     }
-
     this.rasterize = function () {
         (d = new ActionDescriptor()).putReference(s2t('target'), r);
         executeAction(s2t('rasterizePlaced'), d, DialogModes.NO);
     }
-
     this.selectBrush = function () {
         (r = new ActionReference()).putClass(s2t("paintbrushTool"));
         (d = new ActionDescriptor()).putReference(s2t("null"), r);
         executeAction(s2t("select"), d, DialogModes.NO);
     }
-
     this.setBrushOpacity = function (opacity) {
         (r = new ActionReference()).putProperty(s2t('property'), p = s2t('currentToolOptions'));
         r.putEnumerated(s2t('application'), s2t('ordinal'), s2t('targetEnum'));
         var tool = executeActionGet(r).getObjectValue(p);
-
         tool.putInteger(s2t('opacity'), opacity);
-
         (r = new ActionReference()).putClass(s2t(currentTool));
         (d = new ActionDescriptor()).putReference(s2t("target"), r);
         d.putObject(s2t("to"), s2t("target"), tool);
         executeAction(s2t("set"), d, DialogModes.NO);
     }
-
     this.resetSwatches = function () {
         (r = new ActionReference()).putProperty(s2t("color"), s2t("colors"));
         (d = new ActionDescriptor()).putReference(s2t("null"), r);
         executeAction(s2t("reset"), d, DialogModes.NO);
     }
-
     this.exchangeSwatches = function () {
         (r = new ActionReference()).putProperty(s2t("color"), s2t("colors"));
         (d = new ActionDescriptor()).putReference(s2t("null"), r);
         executeAction(s2t("exchange"), d, DialogModes.NO);
     }
-
-function getDescValue(d, p) {
-    switch (d.getType(p)) {
-        case DescValueType.OBJECTTYPE: return { type: t2s(d.getObjectType(p)), value: d.getObjectValue(p) };
-        case DescValueType.LISTTYPE: return d.getList(p);
-        case DescValueType.REFERENCETYPE: return d.getReference(p);
-        case DescValueType.BOOLEANTYPE: return d.getBoolean(p);
-        case DescValueType.STRINGTYPE: return d.getString(p);
-        case DescValueType.INTEGERTYPE: return d.getInteger(p);
-        case DescValueType.LARGEINTEGERTYPE: return d.getLargeInteger(p);
-        case DescValueType.DOUBLETYPE: return d.getDouble(p);
-        case DescValueType.ALIASTYPE: return d.getPath(p);
-        case DescValueType.CLASSTYPE: return d.getClass(p);
-        case DescValueType.UNITDOUBLE: return (d.getUnitDoubleValue(p));
-        case DescValueType.ENUMERATEDTYPE: return { type: t2s(d.getEnumerationType(p)), value: t2s(d.getEnumerationValue(p)) };
-        default: break;
-    };
-}
-
+    function getDescValue(d, p) {
+        switch (d.getType(p)) {
+            case DescValueType.OBJECTTYPE: return { type: t2s(d.getObjectType(p)), value: d.getObjectValue(p) };
+            case DescValueType.LISTTYPE: return d.getList(p);
+            case DescValueType.REFERENCETYPE: return d.getReference(p);
+            case DescValueType.BOOLEANTYPE: return d.getBoolean(p);
+            case DescValueType.STRINGTYPE: return d.getString(p);
+            case DescValueType.INTEGERTYPE: return d.getInteger(p);
+            case DescValueType.LARGEINTEGERTYPE: return d.getLargeInteger(p);
+            case DescValueType.DOUBLETYPE: return d.getDouble(p);
+            case DescValueType.ALIASTYPE: return d.getPath(p);
+            case DescValueType.CLASSTYPE: return d.getClass(p);
+            case DescValueType.UNITDOUBLE: return (d.getUnitDoubleValue(p));
+            case DescValueType.ENUMERATEDTYPE: return { type: t2s(d.getEnumerationType(p)), value: t2s(d.getEnumerationValue(p)) };
+            default: break;
+        };
+    }
 }
