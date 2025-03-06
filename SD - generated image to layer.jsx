@@ -25,8 +25,10 @@ function main() {
     if (ExternalObject.AdobeXMPScript == undefined) ExternalObject.AdobeXMPScript = new ExternalObject('lib:AdobeXMPScript')
     const myCustomNamespace = 'Selection',
         myCustomPrefix = 'SDHelper:';
-    var xmpMeta = new XMPMeta(app.activeDocument.xmpMetadata.rawData);
-    if (doc.hasProperty('selection') || xmpMeta.doesPropertyExist(myCustomNamespace, 'top')) {
+    var xmpMeta = new XMPMeta(app.activeDocument.xmpMetadata.rawData),
+    metaExists = false;
+    try {metaExists = xmpMeta.doesPropertyExist(myCustomNamespace, 'top')} catch(e){};
+    if (doc.hasProperty('selection') || metaExists) {
         var pth = browseFolder(new Folder(SD_Output));
         if (pth.length) {
             pth.sort(function (x, y) {
