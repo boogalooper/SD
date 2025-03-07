@@ -49,7 +49,6 @@ function init() {
                 isCancelled = true
             }
         }
-        alert(cfg.strength)
     }
     else {
         cfg.getScriptSettings()
@@ -66,7 +65,6 @@ function init() {
         } else {
             if (b) main(b)
         }
-        alert(cfg.strength)
     }
 }
 function main(bounds) {
