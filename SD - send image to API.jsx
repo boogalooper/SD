@@ -241,9 +241,9 @@ function dialogWindow(bounds) {
     function commonHandler(evt) {
         if (evt.shiftKey) {
             if (evt.keyIdentifier == 'Right' || evt.keyIdentifier == 'Up') {
-                slider.value = Math.round(slider.value / 5) * 5 + 4
+                slider.value = Math.floor(slider.value / 5) * 5 + 4
             } else if (evt.keyIdentifier == 'Left' || evt.keyIdentifier == 'Down') {
-                slider.value = Math.round(slider.value / 5) * 5 - 4
+                slider.value = Math.ceil(slider.value / 5) * 5 - 4
             }
 
         }

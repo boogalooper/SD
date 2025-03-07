@@ -53,9 +53,9 @@ function main() {
             lr.rasterize();
             lr.makeMask(MASK_MODE == 0 ? runMode : (MASK_MODE == 1 ? false : true));
             lr.setName('SD')
+            doc.resetSwatches()
             doc.selectBrush();
             doc.setBrushOpacity(BRUSH_OPACITY)
-            doc.resetSwatches()
             pth[0].file.remove();
         }
     }
