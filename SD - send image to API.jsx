@@ -7,7 +7,6 @@
 <terminology><![CDATA[<< /Version 1
                         /Events <<
                         /32190faf-82e5-495b-918a-1f52d3029ec1 [(SD - send image to API) <<
-                        /strength [(Strength) /double]
                         >>]
                          >>
                       >> ]]></terminology>
@@ -50,9 +49,10 @@ function init() {
                 isCancelled = true
             }
         }
+        alert(cfg.strength)
     }
     else {
-        cfg.getScriptSettings(true)
+        cfg.getScriptSettings()
         if (app.playbackDisplayDialogs == DialogModes.ALL) {
             var w = dialogWindow(b); var result = w.show()
             if (result == 2) {
@@ -60,11 +60,13 @@ function init() {
                 return;
             } else {
                 if (b) main(b)
+                cfg.putScriptSettings()
                 cfg.putScriptSettings(true)
             }
         } else {
             if (b) main(b)
         }
+        alert(cfg.strength)
     }
 }
 function main(bounds) {
