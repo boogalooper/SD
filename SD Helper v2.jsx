@@ -36,6 +36,8 @@ var time = (new Date).getTime(),
     isCancelled = false,
     targetID = null,
     cleanup = false;
+
+if (ScriptUI.environment.keyboardState.shiftKey) $.setenv('dialogMode', true)
 try { init() } catch (e) {
     SD.exit()
     if (cleanup && targetID) doc.deleteLayer(targetID)
