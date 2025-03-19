@@ -865,7 +865,7 @@ function AM(target, order) {
         d.putObject(s2t('to'), s2t('rectangle'), d1);
         executeAction(s2t('set'), d, DialogModes.NO);
     }
-    this. = function (id) {
+    this.deleteLayer = function (id) {
         (r = new ActionReference()).putIdentifier(s2t("layer"), id);
         (d = new ActionDescriptor()).putReference(s2t('null'), r);
         executeAction(s2t('delete'), d, DialogModes.NO);
