@@ -47,7 +47,7 @@ try { init() } catch (e) {
 isCancelled ? 'cancel' : undefined
 function init() {
     var b = checkSelection();
-    if (!app.playbackParameters.count || app.playbackParameters.count == 1) {
+    if (b && (!app.playbackParameters.count || app.playbackParameters.count == 1)) {
         cfg.getScriptSettings();
         if (app.playbackParameters.count == 1) $.setenv('dialogMode', true)
         if (($.getenv('dialogMode') == 'true' || $.getenv('dialogMode') == null) && b) {
