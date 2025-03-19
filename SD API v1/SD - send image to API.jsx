@@ -15,12 +15,14 @@
 */
 const SD_OUTPUT = 'c:\\Users\\Dmitry\\stable-diffusion-webui\\outputs\\img2img-images',
     UUID = '32190faf-82e5-495b-918a-1f52d3029ec1',
-    FLATTEN_LAYERS = false;
+    FLATTEN_LAYERS = false,
+    LAYER_NAME = "SD generated image";
 var s2t = stringIDToTypeID,
     t2s = typeIDToStringID,
     apl = new AM('application'),
     doc = new AM('document'),
     lr = new AM('layer'),
+    ch = new AM('channel'),
     cfg = new Config(),
     isCancelled = false;
 init();
@@ -29,6 +31,7 @@ function init() {
     var b = getSelectionBounds();
     if (!app.playbackParameters.count || app.playbackParameters.count == 1) {
         cfg.getScriptSettings();
+        cfg.dialogMode = true;//
         if (app.playbackParameters.count == 1) cfg.dialogMode = true
         if (cfg.dialogMode && b) {
             var w = dialogWindow(b); var result = w.show()
@@ -39,12 +42,12 @@ function init() {
                 cfg.dialogMode = false;
                 cfg.putScriptSettings(true)
                 cfg.putScriptSettings()
-                main(b)
+                //   main(b)
             }
         } else {
             if (b) {
                 cfg.putScriptSettings(true)
-                main(b)
+                //      main(b)
             } else {
                 isCancelled = true
             }
@@ -52,25 +55,25 @@ function init() {
     }
     else {
         cfg.getScriptSettings()
-        if (app.playbackDisplayDialogs == DialogModes.ALL) {
+        cfg.dialogMode = true;//
+        if (app.playbackDisplayDialogs == DialogModes.ALL || cfg.dialogMode = true/**/) {
             var w = dialogWindow(b); var result = w.show()
             if (result == 2) {
                 isCancelled = true;
                 return;
             } else {
-                if (b) main(b)
+                //     if (b) main(b)
                 cfg.putScriptSettings()
                 cfg.putScriptSettings(true)
             }
         } else {
-            if (b) main(b)
+            //     if (b) main(b)
         }
     }
 }
 function main(bounds) {
     var sdApiConnector = new File(File($.fileName).path + '/sd-webui-api.pyw')
     if (sdApiConnector.exists) {
-        if (lr.getProperty('name') == 'SD' & lr.getProperty('hasUserMask')) doc.deleteCurrentLayer()
         var hst = activeDocument.activeHistoryState,
             c = doc.getProperty('center').value;
         doc.crop(true);
@@ -81,7 +84,7 @@ function main(bounds) {
             offset = doc.getProperty('hasBackgroundLayer') ? 0 : 1;
             for (var i = start + offset; i <= len; i++) lrsList.putIdentifier(s2t("layer"), lr.getProperty('layerID', false, i, true));
             if (start + offset <= len) {
-                doc.selectLayerByIDList(lrsList);
+                doc.selectLayersByIDList(lrsList);
                 doc.hideSelectedLayers();
             }
         }
@@ -103,9 +106,25 @@ function main(bounds) {
 }
 function getSelectionBounds() {
     if (apl.getProperty('numberOfDocuments')) {
-        if (lr.getProperty('name') == 'SD' & lr.getProperty('hasUserMask')) doc.makeSelectionFromChannel();
+        var currentChannel = findSDChannel(LAYER_NAME)
         if (doc.hasProperty('quickMask')) doc.clearQuickMask();
+
+        if (lr.getProperty('name') == LAYER_NAME && lr.getProperty('hasUserMask') && !doc.hasProperty('selection')) {
+            /*  if (doc.hasProperty('selection')) {
+                  currentChannel ? lr.replaceChannel(currentChannel) : lr.selectionToChannel(LAYER_NAME)
+              } else {*/
+            lr.selectUserMask()
+            doc.makeSelectionFromLayer('targetEnum');
+            if (doc.hasProperty('selection')) {
+                currentChannel ? lr.replaceChannel(currentChannel) : lr.selectionToChannel(LAYER_NAME)
+            }
+            // }
+            doc.makeSelectionFromLayer('transparencyEnum');
+            doc.deleteCurrentLayer();//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        }
         if (doc.hasProperty('selection')) {
+            currentChannel ? lr.replaceChannel(currentChannel) : lr.selectionToChannel(LAYER_NAME)
+
             var b = doc.descToObject(doc.getProperty('selection').value),
                 w = Math.round((b.right - b.left) / 8) * 8,
                 h = Math.round((b.bottom - b.top) / 8) * 8;
@@ -120,6 +139,13 @@ function getSelectionBounds() {
         }
     }
     return null
+
+    function findSDChannel(title) {
+        var idx = 1;
+        do {
+            try { if (ch.getProperty('channelName', false, idx++, true) == title) return idx - 1 } catch (e) { return 0 }
+        } while (true)
+    }
 }
 function AM(target, order) {
     var s2t = stringIDToTypeID,
@@ -179,12 +205,18 @@ function AM(target, order) {
         (d = new ActionDescriptor()).putReference(s2t('null'), r);
         executeAction(s2t('delete'), d, DialogModes.NO);
     }
-    this.makeSelectionFromChannel = function () {
+    this.makeSelectionFromLayer = function (enumType) {
+        // transparencyEnum // targetEnum
         (r = new ActionReference()).putProperty(s2t('channel'), s2t('selection'));
         (d = new ActionDescriptor()).putReference(s2t('null'), r);
-        (r1 = new ActionReference()).putEnumerated(s2t('channel'), s2t('channel'), s2t("transparencyEnum"));
+        (r1 = new ActionReference()).putEnumerated(s2t('channel'), s2t('channel'), s2t(enumType));
         d.putReference(s2t('to'), r1);
         executeAction(s2t('set'), d, DialogModes.NO);
+    }
+    this.selectUserMask = function () {
+        (r = new ActionReference()).putEnumerated(s2t("channel"), s2t("channel"), s2t("mask"));
+        (d = new ActionDescriptor()).putReference(s2t("null"), r);
+        executeAction(s2t("select"), d, DialogModes.NO);
     }
     this.clearQuickMask = function () {
         (r = new ActionReference()).putProperty(s2t("property"), s2t("quickMask"));
@@ -196,7 +228,7 @@ function AM(target, order) {
         (d = new ActionDescriptor()).putBoolean(s2t("delete"), deletePixels);
         executeAction(s2t("crop"), d, DialogModes.NO);
     }
-    this.selectLayerByIDList = function (IDList) {
+    this.selectLayersByIDList = function (IDList) {
         (d = new ActionDescriptor()).putReference(s2t("null"), IDList)
         executeAction(s2t("select"), d, DialogModes.NO)
     }
@@ -205,6 +237,20 @@ function AM(target, order) {
         (l = new ActionList()).putReference(r);
         (d = new ActionDescriptor()).putList(s2t("null"), l);
         executeAction(s2t("hide"), d, DialogModes.NO);
+    }
+    this.selectionToChannel = function (title) {
+        //duplicate //set
+        (r = new ActionReference()).putProperty(s2t("channel"), s2t("selection"));
+        (d = new ActionDescriptor()).putReference(s2t("null"), r);
+        d.putString(s2t("name"), title);
+        executeAction(s2t("duplicate"), d, DialogModes.NO);
+    }
+    this.replaceChannel = function (idx) {
+        (r = new ActionReference()).putIndex(s2t("channel"), idx);
+        (d = new ActionDescriptor()).putReference(s2t("null"), r);
+        (r1 = new ActionReference()).putProperty(s2t("channel"), s2t("selection"));
+        d.putReference(s2t("to"), r1);
+        executeAction(s2t("set"), d, DialogModes.NO);
     }
     function getDescValue(d, p) {
         switch (d.getType(p)) {
@@ -237,6 +283,7 @@ function dialogWindow(bounds) {
     slider.onChanging = function () { slider.onChange() }
 
     slider.addEventListener('keydown', commonHandler)
+    slider.addEventListener('keyup', altHandler)
 
     function commonHandler(evt) {
         if (evt.shiftKey) {
@@ -246,8 +293,9 @@ function dialogWindow(bounds) {
                 slider.value = Math.ceil(slider.value / 5) * 5 - 4
             }
 
-        }
+        } 
     }
+
     w.onShow = function () {
         bnOk.text = cfg.strength
         if (bounds) text.text = 'Selection size: ' + bounds.width + 'x' + bounds.height

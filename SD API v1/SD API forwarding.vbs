@@ -12,4 +12,4 @@ Set desc = CreateObject("Photoshop.ActionDescriptor")
 if WshArguments.count()> 0 then
     desc.putBoolean appRef.stringIDToTypeID("args"), true
 End if
-appRef.executeAction appRef.stringIDToTypeID("338cc304-fb6f-4b1f-8ad4-13bbd65f117c"), desc, 3
+appRef.executeAction appRef.stringIDToTypeID("32190faf-82e5-495b-918a-1f52d3029ec1"), desc, 3

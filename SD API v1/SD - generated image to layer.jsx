@@ -9,50 +9,41 @@
 */
 const SD_Output = 'c:\\Users\\Dmitry\\stable-diffusion-webui\\outputs',
     BRUSH_OPACITY = 50,
-    MASK_MODE = 0; //0 - auto, 1 - hide all, 2 - reveal all
-
+    LAYER_NAME = "SD generated image";
 var doc = new AM('document'),
     lr = new AM('layer'),
     apl = new AM('application'),
+    ch = new AM('channel'),
     s2t = stringIDToTypeID,
     t2s = typeIDToStringID,
     runMode = false;
 
 if (apl.getProperty('numberOfDocuments')) activeDocument.suspendHistory('Paste generated image', 'main()')
 function main() {
-
     try { runMode = (d = app.playbackParameters).getBoolean(d.getKey(0)) } catch (e) { }
-    if (ExternalObject.AdobeXMPScript == undefined) ExternalObject.AdobeXMPScript = new ExternalObject('lib:AdobeXMPScript')
-    const myCustomNamespace = 'Selection',
-        myCustomPrefix = 'SDHelper:';
-    var xmpMeta = new XMPMeta(app.activeDocument.xmpMetadata.rawData),
-    metaExists = false;
-    try {metaExists = xmpMeta.doesPropertyExist(myCustomNamespace, 'top')} catch(e){};
-    if (doc.hasProperty('selection') || metaExists) {
+    var currentChannel = findSDChannel(LAYER_NAME);
+    if (doc.hasProperty('selection') || currentChannel) {
         var pth = browseFolder(new Folder(SD_Output));
         if (pth.length) {
             pth.sort(function (x, y) {
                 return x.time < y.time ? 1 : -1
             });
-            if (doc.hasProperty('selection')) {
-                var bounds = doc.descToObject(doc.getProperty('selection').value);
-            }
-            else {
-                var bounds = {};
-                bounds.top = Number(xmpMeta.getProperty(myCustomNamespace, 'top').value);
-                bounds.left = Number(xmpMeta.getProperty(myCustomNamespace, 'left').value);
-                bounds.bottom = Number(xmpMeta.getProperty(myCustomNamespace, 'bottom').value);
-                bounds.right = Number(xmpMeta.getProperty(myCustomNamespace, 'right').value);
-                doc.makeSelection(bounds.top, bounds.left, bounds.bottom, bounds.right);
-            }
+            if (currentChannel && !doc.hasProperty('selection')) doc.channelToSelection(currentChannel)
+            var bounds = doc.descToObject(doc.getProperty('selection').value);
             doc.place(pth[0].file)
             var placedBounds = doc.descToObject(lr.getProperty('bounds').value);
             var dW = (bounds.right - bounds.left) / (placedBounds.right - placedBounds.left);
             var dH = (bounds.bottom - bounds.top) / (placedBounds.bottom - placedBounds.top)
             lr.transform(dW * 100, dH * 100);
             lr.rasterize();
-            lr.makeMask(MASK_MODE == 0 ? runMode : (MASK_MODE == 1 ? false : true));
-            lr.setName('SD')
+            if (currentChannel) {
+                doc.channelToSelection(currentChannel)
+                doc.makeSelectionMask()
+                doc.deleteChannel(currentChannel)
+            } else {
+                lr.makeMask(true);
+            }
+            lr.setName(LAYER_NAME)
             doc.resetSwatches()
             doc.selectBrush();
             doc.setBrushOpacity(BRUSH_OPACITY)
@@ -92,16 +83,22 @@ function browseFolder(fol) {
         }
     }
 }
+function findSDChannel(title) {
+    var idx = 1;
+    do {
+        try { if (ch.getProperty('channelName', false, idx++, true) == title) return idx - 1 } catch (e) { return 0 }
+    } while (true)
+}
 function AM(target, order) {
     var s2t = stringIDToTypeID,
         t2s = typeIDToStringID;
     target = target ? s2t(target) : null;
-    this.getProperty = function (property, id, idxMode) {
+    this.getProperty = function (property, descMode, id, idxMode) {
         property = s2t(property);
         (r = new ActionReference()).putProperty(s2t('property'), property);
         id != undefined ? (idxMode ? r.putIndex(target, id) : r.putIdentifier(target, id)) :
             r.putEnumerated(target, s2t('ordinal'), order ? s2t(order) : s2t('targetEnum'));
-        return getDescValue(executeActionGet(r), property)
+        return descMode ? executeActionGet(r) : getDescValue(executeActionGet(r), property);
     }
     this.hasProperty = function (property, id, idxMode) {
         property = s2t(property);
@@ -133,6 +130,13 @@ function AM(target, order) {
         descriptor.putBoolean(s2t("linked"), true);
         executeAction(s2t("placeEvent"), descriptor, DialogModes.NO);
     }
+    this.channelToSelection = function (idx) {
+        (r = new ActionReference()).putProperty(s2t("channel"), s2t("selection"));
+        (d = new ActionDescriptor()).putReference(s2t("null"), r);
+        (r1 = new ActionReference()).putIndex(s2t("channel"), idx);
+        d.putReference(s2t("to"), r1);
+        executeAction(s2t("set"), d, DialogModes.NO);
+    }
     this.makeSelection = function (top, left, bottom, right) {
         (r = new ActionReference()).putProperty(s2t('channel'), s2t('selection'));
         (d = new ActionDescriptor()).putReference(s2t('null'), r);
@@ -142,6 +146,13 @@ function AM(target, order) {
         d1.putUnitDouble(s2t('right'), s2t('pixelsUnit'), right);
         d.putObject(s2t('to'), s2t('rectangle'), d1);
         executeAction(s2t('set'), d, DialogModes.NO);
+    }
+    this.makeSelectionMask = function () {
+        (d = new ActionDescriptor()).putClass(s2t("new"), s2t("channel"));
+        (r = new ActionReference()).putEnumerated(s2t("channel"), s2t("channel"), s2t("mask"));
+        d.putReference(s2t("at"), r);
+        d.putEnumerated(s2t("using"), s2t("userMask"), s2t("revealSelection"));
+        executeAction(s2t("make"), d, DialogModes.NO);
     }
     this.transform = function (dw, dh) {
         (d = new ActionDescriptor()).putEnumerated(s2t("freeTransformCenterState"), s2t("quadCenterState"), s2t("QCSAverage"));
@@ -195,6 +206,11 @@ function AM(target, order) {
         (r = new ActionReference()).putProperty(s2t("color"), s2t("colors"));
         (d = new ActionDescriptor()).putReference(s2t("null"), r);
         executeAction(s2t("exchange"), d, DialogModes.NO);
+    }
+    this.deleteChannel = function (idx) {
+        (r = new ActionReference()).putIndex(s2t("channel"), idx);
+        (d = new ActionDescriptor()).putReference(s2t("null"), r);
+        executeAction(s2t("delete"), d, DialogModes.NO);
     }
     function getDescValue(d, p) {
         switch (d.getType(p)) {
