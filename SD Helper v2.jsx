@@ -19,7 +19,11 @@ const LOCALHOST = "127.0.0.1",
     API_PORT_LISTEN = 6321,
     API_FILE = "sd-webui-api v2.pyw",
     LAYER_NAME = "SD generated image",
-    UUID = "338cc304-fb6f-4b1f-8ad4-13bbd65f117c";
+    UUID = "338cc304-fb6f-4b1f-8ad4-13bbd65f117c",
+    SD_GET_OPTIONS_DELAY = 1500,
+    SD_RELOAD_CHECKPOINT_DELAY =10000,
+    SD_GENERATION_DELAY = 120000;
+
 var time = (new Date).getTime(),
     SD = new SDApi(LOCALHOST, SD_PORT, API_PORT_SEND, API_PORT_LISTEN, new File((new File($.fileName)).path + '/' + API_FILE)),
     s2t = stringIDToTypeID,
@@ -128,7 +132,7 @@ function main(bounds) {
     if (checkpoint || vae) {
         changeProgressText("Обновление параметров...")
         updateProgress(0.1, 1)
-        if (!SD.setOptions(checkpoint, vae)) throw new Error("Переключение модели завершилось с ошибкой!")
+        if (!SD.setOptions(checkpoint, vae)) throw new Error("Переключение модели завершилось с ошибкой!\nПревышено время ожидания ответа!")
     }
     changeProgressText("Подготовка документа...")
     updateProgress(0.2, 1)
@@ -709,47 +713,47 @@ function SDApi(host, sdPort, portSend, portListen, apiFile) {
             cfg['outdir_img2img_samples'] = result['outdir_img2img_samples']
             cfg['sd_model_checkpoint'] = result['sd_model_checkpoint']
             cfg['sd_vae'] = result['sd_vae']
-        } else { throw new Error('Невозможно получить параметры sdapi/v1/options\nМодуль sd-webui-api сообщает об ошибке!') }
+        } else { throw new Error('Невозможно получить параметры sdapi/v1/options\nПревышено время ожидания ответа!') }
         var result = sendMessage({ type: "get", message: "sdapi/v1/sd-models" }, true);
         if (result) {
             cfg['sd-models'] = []
             if (!result.length) throw new Error('Список sdapi/v1/sd-models пуст!\nНеобходимо добавить хотя бы одну модель в Stable Diffusion')
             for (var i = 0; i < result.length; i++) cfg['sd-models'].push(result[i].title)
-        } else { throw new Error('Невозможно получить параметры sdapi/v1/sd-models\nМодуль sd-webui-api сообщает об ошибке!') }
+        } else { throw new Error('Невозможно получить параметры sdapi/v1/sd-models\nПревышено время ожидания ответа!') }
         var result = sendMessage({ type: "get", message: "sdapi/v1/sd-vae" }, true);
         if (result) {
             cfg['sd-vaes'] = []
             cfg['sd-vaes'].push("Automatic")
             cfg['sd-vaes'].push("None")
             for (var i = 0; i < result.length; i++) cfg['sd-vaes'].push(result[i].model_name)
-        } else { throw new Error('Невозможно получить параметры sdapi/v1/sd-vae\nМодуль sd-webui-api сообщает об ошибке!') }
+        } else { throw new Error('Невозможно получить параметры sdapi/v1/sd-vae\nПревышено время ожидания ответа!') }
         var result = sendMessage({ type: "get", message: "sdapi/v1/schedulers" }, true);
         if (result) {
             cfg['schedulers'] = []
             if (!result.length) throw new Error('Список sdapi/v1/schedulers пуст!\nНеобходимо добавить хотя бы один планировщик в Stable Diffusion')
             for (var i = 0; i < result.length; i++) cfg['schedulers'].push(result[i].label)
-        } else { throw new Error('Невозможно получить параметры sdapi/v1/schedulers\nМодуль sd-webui-api сообщает об ошибке!') }
+        } else { throw new Error('Невозможно получить параметры sdapi/v1/schedulers\nПревышено время ожидания ответа!') }
         var result = sendMessage({ type: "get", message: "sdapi/v1/samplers" }, true);
         if (result) {
             cfg['samplers'] = []
             if (!result.length) throw new Error('Список sdapi/v1/samplers пуст!\nНеобходимо добавить хотя бы один сэмплер в Stable Diffusion')
             for (var i = 0; i < result.length; i++) cfg['samplers'].push(result[i].name)
-        } else { throw new Error('Невозможно получить параметры sdapi/v1/samplers\nМодуль sd-webui-api сообщает об ошибке!') }
+        } else { throw new Error('Невозможно получить параметры sdapi/v1/samplers\nПревышено время ожидания ответа!') }
         var result = sendMessage({ type: "get", message: "sdapi/v1/cmd-flags" }, true);
         if (result) {
             cfg['data_dir'] = result['data_dir']
-        } else { throw new Error('Невозможно получить параметры sdapi/v1/cmd-flags\nМодуль sd-webui-api сообщает об ошибке!') }
+        } else { throw new Error('Невозможно получить параметры sdapi/v1/cmd-flags\nПревышено время ожидания ответа!') }
         return true
     }
     this.exit = function () {
         sendMessage({ type: "exit" })
     }
     this.setOptions = function (checkpoint, vae) {
-        if (sendMessage({ type: "update", message: { sd_model_checkpoint: checkpoint, sd_vae: vae } }, true, 10000)) return true
+        if (sendMessage({ type: "update", message: { sd_model_checkpoint: checkpoint, sd_vae: vae } }, true, SD_RELOAD_CHECKPOINT_DELAY)) return true
         return false;
     }
     this.sendPayload = function (payload) {
-        var result = sendMessage({ type: "payload", message: payload }, true, 120000)
+        var result = sendMessage({ type: "payload", message: payload }, true, SD_GENERATION_DELAY)
         if (result) return result['message']
         return null;
     }
@@ -761,7 +765,7 @@ function SDApi(host, sdPort, portSend, portListen, apiFile) {
     }
     function sendMessage(o, getAnswer, delay) {
         var tcp = new Socket,
-            delay = delay ? delay : 500;
+            delay = delay ? delay : SD_GET_OPTIONS_DELAY;
         tcp.open(host + ':' + portSend, "UTF-8")
         tcp.writeln(objectToJSON(o))
         tcp.close()
