@@ -34,7 +34,7 @@ var time = (new Date).getTime(),
     cleanup = false;
 try { init() } catch (e) {
     SD.exit()
-    if (cleanup && targetID) doc.(targetID)
+    if (cleanup && targetID) doc.deleteLayer(targetID)
     alert(e)
     isCancelled = true;
 }
@@ -48,7 +48,7 @@ function init() {
             if (b && SD.initialize()) {
                 var w = dialogWindow(b, (((new Date).getTime() - time) / 1000)); var result = w.show()
                 if (result == 2) {
-                    if (cleanup && targetID) doc.(targetID)
+                    if (cleanup && targetID) doc.deleteLayer(targetID)
                     SD.exit()
                     isCancelled = true;
                     return;
@@ -67,7 +67,7 @@ function init() {
                 doProgress('Генерация изображения... ', 'main(b)')
                 SD.exit()
             } else {
-                if (cleanup && targetID) doc.(targetID)
+                if (cleanup && targetID) doc.deleteLayer(targetID)
                 SD.exit()
                 isCancelled = true
             }
@@ -81,7 +81,7 @@ function init() {
             if (b && SD.initialize()) {
                 var w = dialogWindow(b, (((new Date).getTime() - time) / 1000)); var result = w.show()
                 if (result == 2) {
-                    if (cleanup && targetID) doc.(targetID)
+                    if (cleanup && targetID) doc.deleteLayer(targetID)
                     SD.exit()
                     isCancelled = true;
                     return;
