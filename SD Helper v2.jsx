@@ -177,6 +177,7 @@ function main(bounds) {
             doc.makeSelectionFromLayer('transparencyEnum')
             doc.makeSelectionMask()
         }
+        doc.selectUserMask();
         if (cfg.selectBrush) {
             doc.resetSwatches()
             doc.selectBrush();
