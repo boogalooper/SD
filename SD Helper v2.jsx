@@ -167,6 +167,9 @@ function main(bounds) {
     app.refresh()
     var result = SD.sendPayload(payload);
     if (result) {
+        activeDocument.suspendHistory('Generate image', 'generatedImageToLayer()')
+    }
+    function generatedImageToLayer() {
         updateProgress(1, 1)
         changeProgressText("Вставка изображения...")
         doc.place(new File(result))
@@ -199,6 +202,7 @@ function main(bounds) {
         return def;
     }
 }
+
 function dialogWindow(b, s) {
     var w = new Window("dialog");
     w.text = "SD Helper - responce time " + s + 's';
