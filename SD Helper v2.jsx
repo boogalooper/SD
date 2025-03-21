@@ -20,7 +20,7 @@ const LOCALHOST = "127.0.0.1",
     API_FILE = "sd-webui-api v2.pyw",
     LAYER_NAME = "SD generated image",
     UUID = "338cc304-fb6f-4b1f-8ad4-13bbd65f117c",
-    SD_GET_OPTIONS_DELAY = 1500,
+    SD_GET_OPTIONS_DELAY = 2000,
     SD_RELOAD_CHECKPOINT_DELAY = 10000,
     SD_GENERATION_DELAY = 120000;
 var time = (new Date).getTime(),
@@ -48,7 +48,7 @@ function init() {
     if (b && (!app.playbackParameters.count || app.playbackParameters.count == 1)) {
         cfg.getScriptSettings();
         if (app.playbackParameters.count == 1) $.setenv('dialogMode', true)
-        if (($.getenv('dialogMode') == 'true' || $.getenv('dialogMode') == null) && b) {
+        if (($.getenv('dialogMode') == 'true' || $.getenv('dialogMode') == null)) {
             if (b && SD.initialize()) {
                 var w = dialogWindow(b, (((new Date).getTime() - time) / 1000)); var result = w.show()
                 if (result == 2) {
@@ -65,7 +65,7 @@ function init() {
                 }
             }
         } else {
-            if (b && SD.initialize()) {
+            if (SD.initialize()) {
                 $.setenv('dialogMode', false)
                 cfg.putScriptSettings(true)
                 doProgress('Генерация изображения... ', 'main(b)')
@@ -130,9 +130,18 @@ function main(bounds) {
     var p = (new Folder(SD['data_dir'] + '/' + SD['outdir_img2img_samples']))
     if (!p.exists) p.create()
     if (checkpoint || vae) {
+        var vae_path = [];
+        if (SD.forgeUI) {
+            for (var i = 0; i < SD["forge_additional_modules"].length; i++) {
+                if (SD["forge_additional_modules"][i].indexOf(vae) != -1) {
+                    vae_path.push(SD["forge_additional_modules"][i])
+                    break;
+                }
+            }
+        }
         changeProgressText("Обновление параметров...")
         updateProgress(0.1, 1)
-        if (!SD.setOptions(checkpoint, vae)) throw new Error("Переключение модели завершилось с ошибкой!\nПревышено время ожидания ответа!")
+        if (!SD.setOptions(checkpoint, vae, vae_path)) throw new Error("Переключение модели завершилось с ошибкой!\nПревышено время ожидания ответа!")
     }
     changeProgressText("Подготовка документа...")
     updateProgress(0.2, 1)
@@ -700,6 +709,7 @@ function findSDChannel(title) {
     } while (true)
 }
 function SDApi(host, sdPort, portSend, portListen, apiFile) {
+    this.forgeUI = false;
     var SdCfg = this;
     this.initialize = function () {
         if (!apiFile.exists)
@@ -714,6 +724,7 @@ function SDApi(host, sdPort, portSend, portListen, apiFile) {
             SdCfg['outdir_img2img_samples'] = result['outdir_img2img_samples']
             SdCfg['sd_model_checkpoint'] = result['sd_model_checkpoint']
             SdCfg['sd_vae'] = result['sd_vae']
+            if (result['forge_additional_modules']) SdCfg.forgeUI = true;
         } else { throw new Error('Невозможно получить параметры sdapi/v1/options\nПревышено время ожидания ответа!') }
         var result = sendMessage({ type: "get", message: "sdapi/v1/sd-models" }, true);
         if (result) {
@@ -722,15 +733,16 @@ function SDApi(host, sdPort, portSend, portListen, apiFile) {
             for (var i = 0; i < result.length; i++) SdCfg['sd-models'].push(result[i].title)
         } else { throw new Error('Невозможно получить параметры sdapi/v1/sd-models\nПревышено время ожидания ответа!') }
         var vaes = ['sdapi/v1/sd-vae', 'sdapi/v1/sd-modules']
+        cfg.vae = (SdCfg.forgeUI ? vaes[1] : vaes[0])
         var result = sendMessage({ type: "get", message: cfg.vae }, true);
-        if (!result) {
-            cfg.vae = (cfg.vae == vaes[0] ? vaes[1] : vaes[0])
-            result = sendMessage({ type: "get", message: cfg.vae }, true)
-        }
         if (result) {
             SdCfg['sd-vaes'] = []
             SdCfg['sd-vaes'].push("Automatic")
             SdCfg['sd-vaes'].push("None")
+            if (SdCfg.forgeUI) {
+                SdCfg['forge_additional_modules'] = [];
+                for (var i = 0; i < result.length; i++) SdCfg['forge_additional_modules'].push(result[i].filename.replace(/\\/g, '\\\\'))
+            }
             for (var i = 0; i < result.length; i++) SdCfg['sd-vaes'].push(result[i].model_name)
         } else { throw new Error('Невозможно получить параметры ' + cfg.vae + '\nПревышено время ожидания ответа!') }
         var result = sendMessage({ type: "get", message: "sdapi/v1/schedulers" }, true);
@@ -754,8 +766,12 @@ function SDApi(host, sdPort, portSend, portListen, apiFile) {
     this.exit = function () {
         sendMessage({ type: "exit" })
     }
-    this.setOptions = function (checkpoint, vae) {
-        if (sendMessage({ type: "update", message: { sd_model_checkpoint: checkpoint, sd_vae: vae } }, true, SD_RELOAD_CHECKPOINT_DELAY)) return true
+    this.setOptions = function (checkpoint, vae, vae_path) {
+        var message = {}
+        message['sd_model_checkpoint'] = checkpoint
+        message['sd_vae'] = vae
+        if (SdCfg.forgeUI) message['forge_additional_modules'] = vae_path
+        if (sendMessage({ type: "update", message: message }, true, SD_RELOAD_CHECKPOINT_DELAY)) return true
         return false;
     }
     this.sendPayload = function (payload) {
@@ -1019,6 +1035,7 @@ function Config() {
     this.brushOpacity = 50
     this.recordToAction = true
     this.vae = 'sdapi/v1/sd-vae'
+    this.vaePath = ''
     settingsObj = this;
     this.getScriptSettings = function (fromAction) {
         if (fromAction) d = playbackParameters else try { var d = getCustomOptions(UUID) } catch (e) { };

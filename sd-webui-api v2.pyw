@@ -102,6 +102,8 @@ def start_local_server():
                             options["sd_model_checkpoint"] = data["sd_model_checkpoint"]
                         if data["sd_vae"]:
                             options["sd_vae"] = data["sd_vae"]
+                        if 'forge_additional_modules' in data:
+                            options["forge_additional_modules"] = data["forge_additional_modules"]
                         payload = json.dumps(options).encode("utf-8")
                         req = urllib.request.Request(
                             f"http://{LOCALHOST}:{SD_PORT}/sdapi/v1/options",
