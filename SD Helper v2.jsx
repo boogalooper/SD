@@ -21,9 +21,8 @@ const LOCALHOST = "127.0.0.1",
     LAYER_NAME = "SD generated image",
     UUID = "338cc304-fb6f-4b1f-8ad4-13bbd65f117c",
     SD_GET_OPTIONS_DELAY = 1500,
-    SD_RELOAD_CHECKPOINT_DELAY =10000,
+    SD_RELOAD_CHECKPOINT_DELAY = 10000,
     SD_GENERATION_DELAY = 120000;
-
 var time = (new Date).getTime(),
     SD = new SDApi(LOCALHOST, SD_PORT, API_PORT_SEND, API_PORT_LISTEN, new File((new File($.fileName)).path + '/' + API_FILE)),
     s2t = stringIDToTypeID,
@@ -36,7 +35,6 @@ var time = (new Date).getTime(),
     isCancelled = false,
     targetID = null,
     cleanup = false;
-
 if (ScriptUI.environment.keyboardState.shiftKey) $.setenv('dialogMode', true)
 try { init() } catch (e) {
     SD.exit()
@@ -702,7 +700,7 @@ function findSDChannel(title) {
     } while (true)
 }
 function SDApi(host, sdPort, portSend, portListen, apiFile) {
-    var cfg = this;
+    var SdCfg = this;
     this.initialize = function () {
         if (!apiFile.exists)
             throw new Error('Модуль sd-webui-api\n' + apiFile.fsName + '\nне найден!')
@@ -713,38 +711,43 @@ function SDApi(host, sdPort, portSend, portListen, apiFile) {
             throw new Error('Невозможно установить соединение c ' + host + ':' + portSend + '\nМодуль sd-webui-api не отвечает!')
         var result = sendMessage({ type: "get", message: "sdapi/v1/options" }, true);
         if (result) {
-            cfg['outdir_img2img_samples'] = result['outdir_img2img_samples']
-            cfg['sd_model_checkpoint'] = result['sd_model_checkpoint']
-            cfg['sd_vae'] = result['sd_vae']
+            SdCfg['outdir_img2img_samples'] = result['outdir_img2img_samples']
+            SdCfg['sd_model_checkpoint'] = result['sd_model_checkpoint']
+            SdCfg['sd_vae'] = result['sd_vae']
         } else { throw new Error('Невозможно получить параметры sdapi/v1/options\nПревышено время ожидания ответа!') }
         var result = sendMessage({ type: "get", message: "sdapi/v1/sd-models" }, true);
         if (result) {
-            cfg['sd-models'] = []
+            SdCfg['sd-models'] = []
             if (!result.length) throw new Error('Список sdapi/v1/sd-models пуст!\nНеобходимо добавить хотя бы одну модель в Stable Diffusion')
-            for (var i = 0; i < result.length; i++) cfg['sd-models'].push(result[i].title)
+            for (var i = 0; i < result.length; i++) SdCfg['sd-models'].push(result[i].title)
         } else { throw new Error('Невозможно получить параметры sdapi/v1/sd-models\nПревышено время ожидания ответа!') }
-        var result = sendMessage({ type: "get", message: "sdapi/v1/sd-vae" }, true);
+        var vaes = ['sdapi/v1/sd-vae', 'sdapi/v1/sd-modules']
+        var result = sendMessage({ type: "get", message: cfg.vae }, true);
+        if (!result) {
+            cfg.vae = (cfg.vae == vaes[0] ? vaes[1] : vaes[0])
+            result = sendMessage({ type: "get", message: cfg.vae }, true)
+        }
         if (result) {
-            cfg['sd-vaes'] = []
-            cfg['sd-vaes'].push("Automatic")
-            cfg['sd-vaes'].push("None")
-            for (var i = 0; i < result.length; i++) cfg['sd-vaes'].push(result[i].model_name)
-        } else { throw new Error('Невозможно получить параметры sdapi/v1/sd-vae\nПревышено время ожидания ответа!') }
+            SdCfg['sd-vaes'] = []
+            SdCfg['sd-vaes'].push("Automatic")
+            SdCfg['sd-vaes'].push("None")
+            for (var i = 0; i < result.length; i++) SdCfg['sd-vaes'].push(result[i].model_name)
+        } else { throw new Error('Невозможно получить параметры ' + cfg.vae + '\nПревышено время ожидания ответа!') }
         var result = sendMessage({ type: "get", message: "sdapi/v1/schedulers" }, true);
         if (result) {
-            cfg['schedulers'] = []
+            SdCfg['schedulers'] = []
             if (!result.length) throw new Error('Список sdapi/v1/schedulers пуст!\nНеобходимо добавить хотя бы один планировщик в Stable Diffusion')
-            for (var i = 0; i < result.length; i++) cfg['schedulers'].push(result[i].label)
+            for (var i = 0; i < result.length; i++) SdCfg['schedulers'].push(result[i].label)
         } else { throw new Error('Невозможно получить параметры sdapi/v1/schedulers\nПревышено время ожидания ответа!') }
         var result = sendMessage({ type: "get", message: "sdapi/v1/samplers" }, true);
         if (result) {
-            cfg['samplers'] = []
+            SdCfg['samplers'] = []
             if (!result.length) throw new Error('Список sdapi/v1/samplers пуст!\nНеобходимо добавить хотя бы один сэмплер в Stable Diffusion')
-            for (var i = 0; i < result.length; i++) cfg['samplers'].push(result[i].name)
+            for (var i = 0; i < result.length; i++) SdCfg['samplers'].push(result[i].name)
         } else { throw new Error('Невозможно получить параметры sdapi/v1/samplers\nПревышено время ожидания ответа!') }
         var result = sendMessage({ type: "get", message: "sdapi/v1/cmd-flags" }, true);
         if (result) {
-            cfg['data_dir'] = result['data_dir']
+            SdCfg['data_dir'] = result['data_dir']
         } else { throw new Error('Невозможно получить параметры sdapi/v1/cmd-flags\nПревышено время ожидания ответа!') }
         return true
     }
@@ -1015,6 +1018,7 @@ function Config() {
     this.selectBrush = true
     this.brushOpacity = 50
     this.recordToAction = true
+    this.vae = 'sdapi/v1/sd-vae'
     settingsObj = this;
     this.getScriptSettings = function (fromAction) {
         if (fromAction) d = playbackParameters else try { var d = getCustomOptions(UUID) } catch (e) { };
