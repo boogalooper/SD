@@ -79,8 +79,10 @@ function init() {
     }
     else {
         cfg.getScriptSettings(true)
-        if (!cfg.recordToAction) cfg.getScriptSettings()
-        cfg.recordToAction = false;
+        if (!cfg.recordToAction) {
+            cfg.getScriptSettings()
+            cfg.recordToAction = false
+        }
         if (app.playbackDisplayDialogs == DialogModes.ALL) {
             if (b && SD.initialize()) {
                 var w = dialogWindow(b, (((new Date).getTime() - time) / 1000)); var result = w.show()
