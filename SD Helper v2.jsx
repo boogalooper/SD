@@ -168,7 +168,7 @@ function main(bounds) {
     var result = SD.sendPayload(payload);
     if (result) {
         activeDocument.suspendHistory('Generate image', 'generatedImageToLayer()')
-    }
+    } else throw new Error('Превышено время ожидания ответа Stable Diffusion!')
     function generatedImageToLayer() {
         updateProgress(1, 1)
         changeProgressText("Вставка изображения...")
@@ -196,7 +196,7 @@ function main(bounds) {
         if (cfg.removeImage) {
             (new File(result)).remove();
         }
-    } else throw new Error('Превышено время ожидания ответа Stable Diffusion!')
+    }
     function findOption(s, o, def) {
         for (a in o) if (o[a] == s) return s;
         return def;
