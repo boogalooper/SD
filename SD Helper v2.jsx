@@ -126,7 +126,6 @@ function main(bounds) {
     doc.saveACopy(f);
     activeDocument.activeHistoryState = hst;
     doc.setProperty('center', c);
-    activeDocument.suspendHistory('Generate image', 'function(){}')
     var p = (new Folder(SD['data_dir'] + '/' + SD['outdir_img2img_samples']))
     if (!p.exists) p.create()
     if (checkpoint || vae) {
