@@ -106,7 +106,7 @@ function init() {
 function main(bounds) {
     var checkpoint = (cfg.sd_model_checkpoint == SD['sd_model_checkpoint'] ? null : findOption(cfg.sd_model_checkpoint, SD['sd-models'], SD['sd_model_checkpoint'])),
         vae = (cfg.sd_vae == SD['sd_vae'] ? null : findOption(cfg.sd_vae, SD['sd-vaes'], SD['sd_vae']));
-    if (vae != cfg.sd_vae) cfg.sd_vae = vae
+    if (vae != cfg.sd_vae && vae !=null) cfg.sd_vae = vae
     if (checkpoint != cfg.sd_model_checkpoint) cfg.sd_model_checkpoint = checkpoint
     doc.makeSelection(bounds.top, bounds.left, bounds.bottom, bounds.right);
     var hst = activeDocument.activeHistoryState,
@@ -134,7 +134,7 @@ function main(bounds) {
         var vae_path = [];
         if (SD.forgeUI) {
             for (var i = 0; i < SD["forge_additional_modules"].length; i++) {
-                if (SD["forge_additional_modules"][i].indexOf(vae) != -1) {
+                if (SD["forge_additional_modules"][i].indexOf(cfg.sd_vae) != -1) {
                     vae_path.push(SD["forge_additional_modules"][i])
                     break;
                 }
