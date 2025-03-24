@@ -387,7 +387,7 @@ function dialogWindow(b, s) {
             var stStepsValue = grStepsTitle.add("statictext");
             stStepsValue.preferredSize.width = 65;
             stStepsValue.justify = "right";
-            stStepsValue.graphics.foregroundColor = stStepsValue.graphics.newPen(stStepsValue.graphics.PenType.SOLID_COLOR, [0.48, 0.76, 0.34, 1], 1)
+          //  stStepsValue.graphics.foregroundColor = stStepsValue.graphics.newPen(stStepsValue.graphics.PenType.SOLID_COLOR, [0.48, 0.76, 0.34, 1], 1)
             var slSteps = grSteps.add("slider");
             slSteps.minvalue = 1;
             slSteps.maxvalue = 100;
@@ -424,7 +424,7 @@ function dialogWindow(b, s) {
             var stCfgValue = grCfgTitle.add("statictext");
             stCfgValue.justify = "right";
             stCfgValue.preferredSize.width = 65
-            stCfgValue.graphics.foregroundColor = stCfgValue.graphics.newPen(stCfgValue.graphics.PenType.SOLID_COLOR, [0.48, 0.76, 0.34, 1], 1)
+         //   stCfgValue.graphics.foregroundColor = stCfgValue.graphics.newPen(stCfgValue.graphics.PenType.SOLID_COLOR, [0.48, 0.76, 0.34, 1], 1)
             var slCfg = grCfg.add("slider");
             slCfg.minvalue = 2;
             slCfg.maxvalue = 30;
@@ -464,7 +464,7 @@ function dialogWindow(b, s) {
             stResizeValue.justify = "right";
             stResizeValue.preferredSize.width = 65
             stResizeValue.text = "1";
-            stResizeValue.graphics.foregroundColor = stResizeValue.graphics.newPen(stResizeValue.graphics.PenType.SOLID_COLOR, [0.48, 0.76, 0.34, 1], 1)
+          //  stResizeValue.graphics.foregroundColor = stResizeValue.graphics.newPen(stResizeValue.graphics.PenType.SOLID_COLOR, [0.48, 0.76, 0.34, 1], 1)
             var slResize = grResize.add("slider");
             slResize.minvalue = 1;
             slResize.maxvalue = 40;
@@ -503,7 +503,7 @@ function dialogWindow(b, s) {
             var stStrengthValue = grStrengthTitle.add("statictext");
             stStrengthValue.justify = "right";
             stStrengthValue.preferredSize.width = 65
-            stStrengthValue.graphics.foregroundColor = stStrengthValue.graphics.newPen(stStrengthValue.graphics.PenType.SOLID_COLOR, [0.48, 0.76, 0.34, 1], 1)
+          //  stStrengthValue.graphics.foregroundColor = stStrengthValue.graphics.newPen(stStrengthValue.graphics.PenType.SOLID_COLOR, [0.48, 0.76, 0.34, 1], 1)
             var slStrength = grStrength.add("slider");
             slStrength.minvalue = 0;
             slStrength.maxvalue = 100;
@@ -624,9 +624,9 @@ function dialogWindow(b, s) {
         grOpacityTitle.alignChildren = ["left", "center"];
         grOpacityTitle.spacing = 10;
         grOpacityTitle.margins = 0;
-        var stOpacityTitke = grOpacityTitle.add("statictext");
-        stOpacityTitke.text = "Brush opacity";
-        stOpacityTitke.preferredSize.width = 150;
+        var stOpacityTitle = grOpacityTitle.add("statictext");
+        stOpacityTitle.text = "Brush opacity";
+        stOpacityTitle.preferredSize.width = 150;
         var stOpacityValue = grOpacityTitle.add("statictext");
         stOpacityValue.preferredSize.width = 65;
         stOpacityValue.justify = "right";
@@ -634,7 +634,7 @@ function dialogWindow(b, s) {
         slOpacity.minvalue = 0;
         slOpacity.maxvalue = 100;
         slOpacity.active = true
-        stOpacityValue.graphics.foregroundColor = stOpacityValue.graphics.newPen(stOpacityValue.graphics.PenType.SOLID_COLOR, [0.48, 0.76, 0.34, 1], 1)
+      //  stOpacityValue.graphics.foregroundColor = stOpacityValue.graphics.newPen(stOpacityValue.graphics.PenType.SOLID_COLOR, [0.48, 0.76, 0.34, 1], 1)
         slOpacity.value = stOpacityValue.text = cfg.brushOpacity
         slOpacity.onChange = function () {
             stOpacityValue.text = cfg.brushOpacity = mathTrunc(this.value)
