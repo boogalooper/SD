@@ -106,7 +106,7 @@ function init() {
 function main(bounds) {
     var checkpoint = (cfg.sd_model_checkpoint == SD['sd_model_checkpoint'] ? null : findOption(cfg.sd_model_checkpoint, SD['sd-models'], SD['sd_model_checkpoint'])),
         vae = (cfg.sd_vae == SD['sd_vae'] ? null : findOption(cfg.sd_vae, SD['sd-vaes'], SD['sd_vae']));
-    if (vae != cfg.sd_vae && vae !=null) cfg.sd_vae = vae
+    if (vae != cfg.sd_vae && vae != null) cfg.sd_vae = vae
     if (checkpoint != cfg.sd_model_checkpoint) cfg.sd_model_checkpoint = checkpoint
     doc.makeSelection(bounds.top, bounds.left, bounds.bottom, bounds.right);
     var hst = activeDocument.activeHistoryState,
@@ -146,6 +146,7 @@ function main(bounds) {
     }
     changeProgressText("Подготовка документа...")
     updateProgress(0.2, 1)
+    if (cfg.autoResize) cfg.resize = autoScale(bounds)
     var width = cfg.resize != 1 ? (mathTrunc((bounds.width * cfg.resize) / 8) * 8) : bounds.width,
         height = cfg.resize != 1 ? (mathTrunc((bounds.height * cfg.resize) / 8) * 8) : bounds.height
     var payload = {
@@ -203,7 +204,6 @@ function main(bounds) {
         return def;
     }
 }
-
 function dialogWindow(b, s) {
     var w = new Window("dialog");
     w.text = "SD Helper - responce time " + s + 's';
@@ -231,7 +231,7 @@ function dialogWindow(b, s) {
         if (result == 1) {
             var isDitry = false;
             for (var a in tempSettings) {
-                if (a.indexOf('show') == -1) continue;
+                if (a.indexOf('show') == -1 && a.indexOf('autoResize') == -1) continue;
                 if (tempSettings[a] != cfg[a]) {
                     isDitry = true
                     break;
@@ -387,7 +387,6 @@ function dialogWindow(b, s) {
             var stStepsValue = grStepsTitle.add("statictext");
             stStepsValue.preferredSize.width = 65;
             stStepsValue.justify = "right";
-          //  stStepsValue.graphics.foregroundColor = stStepsValue.graphics.newPen(stStepsValue.graphics.PenType.SOLID_COLOR, [0.48, 0.76, 0.34, 1], 1)
             var slSteps = grSteps.add("slider");
             slSteps.minvalue = 1;
             slSteps.maxvalue = 100;
@@ -424,7 +423,6 @@ function dialogWindow(b, s) {
             var stCfgValue = grCfgTitle.add("statictext");
             stCfgValue.justify = "right";
             stCfgValue.preferredSize.width = 65
-         //   stCfgValue.graphics.foregroundColor = stCfgValue.graphics.newPen(stCfgValue.graphics.PenType.SOLID_COLOR, [0.48, 0.76, 0.34, 1], 1)
             var slCfg = grCfg.add("slider");
             slCfg.minvalue = 2;
             slCfg.maxvalue = 30;
@@ -464,14 +462,15 @@ function dialogWindow(b, s) {
             stResizeValue.justify = "right";
             stResizeValue.preferredSize.width = 65
             stResizeValue.text = "1";
-          //  stResizeValue.graphics.foregroundColor = stResizeValue.graphics.newPen(stResizeValue.graphics.PenType.SOLID_COLOR, [0.48, 0.76, 0.34, 1], 1)
             var slResize = grResize.add("slider");
             slResize.minvalue = 1;
             slResize.maxvalue = 40;
-            slResize.value = cfg.resize * 10
-            stResizeValue.text = cfg.resize
-            slResize.onChange = function () {
-                stResizeValue.text = cfg.resize = mathTrunc(this.value) / 10
+            slResize.onChange = function (auto) {
+                if (auto == undefined) {
+                    stResizeValue.text = cfg.resize = mathTrunc(this.value) / 10
+                } else {
+                    stResizeValue.text = cfg.resize
+                }
                 stResize.text = cfg.resize != 1 ? s + ' ' + (mathTrunc((b.width * cfg.resize) / 8) * 8) + 'x' + (mathTrunc((b.height * cfg.resize) / 8) * 8) : s
             }
             slResize.onChanging = function () { slResize.onChange() }
@@ -485,6 +484,15 @@ function dialogWindow(b, s) {
                     }
                 }
             }
+            if (cfg.autoResize) {
+                cfg.resize = autoScale(b)
+                slResize.value = cfg.resize * 10
+                slResize.onChange(true);
+            } else {
+                slResize.value = cfg.resize * 10
+                slResize.onChange();
+            }
+
         }
         function denoisingStrength(w) {
             var grStrength = w.add("group");
@@ -503,7 +511,6 @@ function dialogWindow(b, s) {
             var stStrengthValue = grStrengthTitle.add("statictext");
             stStrengthValue.justify = "right";
             stStrengthValue.preferredSize.width = 65
-          //  stStrengthValue.graphics.foregroundColor = stStrengthValue.graphics.newPen(stStrengthValue.graphics.PenType.SOLID_COLOR, [0.48, 0.76, 0.34, 1], 1)
             var slStrength = grStrength.add("slider");
             slStrength.minvalue = 0;
             slStrength.maxvalue = 100;
@@ -626,7 +633,7 @@ function dialogWindow(b, s) {
         grOpacityTitle.margins = 0;
         var stOpacityTitle = grOpacityTitle.add("statictext");
         stOpacityTitle.text = "Brush opacity";
-        stOpacityTitle.preferredSize.width = 150;
+        stOpacityTitle.preferredSize.width = 180;
         var stOpacityValue = grOpacityTitle.add("statictext");
         stOpacityValue.preferredSize.width = 65;
         stOpacityValue.justify = "right";
@@ -634,7 +641,6 @@ function dialogWindow(b, s) {
         slOpacity.minvalue = 0;
         slOpacity.maxvalue = 100;
         slOpacity.active = true
-      //  stOpacityValue.graphics.foregroundColor = stOpacityValue.graphics.newPen(stOpacityValue.graphics.PenType.SOLID_COLOR, [0.48, 0.76, 0.34, 1], 1)
         slOpacity.value = stOpacityValue.text = cfg.brushOpacity
         slOpacity.onChange = function () {
             stOpacityValue.text = cfg.brushOpacity = mathTrunc(this.value)
@@ -649,6 +655,78 @@ function dialogWindow(b, s) {
                     slOpacity.value = Math.ceil(slOpacity.value / 5) * 5 - 4
                 }
             }
+        }
+        var pnResize = w.add("panel", undefined, undefined, { name: "pnResize" });
+        pnResize.text = "Auto resize";
+        pnResize.orientation = "column";
+        pnResize.alignChildren = ["fill", "top"];
+        pnResize.spacing = 10;
+        pnResize.margins = 10;
+        var chAutoResize = pnResize.add("checkbox", undefined, undefined, { name: "chResize1" });
+        chAutoResize.text = "Set scale value based on selection size";
+        var grChResize = pnResize.add("group", undefined, { name: "grChResize" });
+        grChResize.orientation = "column";
+        grChResize.alignChildren = ["fill", "center"];
+        grChResize.spacing = 10;
+        grChResize.margins = 0;
+        var grResizeSl = grChResize.add("group", undefined, { name: "grResizeSl" });
+        grResizeSl.orientation = "row";
+        grResizeSl.alignChildren = ["left", "center"];
+        grResizeSl.spacing = 10;
+        grResizeSl.margins = 0;
+        chAutoResize.value = grResizeSl.enabled = cfg.autoResize
+        var grLess = grResizeSl.add("group", undefined, { name: "grLess" });
+        grLess.preferredSize.width = 100;
+        grLess.orientation = "row";
+        grLess.alignChildren = ["left", "center"];
+        grLess.spacing = 0;
+        grLess.margins = 0;
+        var slLess = grLess.add("slider", undefined, undefined, undefined, undefined, { name: "slLess" });
+        slLess.minvalue = 128;
+        slLess.maxvalue = 1024;
+        slLess.helpTip = 'minimum, px'
+        slLess.preferredSize.width = 90;
+        var stLess = grLess.add("statictext", undefined, undefined, { name: "statictext1" });
+        stLess.preferredSize.width = 30;
+        stLess.justify = "right";
+        slLess.value = stLess.text = cfg.autoResizeLess;
+        slLess.onChange = function () {
+            stLess.text = cfg.autoResizeLess = mathTrunc(this.value / 32) * 32
+        }
+        slLess.onChanging = function () { slLess.onChange() }
+        slLess.addEventListener('keydown', resizeHandler)
+        var grAbove = grResizeSl.add("group", undefined, { name: "slAbove" });
+        grAbove.preferredSize.width = 100;
+        grAbove.orientation = "row";
+        grAbove.alignChildren = ["left", "center"];
+        grAbove.spacing = 0;
+        grAbove.margins = 0;
+        var slAbove = grAbove.add("slider", undefined, undefined, undefined, undefined, { name: "slOpacity1" });
+        slAbove.minvalue = 1024;
+        slAbove.maxvalue = 2048;
+        slAbove.helpTip = 'maximum, px'
+        slAbove.preferredSize.width = 90;
+        var stAbove = grAbove.add("statictext", undefined, undefined, { name: "statictext2" });
+        stAbove.preferredSize.width = 30;
+        stAbove.justify = "right";
+        slAbove.value = stAbove.text = cfg.autoResizeAbove;
+        slAbove.onChange = function () {
+            stAbove.text = cfg.autoResizeAbove = mathTrunc(this.value / 32) * 32
+        }
+        slAbove.onChanging = function () { slAbove.onChange() }
+        slAbove.addEventListener('keydown', resizeHandler)
+        function resizeHandler(evt) {
+            if (evt.shiftKey) {
+                if (evt.keyIdentifier == 'Right' || evt.keyIdentifier == 'Up') {
+                    evt.target.value = Math.floor(evt.target.value / 128) * 128 + 127
+                } else if (evt.keyIdentifier == 'Left' || evt.keyIdentifier == 'Down') {
+                    evt.target.value = Math.ceil(evt.target.value / 128) * 128 - 127
+                }
+            }
+        }
+        chAutoResize.onClick = function () {
+            cfg.autoResize = grResizeSl.enabled = this.value
+            cfg.resize = 1;
         }
         var chRecordSettings = w.add("checkbox");
         chRecordSettings.text = "Do not record generation settings to action";
@@ -668,6 +746,15 @@ function dialogWindow(b, s) {
 }
 function mathTrunc(val) {
     return val < 0 ? Math.ceil(val) : Math.floor(val);
+}
+function autoScale(b) {
+    var less = b.width < b.height ? b.width : b.height,
+        above = b.width > b.height ? b.width : b.height,
+        result = 0;
+    if (less < cfg.autoResizeLess) result = Math.ceil(cfg.autoResizeLess / less * 1000) / 1000
+    if (above > cfg.autoResizeAbove) result = Math.floor(cfg.autoResizeAbove / above * 1000) / 1000
+    if (less > cfg.autoResizeLess && above < cfg.autoResizeAbove) result = 1
+    return (result > 4 ? 4 : result)
 }
 function cloneObject(o1, o2) {
     var tmp = o1.reflect.properties;
@@ -1039,6 +1126,9 @@ function Config() {
     this.selectBrush = true
     this.brushOpacity = 50
     this.recordToAction = true
+    this.autoResize = false
+    this.autoResizeLess = 512
+    this.autoResizeAbove = 1408
     this.vae = 'sdapi/v1/sd-vae'
     this.vaePath = ''
     settingsObj = this;
