@@ -5,6 +5,7 @@ import sys
 import time
 import base64
 from datetime import datetime
+import subprocess
 import os
 
 LOCALHOST = "127.0.0.1"
@@ -70,6 +71,30 @@ def call_img2img_api(payload, out_dir):
     return save_path
 
 
+def check_module(module_name):
+    try:
+        __import__(module_name)
+    except ImportError:
+        print(f"Модуль {module_name} не найден. Устанавливаем...")
+        if install_module(module_name):
+            return True
+        else:
+            return False
+    else:
+        print(f"Модуль {module_name} уже установлен.")
+        return True
+
+
+def install_module(module_name):
+    try:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", module_name])
+        print(f"Модуль {module_name} успешно установлен.")
+        return True
+    except subprocess.CalledProcessError:
+        print(f"Ошибка при установке модуля {module_name}.")
+        return False
+
+
 def start_local_server():
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     srv.bind((LOCALHOST, API_PORT_LISTEN))
@@ -102,8 +127,10 @@ def start_local_server():
                             options["sd_model_checkpoint"] = data["sd_model_checkpoint"]
                         if data["sd_vae"]:
                             options["sd_vae"] = data["sd_vae"]
-                        if 'forge_additional_modules' in data:
-                            options["forge_additional_modules"] = data["forge_additional_modules"]
+                        if "forge_additional_modules" in data:
+                            options["forge_additional_modules"] = data[
+                                "forge_additional_modules"
+                            ]
                         payload = json.dumps(options).encode("utf-8")
                         req = urllib.request.Request(
                             f"http://{LOCALHOST}:{SD_PORT}/sdapi/v1/options",
@@ -135,14 +162,36 @@ def start_local_server():
                         "n_iter": 1,
                         "init_images": init_images,
                     }
+                    if "mask" in data:
+                        payload["mask"] = encode_file_to_base64(data["mask"])
+                        payload["inpainting_fill"] = data["inpainting_fill"]
+                        payload["image_cfg_scale"] = 1.5
+                        payload["inpaint_full_res"] = 0
+                        payload["initial_noise_multiplier"] = 1
+                        payload["resize_mode"] = 0
                     outfile = call_img2img_api(payload, data["output"])
                     print("Генерация завершена!")
                     send_data_to_jsx({"type": "answer", "message": outfile})
+                elif message["type"] == "translate":
+                    print("Получен запрос на перевод текста")
+                    if check_module("translate"):
+                        from translate import Translator
+
+                        try:
+                            translator = Translator(from_lang="ru", to_lang="en")
+                            translated_text = translator.translate(message["message"])
+                            print("\nПереведённый текст на английском языке:")
+                            print(translated_text)
+                        except:
+                            translated_text = ""
+                    send_data_to_jsx(
+                        {"type": "answer", "message": str(translated_text)}
+                    )
                 elif message["type"] == "exit":
                     sys.exit()
         except Exception as e:
             print(f"Произошла ошибка: {e}")
-            # sys.exit()
+            sys.exit()
         finally:
             client_socket.close()
 

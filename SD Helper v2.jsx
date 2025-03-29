@@ -7,125 +7,163 @@
 <terminology><![CDATA[<< /Version 1
                         /Events <<
                         /338cc304-fb6f-4b1f-8ad4-13bbd65f117c [(SD helper) <<
+                        /inpaintMode [(Inpaint mode) /boolean] 
                         >>]
                          >>
                       >> ]]></terminology>
 </javascriptresource>
 // END__HARVEST_EXCEPTION_ZSTRING
 */
-const LOCALHOST = "127.0.0.1",
+const LOCALHOST = '127.0.0.1',
     SD_PORT = 7860,
     API_PORT_SEND = 6320,
     API_PORT_LISTEN = 6321,
-    API_FILE = "sd-webui-api v2.pyw",
-    LAYER_NAME = "SD generated image",
-    UUID = "338cc304-fb6f-4b1f-8ad4-13bbd65f117c",
+    API_FILE = 'sd-webui-api v2.pyw',
+    LAYER_NAME = 'SD generated image',
+    UUID = '338cc304-fb6f-4b1f-8ad4-13bbd65f117c',
     SD_GET_OPTIONS_DELAY = 2000, // максимальное время ожидания ответа Stable Diffusion при запросе текущих параметров
     SD_RELOAD_CHECKPOINT_DELAY = 10000, // максимальное время ожидания перезагрузки checkpoint или vae
-    SD_GENERATION_DELAY = 120000; // максимальное время ожидания генерации изображения
+    SD_GENERATION_DELAY = 60000; // максимальное время ожидания генерации изображения
 var time = (new Date).getTime(),
     SD = new SDApi(LOCALHOST, SD_PORT, API_PORT_SEND, API_PORT_LISTEN, new File((new File($.fileName)).path + '/' + API_FILE)),
     s2t = stringIDToTypeID,
     t2s = typeIDToStringID,
     cfg = new Config(),
+    str = new Locale(),
     apl = new AM('application'),
     doc = new AM('document'),
     lr = new AM('layer'),
     ch = new AM('channel'),
-    isCancelled = false,
-    targetID = null,
-    cleanup = false;
+    ver = 0.25,
+    isDitry = false;
+isCancelled = false;
+$.localize = true
 if (ScriptUI.environment.keyboardState.shiftKey) $.setenv('dialogMode', true)
 try { init() } catch (e) {
     SD.exit()
-    if (cleanup && targetID) doc.deleteLayer(targetID)
     alert(e)
     isCancelled = true;
 }
 isCancelled ? 'cancel' : undefined
 function init() {
-    var b = checkSelection();
-    if (b && (!app.playbackParameters.count || app.playbackParameters.count == 1)) {
-        cfg.getScriptSettings();
-        if (app.playbackParameters.count == 1) $.setenv('dialogMode', true)
-        if (($.getenv('dialogMode') == 'true' || $.getenv('dialogMode') == null)) {
-            if (b && SD.initialize()) {
-                var w = dialogWindow(b, (((new Date).getTime() - time) / 1000)); var result = w.show()
-                if (result == 2) {
-                    if (cleanup && targetID) doc.deleteLayer(targetID)
-                    SD.exit()
-                    isCancelled = true;
-                    return;
-                } else if (result != undefined) {
-                    $.setenv('dialogMode', false)
-                    cfg.putScriptSettings(true)
-                    cfg.putScriptSettings()
-                    doProgress('Генерация изображения... ', 'main(b)')
-                    SD.exit()
+    var currentSelection = { result: false, bounds: null, previousGeneration: null, junk: null };
+    if (apl.getProperty('numberOfDocuments')) activeDocument.suspendHistory('Check selection', 'checkSelection(currentSelection)');
+    if (currentSelection.result) {
+        var b = currentSelection.bounds,
+            w = Math.floor((b.right - b.left) / 8) * 8,
+            h = Math.floor((b.bottom - b.top) / 8) * 8;
+        if (w != (b.right - b.left) || h != (b.bottom - b.top)) {
+            b.bottom = b.top + h;
+            b.right = b.left + w;
+        }
+        b.width = b.right - b.left
+        b.height = b.bottom - b.top
+        if (!app.playbackParameters.count || app.playbackParameters.count == 1) {
+            cfg.getScriptSettings();
+            if (app.playbackParameters.count == 1) $.setenv('dialogMode', true)
+            if (($.getenv('dialogMode') == 'true' || $.getenv('dialogMode') == null)) {
+                if (SD.initialize()) {
+                    var w = dialogWindow(currentSelection.bounds, (((new Date).getTime() - time) / 1000)); var result = w.show()
+                    if (result == 2) {
+                        SD.exit()
+                        isCancelled = true;
+                        return;
+                    } else if (result != undefined) {
+                        $.setenv('dialogMode', false)
+                        doProgress(str.progressGenerate, 'main(currentSelection)')
+                        cfg.putScriptSettings()
+                        cfg.putScriptSettings(true, true)
+                        SD.exit()
+                    }
                 }
-            }
-        } else {
-            if (SD.initialize()) {
-                $.setenv('dialogMode', false)
-                cfg.putScriptSettings(true)
-                doProgress('Генерация изображения... ', 'main(b)')
-                SD.exit()
             } else {
-                if (cleanup && targetID) doc.deleteLayer(targetID)
-                SD.exit()
-                isCancelled = true
-            }
-        }
-    }
-    else {
-        cfg.getScriptSettings(true)
-        if (!cfg.recordToAction) {
-            cfg.getScriptSettings()
-            cfg.recordToAction = false
-        }
-        if (app.playbackDisplayDialogs == DialogModes.ALL) {
-            if (b && SD.initialize()) {
-                var w = dialogWindow(b, (((new Date).getTime() - time) / 1000)); var result = w.show()
-                if (result == 2) {
+                if (SD.initialize()) {
+                    $.setenv('dialogMode', false)
+                    doProgress(str.progressGenerate, 'main(currentSelection)')
+                    cfg.putScriptSettings(true)
+                    SD.exit()
+                } else {
                     if (cleanup && targetID) doc.deleteLayer(targetID)
                     SD.exit()
-                    isCancelled = true;
-                    return;
-                } else if (result != undefined) {
-                    if (cfg.recordToAction) cfg.putScriptSettings(true) else cfg.putScriptSettings()
-                    doProgress('Генерация изображения... ', 'main(b)')
-                    SD.exit()
+                    isCancelled = true
                 }
             }
-        } else {
-            if (b && SD.initialize()) { doProgress('Генерация изображения... ', 'main(b)') }
-            SD.exit()
+        }
+        else {
+            cfg.getScriptSettings(true)
+            if (!cfg.current.recordToAction) {
+                cfg.getScriptSettings()
+                cfg.current.recordToAction = false
+            }
+            if (app.playbackDisplayDialogs == DialogModes.ALL) {
+                if (SD.initialize()) {
+                    var w = dialogWindow(currentSelection.bounds, (((new Date).getTime() - time) / 1000)); var result = w.show()
+                    if (result == 2) {
+                        SD.exit()
+                        isCancelled = true;
+                        return;
+                    } else if (result != undefined) {
+                        doProgress(str.progressGenerate, 'main(currentSelection)')
+                        if (cfg.current.recordToAction) cfg.putScriptSettings(true) else cfg.putScriptSettings()
+                        SD.exit()
+                    }
+                }
+            } else {
+                if (SD.initialize()) { doProgress(str.progressGenerate, 'main(currentSelection)') }
+                SD.exit()
+            }
         }
     }
 }
-function main(bounds) {
-    var checkpoint = (cfg.sd_model_checkpoint == SD['sd_model_checkpoint'] ? null : findOption(cfg.sd_model_checkpoint, SD['sd-models'], SD['sd_model_checkpoint'])),
-        vae = (cfg.sd_vae == SD['sd_vae'] ? null : findOption(cfg.sd_vae, SD['sd-vaes'], SD['sd_vae']));
-    if (vae != cfg.sd_vae && vae != null) cfg.sd_vae = vae
-    if (checkpoint != cfg.sd_model_checkpoint) cfg.sd_model_checkpoint = checkpoint
-    doc.makeSelection(bounds.top, bounds.left, bounds.bottom, bounds.right);
+function main(selection) {
+    var checkpoint = (cfg.current.sd_model_checkpoint == SD['sd_model_checkpoint'] ? null : findOption(cfg.current.sd_model_checkpoint, SD['sd-models'], SD['sd_model_checkpoint'])),
+        vae = (cfg.current.sd_vae == SD['sd_vae'] ? null : findOption(cfg.current.sd_vae, SD['sd-vaes'], SD['sd_vae']));
+    if (vae != cfg.current.sd_vae && vae != null) cfg.current.sd_vae = vae
+    if (checkpoint != cfg.current.sd_model_checkpoint && checkpoint != null) cfg.current.sd_model_checkpoint = checkpoint
+    if (selection.previousGeneration) doc.hideSelectedLayers()
+    if (doc.getProperty('quickMask')) {
+        doc.quickMask('clearEvent');
+        doc.makeLayer(LAYER_NAME)
+        doc.makeSelectionMask()
+    } else if (doc.hasProperty('selection')) {
+        doc.makeLayer(LAYER_NAME)
+        doc.makeSelectionMask()
+    } else if (lr.getProperty('name') == LAYER_NAME) {
+        if (lr.getProperty('hasUserMask')) {
+            lr.selectChannel('mask')
+            doc.makeSelectionFromLayer('targetEnum');
+        } else {
+            doc.makeSelectionFromLayer('transparencyEnum');
+            doc.makeSelectionMask()
+        }
+    }
+    selection.junk = lr.getProperty('layerID')
+    doc.makeSelection(selection.bounds);
     var hst = activeDocument.activeHistoryState,
         c = doc.getProperty('center').value;
-    if (targetID) doc.hideSelectedLayers()
     doc.crop(true);
-    if (cfg.flatten) { doc.flatten() } else {
+    if (cfg.current.flatten) { doc.flatten() } else {
         var len = doc.getProperty('numberOfLayers'),
             start = lr.getProperty('itemIndex'),
             lrsList = new ActionReference();
         offset = doc.getProperty('hasBackgroundLayer') ? 0 : 1;
-        for (var i = start + offset; i <= len; i++) lrsList.putIdentifier(s2t("layer"), lr.getProperty('layerID', false, i, true));
+        for (var i = start + offset; i <= len; i++) lrsList.putIdentifier(s2t('layer'), lr.getProperty('layerID', false, i, true));
         if (start + offset <= len) {
             doc.selectLayersByIDList(lrsList);
             doc.hideSelectedLayers();
         }
     }
     var f = new File(Folder.temp + '/SDH.jpg');
+    var f1 = new File(Folder.temp + '/SDH_MASK.jpg');
     doc.saveACopy(f);
+    if (cfg.inpaintMode) {
+        lr.selectChannel('mask');
+        lr.selectAllPixels();
+        doc.copyPixels()
+        lr.selectChannel('RGB')
+        doc.pastePixels()
+        doc.saveACopy(f1);
+    }
     activeDocument.activeHistoryState = hst;
     doc.setProperty('center', c);
     var p = (new Folder(SD['data_dir'] + '/' + SD['outdir_img2img_samples']))
@@ -133,69 +171,68 @@ function main(bounds) {
     if (checkpoint || vae) {
         var vae_path = [];
         if (SD.forgeUI) {
-            for (var i = 0; i < SD["forge_additional_modules"].length; i++) {
-                if (SD["forge_additional_modules"][i].indexOf(cfg.sd_vae) != -1) {
-                    vae_path.push(SD["forge_additional_modules"][i])
+            for (var i = 0; i < SD['forge_additional_modules'].length; i++) {
+                if (SD['forge_additional_modules'][i].indexOf(cfg.current.sd_vae) != -1) {
+                    vae_path.push(SD['forge_additional_modules'][i])
                     break;
                 }
             }
         }
-        changeProgressText("Обновление параметров...")
+        changeProgressText(str.progressUpdating)
         updateProgress(0.1, 1)
-        if (!SD.setOptions(checkpoint, vae, vae_path)) throw new Error("Переключение модели завершилось с ошибкой!\nПревышено время ожидания ответа!")
+        if (!SD.setOptions(checkpoint, vae, vae_path)) throw new Error(str.errUpdating)
     }
-    changeProgressText("Подготовка документа...")
+    changeProgressText(str.progressDocument)
     updateProgress(0.2, 1)
-    if (cfg.autoResize) cfg.resize = autoScale(bounds)
-    var width = cfg.resize != 1 ? (mathTrunc((bounds.width * cfg.resize) / 8) * 8) : bounds.width,
-        height = cfg.resize != 1 ? (mathTrunc((bounds.height * cfg.resize) / 8) * 8) : bounds.height
+    if (cfg.current.autoResize && !isDitry) cfg.current.resize = autoScale(selection.bounds)
+    var width = cfg.current.resize != 1 ? (mathTrunc((selection.bounds.width * cfg.current.resize) / 8) * 8) : selection.bounds.width,
+        height = cfg.current.resize != 1 ? (mathTrunc((selection.bounds.height * cfg.current.resize) / 8) * 8) : selection.bounds.height
     var payload = {
-        "input": f.fsName.replace(/\\/g, '\\\\'),
-        "output": p.fsName.replace(/\\/g, '\\\\'),
-        "prompt": cfg.prompt,
-        "negative_prompt": cfg.negative_prompt,
-        "sampler_name": cfg.sampler_name,
-        "scheduler": cfg.scheduler,
-        "cfg_scale": cfg.cfg_scale,
-        "seed": -1,
-        "steps": cfg.steps,
-        "width": width,
-        "height": height,
-        "denoising_strength": cfg.denoising_strength,
-        "n_iter": 1,
+        'input': f.fsName.replace(/\\/g, '\\\\'),
+        'output': p.fsName.replace(/\\/g, '\\\\'),
+        'prompt': cfg.current.prompt,
+        'negative_prompt': cfg.current.negative_prompt,
+        'sampler_name': cfg.current.sampler_name,
+        'scheduler': cfg.current.scheduler,
+        'cfg_scale': cfg.current.cfg_scale,
+        'seed': -1,
+        'steps': cfg.current.steps,
+        'width': width,
+        'height': height,
+        'denoising_strength': cfg.current.denoising_strength,
+        'n_iter': 1,
     };
+    if (cfg.inpaintMode) {
+        payload['mask'] = f1.fsName.replace(/\\/g, '\\\\')
+        payload['inpainting_fill'] = cfg.current.inpaintingFill
+    }
     updateProgress(0.7, 1)
-    changeProgressText("Генерация изображения...")
+    changeProgressText(str.progressGenerate)
     app.refresh()
     var result = SD.sendPayload(payload);
     if (result) {
         activeDocument.suspendHistory('Generate image', 'generatedImageToLayer()')
-    } else throw new Error('Превышено время ожидания ответа Stable Diffusion!')
+    } else throw new Error(str.errGenerating)
     function generatedImageToLayer() {
         updateProgress(1, 1)
-        changeProgressText("Вставка изображения...")
+        changeProgressText(str.progressPlace)
         doc.place(new File(result))
         var placedBounds = doc.descToObject(lr.getProperty('bounds').value);
-        var dW = (bounds.right - bounds.left) / (placedBounds.right - placedBounds.left);
-        var dH = (bounds.bottom - bounds.top) / (placedBounds.bottom - placedBounds.top)
+        var dW = (selection.bounds.right - selection.bounds.left) / (placedBounds.right - placedBounds.left);
+        var dH = (selection.bounds.bottom - selection.bounds.top) / (placedBounds.bottom - placedBounds.top)
         lr.transform(dW * 100, dH * 100);
-        if (cfg.rasterizeImage) lr.rasterize();
+        if (cfg.current.rasterizeImage) lr.rasterize();
         lr.setName(LAYER_NAME)
-        if (targetID) {
-            doc.makeSelectionFromLayer('mask', targetID)
-            doc.makeSelectionMask()
-            doc.deleteLayer(targetID)
-        } else {
-            doc.makeSelectionFromLayer('transparencyEnum')
-            doc.makeSelectionMask()
-        }
-        doc.selectUserMask();
-        if (cfg.selectBrush) {
+        doc.makeSelectionFromLayer('mask', selection.junk)
+        doc.makeSelectionMask()
+        doc.deleteLayer(selection.junk)
+        lr.selectChannel('mask');
+        if (cfg.current.selectBrush) {
             doc.resetSwatches()
             doc.selectBrush();
-            doc.setBrushOpacity(cfg.brushOpacity)
+            doc.setBrushOpacity(cfg.current.brushOpacity)
         }
-        if (cfg.removeImage) {
+        if (cfg.current.removeImage) {
             (new File(result)).remove();
         }
     }
@@ -205,194 +242,202 @@ function main(bounds) {
     }
 }
 function dialogWindow(b, s) {
-    var w = new Window("dialog");
-    w.text = "SD Helper - responce time " + s + 's';
-    w.orientation = "column";
-    w.alignChildren = ["fill", "top"];
-    w.spacing = 10;
-    w.margins = 16;
-    var grGlobal = w.add("group");
-    grGlobal.orientation = "row";
-    grGlobal.alignChildren = ["left", "center"];
-    grGlobal.spacing = 0;
-    grGlobal.margins = 0;
-    var stWH = grGlobal.add("statictext");
-    stWH.text = 'Selection size: ' + b.width + 'x' + b.height;
-    stWH.preferredSize.width = 260;
-    var bnSettings = grGlobal.add("button");
-    bnSettings.text = "⚙";
-    bnSettings.helpTip = 'Script settings'
-    bnSettings.preferredSize = [25, 25];
+    var w = new Window("dialog{orientation:'column',alignChildren:['fill', 'top'],spacing:10,margins:16}"),
+        grGlobal = w.add("group{orientation:'row',alignChildren:['left', 'center'],spacing:0,margins:0}"),
+        stWH = grGlobal.add("statictext{preferredSize:[130,-1]}"),
+        rbImg = grGlobal.add("radiobutton{preferredSize:[65,-1]}"),
+        rbInpaint = grGlobal.add("radiobutton{preferredSize:[65,-1]}"),
+        bnSettings = grGlobal.add("button{preferredSize:[25, 25]}"),
+        grSettings = w.add("group{orientation:'column',alignChildren:['fill', 'left'],spacing:5,margins:0}");
+    showControls(grSettings);
+    var grOk = w.add("group{orientation:'row',alignChildren:['center', 'center'],spacing:10,margins:[0, 10, 0, 0]}"),
+        Ok = grOk.add('button', undefined, undefined, { name: 'ok' });
+    w.text = 'SD Helper v.' + ver + ' - responce time ' + s + 's';
+    stWH.text = str.selection + b.width + 'x' + b.height;
+    rbImg.text = 'Img2Img'
+    rbInpaint.text = 'Inpaint'
+    bnSettings.text = '⚙';
+    Ok.text = str.generate;
+    bnSettings.helpTip = str.settings
+    cfg.inpaintMode ? (rbInpaint.value = true) : (rbImg.value = true);
     bnSettings.onClick = function () {
         var tempSettings = {}
         cloneObject(cfg, tempSettings)
         var s = settingsWindow(w, tempSettings),
             result = s.show();
         if (result == 1) {
-            var isDitry = false;
-            for (var a in tempSettings) {
+            var changed = false;
+            for (var a in tempSettings.current) {
                 if (a.indexOf('show') == -1 && a.indexOf('autoResize') == -1) continue;
-                if (tempSettings[a] != cfg[a]) {
-                    isDitry = true
+                if (tempSettings[a] != cfg.current[a]) {
+                    changed = true
                     break;
                 }
             }
             cloneObject(tempSettings, cfg)
-            if (isDitry) {
-                var len = grSettings.children.length
-                for (var i = 0; i < len; i++) {
-                    grSettings.remove(grSettings.children[0])
-                }
+            if (changed) {
                 showControls(grSettings)
                 w.layout.layout(true)
             }
         }
     }
-    var grSettings = w.add("group");
-    grSettings.orientation = "column";
-    grSettings.alignChildren = ["fill", "left"];
-    grSettings.spacing = 5;
-    grSettings.margins = 0;
-    showControls(grSettings);
-    var grOk = w.add("group");
-    grOk.orientation = "row";
-    grOk.alignChildren = ["center", "center"];
-    grOk.spacing = 10;
-    grOk.margins = [0, 10, 0, 0];;
-    var Ok = grOk.add("button", undefined, undefined, { name: "ok" });
-    Ok.text = "Generate";
+    rbImg.onClick = function () {
+        cfg.inpaint = cfg.current
+        cfg.current = cfg.img2img
+        cfg.inpaintMode = false
+        showControls(grSettings)
+        w.layout.layout(true)
+    }
+    rbInpaint.onClick = function () {
+        cfg.img2img = cfg.current
+        cfg.current = cfg.inpaint
+        cfg.inpaintMode = true
+        showControls(grSettings)
+        w.layout.layout(true)
+    }
     return w;
-    function showControls(w) {
-        if (cfg.showSd_model_checkpoint) checkpoint(w);
-        if (cfg.showSd_vae) vae(w)
-        if (cfg.showPrompt) prompt(w)
-        if (cfg.showNegative_prompt) negativePrompt(w)
-        if (cfg.showSampler_name) sampler(w)
-        if (cfg.showScheduler) shelduler(w)
-        if (cfg.showSteps) steps(w)
-        if (cfg.showCfg_scale) cfgScale(w)
-        if (cfg.showResize) resizeScale(w)
-        denoisingStrength(w)
-        function checkpoint(w) {
-            var grCheckoint = w.add("group");
-            grCheckoint.orientation = "column";
-            grCheckoint.alignChildren = ["fill", "center"];
-            grCheckoint.spacing = 0;
-            grCheckoint.margins = 0;
-            var stCheckpoint = grCheckoint.add("statictext");
-            stCheckpoint.text = "Stable Diffusion checkpoint";
-            var dlCheckpoint = grCheckoint.add("dropdownlist");
-            dlCheckpoint.preferredSize.width = 285;
+    function showControls(p) {
+        var len = p.children.length
+        for (var i = 0; i < len; i++) {
+            p.remove(p.children[0])
+        }
+        if (cfg.current.showInpaintingFill && cfg.inpaintMode) inpaintingFill(p)
+        if (cfg.current.showSd_model_checkpoint) checkpoint(p);
+        if (cfg.current.showSd_vae) vae(p)
+        if (cfg.current.showPrompt) prompt(p)
+        if (cfg.current.showNegative_prompt) negativePrompt(p)
+        if (cfg.current.showSampler_name) sampler(p)
+        if (cfg.current.showScheduler) shelduler(p)
+        if (cfg.current.showSteps) steps(p)
+        if (cfg.current.showCfg_scale) cfgScale(p)
+        if (cfg.current.showResize) resizeScale(p)
+        denoisingStrength(p)
+        function inpaintingFill(p) {
+            var grCheckoint = p.add("group{orientation:'column',alignChildren:['fill', 'center'],spacing:0,margins:0}"),
+                stCheckpoint = grCheckoint.add('statictext'),
+                dlCheckpoint = grCheckoint.add('dropdownlist', undefined, undefined, { items: ['fill', 'original', 'latent noise', 'latent nothing'], preferredSize: [285, -1] });
+            stCheckpoint.text = str.fill
+            dlCheckpoint.selection = cfg.current.inpaintingFill
+            dlCheckpoint.onChange = function () {
+                cfg.current.inpaintingFill = this.selection.index
+            }
+        }
+        function checkpoint(p) {
+            var grCheckoint = p.add("group{orientation:'column',alignChildren:['fill', 'center'],spacing:0,margins:0}"),
+                stCheckpoint = grCheckoint.add('statictext'),
+                dlCheckpoint = grCheckoint.add('dropdownlist{preferredSize:[285,-1]}');
+            stCheckpoint.text = str.checkpoint;
             if (SD['sd-models'].length) for (var i = 0; i < SD['sd-models'].length; i++) dlCheckpoint.add('item', SD['sd-models'][i])
-            var current = dlCheckpoint.find(cfg.sd_model_checkpoint) ? dlCheckpoint.find(cfg.sd_model_checkpoint) : dlCheckpoint.find(SD['sd_model_checkpoint']);
+            var current = dlCheckpoint.find(cfg.current.sd_model_checkpoint) ? dlCheckpoint.find(cfg.current.sd_model_checkpoint) : dlCheckpoint.find(SD['sd_model_checkpoint']);
             dlCheckpoint.selection = current ? current.index : 0
             dlCheckpoint.onChange = function () {
-                cfg.sd_model_checkpoint = this.selection.text
+                cfg.current.sd_model_checkpoint = this.selection.text
             }
         }
-        function vae(w) {
-            var grVae = w.add("group");
-            grVae.orientation = "column";
-            grVae.alignChildren = ["fill", "center"];
-            grVae.spacing = 0;
-            grVae.margins = 0;
-            var stVae = grVae.add("statictext");
-            stVae.text = "SD VAE";
-            var dlVae = grVae.add("dropdownlist");
-            dlVae.preferredSize.width = 285;
+        function vae(p) {
+            var grVae = p.add("group{orientation:'column',alignChildren:['fill', 'center'],spacing:0,margins:0}"),
+                stVae = grVae.add('statictext'),
+                dlVae = grVae.add('dropdownlist{preferredSize:[285,-1]}')
+            stVae.text = str.vae;
             if (SD['sd-vaes'].length) for (var i = 0; i < SD['sd-vaes'].length; i++) dlVae.add('item', SD['sd-vaes'][i])
-            var current = dlVae.find(cfg.sd_vae) ? dlVae.find(cfg.sd_vae) : dlVae.find(SD['sd_vae']);
+            var current = dlVae.find(cfg.current.sd_vae) ? dlVae.find(cfg.current.sd_vae) : dlVae.find(SD['sd_vae']);
             dlVae.selection = current ? current.index : 0
             dlVae.onChange = function () {
-                cfg.sd_vae = this.selection.text
+                cfg.current.sd_vae = this.selection.text
             }
         }
-        function prompt(w) {
-            var grPrompt = w.add("group");
-            grPrompt.orientation = "column";
-            grPrompt.alignChildren = ["fill", "top"];
-            grPrompt.spacing = 0;
-            grPrompt.margins = 0;
-            var stPrompt = grPrompt.add("statictext");
-            stPrompt.text = "Prompt";
-            var etPrompt = grPrompt.add('edittext {properties: {multiline: true, scrollable: true}}');
-            etPrompt.preferredSize.height = 80;
-            etPrompt.text = cfg.prompt
+        function prompt(p) {
+            var grPrompt = p.add("group{orientation:'column',alignChildren:['fill', 'top'],spacing:0,margins:0}"),
+                stPrompt = grPrompt.add('statictext'),
+                etPrompt = grPrompt.add('edittext{preferredSize:[285,80],properties:{multiline: true, scrollable: true}}'),
+                bnTranslate = grPrompt.add('button');
+            stPrompt.text = str.prompt
+            etPrompt.text = cfg.current.prompt
+            bnTranslate.text = str.translate + 'ru -> en';
+            bnTranslate.enabled = cfg.current.prompt.length
             etPrompt.onChange = function () {
-                cfg.prompt = this.text
+                cfg.current.prompt = this.text
+            }
+            bnTranslate.onClick = function () {
+                if (etPrompt.text != '') {
+                    var result = SD.translate(etPrompt.text)
+                    if (result) {
+                        etPrompt.text = result
+                        etPrompt.onChange()
+                    } else {
+                        alert(str.errTranslate)
+                        this.enabled = false;
+                        etPrompt.locked = true
+                    }
+                }
+            }
+            etPrompt.onChanging = function () {
+                if (!this.locked) bnTranslate.enabled = this.text.length
             }
         }
-        function negativePrompt(w) {
-            var grNegative = w.add("group");
-            grNegative.orientation = "column";
-            grNegative.alignChildren = ["fill", "top"];
-            grNegative.spacing = 0;
-            grNegative.margins = 0;
-            var stNegative = grNegative.add("statictext");
-            stNegative.text = "Negative prompt";
-            var etNegative = grNegative.add('edittext {properties: {multiline: true, scrollable: true}}}');
-            etNegative.preferredSize.height = 80;
-            etNegative.text = cfg.negative_prompt;
+        function negativePrompt(p) {
+            var grNegative = p.add("group{orientation:'column',alignChildren:['fill', 'top'],spacing:0,margins:0}"),
+                stNegative = grNegative.add('statictext'),
+                etNegative = grNegative.add('edittext {preferredSize:[285,80],properties: {multiline: true, scrollable: true}}}'),
+                bnTranslate = grNegative.add('button');
+            stNegative.text = str.negativePrompt
+            etNegative.text = cfg.current.negative_prompt;
+            bnTranslate.text = str.translate + 'ru -> en';
+            bnTranslate.enabled = cfg.current.negative_prompt.length
             etNegative.onChange = function () {
-                cfg.negative_prompt = this.text
+                cfg.current.negative_prompt = this.text
+            }
+            bnTranslate.onClick = function () {
+                if (etNegative.text != '') {
+                    var result = SD.translate(etNegative.text)
+                    if (result) {
+                        etNegative.text = result
+                        etNegative.onChange()
+                    } else {
+                        alert(str.errTranslate)
+                        this.enabled = false;
+                        etNegative.locked = true
+                    }
+                }
+            }
+            etNegative.onChanging = function () {
+                if (!this.locked) bnTranslate.enabled = this.text.length
             }
         }
-        function sampler(w) {
-            var grSampler = w.add("group");
-            grSampler.orientation = "column";
-            grSampler.alignChildren = ["fill", "center"];
-            grSampler.spacing = 0;
-            grSampler.margins = 0;
-            var stSampler = grSampler.add("statictext");
-            stSampler.text = "Sampling method";
-            var dlSampler = grSampler.add("dropdownlist");
-            dlSampler.preferredSize.width = 285;
+        function sampler(p) {
+            var grSampler = p.add("group{orientation:'column',alignChildren:['fill', 'center'],spacing:0,margins:0}"),
+                stSampler = grSampler.add('statictext'),
+                dlSampler = grSampler.add('dropdownlist{preferredSize:[285,-1]}');
+            stSampler.text = str.sampling
             if (SD['samplers'].length) for (var i = 0; i < SD['samplers'].length; i++) dlSampler.add('item', SD['samplers'][i])
-            var current = dlSampler.find(cfg.sampler_name);
+            var current = dlSampler.find(cfg.current.sampler_name);
             dlSampler.selection = current ? current.index : 0
             dlSampler.onChange = function () {
-                cfg.sampler_name = this.selection.text
+                cfg.current.sampler_name = this.selection.text
             }
         }
-        function shelduler(w) {
-            var grSheldue = w.add("group");
-            grSheldue.orientation = "column";
-            grSheldue.alignChildren = ["fill", "center"];
-            grSheldue.spacing = 0;
-            grSheldue.margins = 0;
-            var stSheldue = grSheldue.add("statictext");
-            stSheldue.text = "Schedule type";
-            var dlSheldue = grSheldue.add("dropdownlist");
+        function shelduler(p) {
+            var grSheldue = p.add("group{orientation:'column',alignChildren:['fill', 'center'],spacing:0,margins:0}"),
+                stSheldue = grSheldue.add('statictext'),
+                dlSheldue = grSheldue.add('dropdownlist{preferredSize:[285,-1]}');
+            stSheldue.text = str.schedule;
             if (SD['schedulers'].length) for (var i = 0; i < SD['schedulers'].length; i++) dlSheldue.add('item', SD['schedulers'][i])
-            var current = dlSheldue.find(cfg.scheduler);
+            var current = dlSheldue.find(cfg.current.scheduler);
             dlSheldue.selection = current ? current.index : 0
             dlSheldue.onChange = function () {
-                cfg.scheduler = this.selection.text
+                cfg.current.scheduler = this.selection.text
             }
         }
-        function steps(w) {
-            var grSteps = w.add("group");
-            grSteps.orientation = "column";
-            grSteps.alignChildren = ["fill", "top"];
-            grSteps.spacing = 0;
-            grSteps.margins = 0;
-            var grStepsTitle = grSteps.add("group");
-            grStepsTitle.orientation = "row";
-            grStepsTitle.alignChildren = ["left", "center"];
-            grStepsTitle.spacing = 10;
-            grStepsTitle.margins = 0;
-            var stSteps = grStepsTitle.add("statictext");
-            stSteps.text = "Sampling steps";
-            stSteps.preferredSize.width = 220;
-            var stStepsValue = grStepsTitle.add("statictext");
-            stStepsValue.preferredSize.width = 65;
-            stStepsValue.justify = "right";
-            var slSteps = grSteps.add("slider");
-            slSteps.minvalue = 1;
-            slSteps.maxvalue = 100;
-            slSteps.value = stStepsValue.text = cfg.steps
+        function steps(p) {
+            var grSteps = p.add("group{orientation:'column',alignChildren:['fill', 'top'],spacing:0,margins:0}"),
+                grStepsTitle = grSteps.add("group{orientation:'row',alignChildren:['left', 'center'],spacing:10,margins:0}"),
+                stSteps = grStepsTitle.add('statictext{preferredSize:[220,-1]}'),
+                stStepsValue = grStepsTitle.add('statictext{preferredSize:[65,-1],justify:"right"}'),
+                slSteps = grSteps.add('slider{minvalue:1,maxvalue:100}');
+            stSteps.text = str.steps
+            slSteps.value = stStepsValue.text = cfg.current.steps
             slSteps.onChange = function () {
-                stStepsValue.text = cfg.steps = mathTrunc(this.value)
+                stStepsValue.text = cfg.current.steps = mathTrunc(this.value)
             }
             slSteps.onChanging = function () { slSteps.onChange() }
             slSteps.addEventListener('keydown', commonHandler)
@@ -406,30 +451,17 @@ function dialogWindow(b, s) {
                 }
             }
         }
-        function cfgScale(w) {
-            var grCfg = w.add("group");
-            grCfg.orientation = "column";
-            grCfg.alignChildren = ["fill", "top"];
-            grCfg.spacing = 0;
-            grCfg.margins = 0;
-            var grCfgTitle = grCfg.add("group");
-            grCfgTitle.orientation = "row";
-            grCfgTitle.alignChildren = ["left", "center"];
-            grCfgTitle.spacing = 10;
-            grCfgTitle.margins = 0;
-            var stCfg = grCfgTitle.add("statictext");
-            stCfg.text = "CFG Scale";
-            stCfg.preferredSize.width = 220;
-            var stCfgValue = grCfgTitle.add("statictext");
-            stCfgValue.justify = "right";
-            stCfgValue.preferredSize.width = 65
-            var slCfg = grCfg.add("slider");
-            slCfg.minvalue = 2;
-            slCfg.maxvalue = 30;
-            slCfg.value = cfg.cfg_scale * 2
-            stCfgValue.text = cfg.cfg_scale
+        function cfgScale(p) {
+            var grCfg = p.add("group{orientation:'column',alignChildren:['fill', 'top'],spacing:0,margins:0}"),
+                grCfgTitle = grCfg.add("group{orientation:'row',alignChildren:['left', 'center'],spacing:10,margins:0}"),
+                stCfg = grCfgTitle.add('statictext{preferredSize:[220,-1]}'),
+                stCfgValue = grCfgTitle.add('statictext{preferredSize:[65,-1],justify:"right"}'),
+                slCfg = grCfg.add('slider{minvalue:2,maxvalue:30}');
+            stCfg.text = str.cfgScale
+            slCfg.value = cfg.current.cfg_scale * 2
+            stCfgValue.text = cfg.current.cfg_scale
             slCfg.onChange = function () {
-                stCfgValue.text = cfg.cfg_scale = mathTrunc(this.value) / 2
+                stCfgValue.text = cfg.current.cfg_scale = mathTrunc(this.value) / 2
             }
             slCfg.onChanging = function () { slCfg.onChange() }
             slCfg.addEventListener('keydown', commonHandler)
@@ -443,40 +475,23 @@ function dialogWindow(b, s) {
                 }
             }
         }
-        function resizeScale(w) {
-            var s = "Resize by scale";
-            var grResize = w.add("group");
-            grResize.orientation = "column";
-            grResize.alignChildren = ["fill", "top"];
-            grResize.spacing = 0;
-            grResize.margins = 0;
-            var grResizeTitle = grResize.add("group");
-            grResizeTitle.orientation = "row";
-            grResizeTitle.alignChildren = ["left", "center"];
-            grResizeTitle.spacing = 10;
-            grResizeTitle.margins = 0;
-            var stResize = grResizeTitle.add("statictext");
-            stResize.text = cfg.resize != 1 ? s + ' ' + (mathTrunc((b.width * cfg.resize) / 8) * 8) + 'x' + (mathTrunc((b.height * cfg.resize) / 8) * 8) : s
-            stResize.preferredSize.width = 220;
-            var stResizeValue = grResizeTitle.add("statictext");
-            stResizeValue.justify = "right";
-            stResizeValue.preferredSize.width = 65
-            stResizeValue.text = "1";
-            var slResize = grResize.add("slider");
-            slResize.minvalue = 1;
-            slResize.maxvalue = 40;
-            slResize.onChange = function (auto) {
-                if (auto == undefined) {
-                    stResizeValue.text = cfg.resize = mathTrunc(this.value) / 10
-                } else {
-                    stResizeValue.text = cfg.resize
-                }
-                stResize.text = cfg.resize != 1 ? s + ' ' + (mathTrunc((b.width * cfg.resize) / 8) * 8) + 'x' + (mathTrunc((b.height * cfg.resize) / 8) * 8) : s
+        function resizeScale(p) {
+            var grResize = p.add("group{orientation:'column',alignChildren:['fill', 'top'],spacing:0,margins:0}"),
+                grResizeTitle = grResize.add("group{orientation:'row',alignChildren:['left', 'center'],spacing:10,margins:0}"),
+                stResize = grResizeTitle.add('statictext{preferredSize:[220,-1]}'),
+                stResizeValue = grResizeTitle.add('statictext{preferredSize:[65,-1],justify:"right"}'),
+                slResize = grResize.add('slider{minvalue:1,maxvalue:40}');
+            slResize.onChange = function () {
+                stResizeValue.text = cfg.current.resize = mathTrunc(this.value) / 10
+                stResizeValue.text = cfg.current.resize
+                stResize.text = setTitle()
+                isDitry = true
             }
             slResize.onChanging = function () { slResize.onChange() }
             slResize.addEventListener('keydown', commonHandler)
             function commonHandler(evt) {
                 if (evt.shiftKey) {
+                    isDitry = true
                     if (evt.keyIdentifier == 'Right' || evt.keyIdentifier == 'Up') {
                         slResize.value = Math.floor(slResize.value / 5) * 5 + 4
                     } else if (evt.keyIdentifier == 'Left' || evt.keyIdentifier == 'Down') {
@@ -484,41 +499,35 @@ function dialogWindow(b, s) {
                     }
                 }
             }
-            if (cfg.autoResize) {
-                cfg.resize = autoScale(b)
-                slResize.value = cfg.resize * 10
-                slResize.onChange(true);
+
+            if (cfg.current.autoResize) {
+                cfg.current.resize = autoScale(b)
+                slResize.value = cfg.current.resize * 10
+                stResizeValue.text = cfg.current.resize
+                stResize.text = setTitle()
             } else {
-                slResize.value = cfg.resize * 10
-                slResize.onChange();
+                slResize.value = cfg.current.resize * 10
+                stResizeValue.text = cfg.current.resize = mathTrunc(slResize.value) / 10
+                stResize.text = setTitle()
             }
 
+            function setTitle() {
+                var s = str.resize
+                return cfg.current.resize != 1 ? s + ' ' + (mathTrunc((b.width * cfg.current.resize) / 8) * 8) + 'x' + (mathTrunc((b.height * cfg.current.resize) / 8) * 8) : s
+            }
         }
-        function denoisingStrength(w) {
-            var grStrength = w.add("group");
-            grStrength.orientation = "column";
-            grStrength.alignChildren = ["fill", "top"];
-            grStrength.spacing = 0;
-            grStrength.margins = 0;
-            var grStrengthTitle = grStrength.add("group");
-            grStrengthTitle.orientation = "row";
-            grStrengthTitle.alignChildren = ["left", "center"];
-            grStrengthTitle.spacing = 10;
-            grStrengthTitle.margins = 0;
-            var stStrength = grStrengthTitle.add("statictext");
-            stStrength.text = "Denoising strength";
-            stStrength.preferredSize.width = 220;
-            var stStrengthValue = grStrengthTitle.add("statictext");
-            stStrengthValue.justify = "right";
-            stStrengthValue.preferredSize.width = 65
-            var slStrength = grStrength.add("slider");
-            slStrength.minvalue = 0;
-            slStrength.maxvalue = 100;
-            slStrength.value = cfg.denoising_strength * 100
-            stStrengthValue.text = cfg.denoising_strength
+        function denoisingStrength(p) {
+            var grStrength = p.add("group{orientation:'column',alignChildren:['fill', 'top'],spacing:0,margins:0}"),
+                grStrengthTitle = grStrength.add("group{orientation:'row',alignChildren:['left', 'center'],spacing:10,margins:0}"),
+                stStrength = grStrengthTitle.add('statictext{preferredSize:[220,-1]}'),
+                stStrengthValue = grStrengthTitle.add('statictext{preferredSize:[65,-1],justify:"right"}'),
+                slStrength = grStrength.add('slider{minvalue:0,maxvalue:100}');
+            stStrength.text = str.strength
+            slStrength.value = cfg.current.denoising_strength * 100
+            stStrengthValue.text = cfg.current.denoising_strength
             slStrength.active = true
             slStrength.onChange = function () {
-                stStrengthValue.text = cfg.denoising_strength = mathTrunc(this.value) / 100
+                stStrengthValue.text = cfg.current.denoising_strength = mathTrunc(this.value) / 100
             }
             slStrength.onChanging = function () { slStrength.onChange() }
             slStrength.addEventListener('keydown', commonHandler)
@@ -534,117 +543,104 @@ function dialogWindow(b, s) {
         }
     }
     function settingsWindow(p, cfg) {
-        var w = new Window("dialog");
-        w.text = "Sctipt settings";
-        w.orientation = "column";
-        w.alignChildren = ["fill", "top"];
-        w.spacing = 10;
-        w.margins = 16;
-        var chFlatten = w.add("checkbox");
-        chFlatten.text = "flatten layers before generation";
-        chFlatten.value = cfg.flatten
-        chFlatten.onClick = function () { cfg.flatten = this.value }
-        var pnPathSettings = w.add("panel");
-        pnPathSettings.text = "Output";
-        pnPathSettings.orientation = "column";
-        pnPathSettings.alignChildren = ["fill", "top"];
-        pnPathSettings.spacing = 5;
-        pnPathSettings.margins = 10;
-        var grPath = pnPathSettings.add("group");
-        grPath.orientation = "column";
-        grPath.alignChildren = ["left", "center"];
-        grPath.spacing = 5;
-        grPath.margins = 0;
-        var etPath = grPath.add('edittext {properties: {readonly: true, multiline: true}}');
-        etPath.preferredSize.width = 250;
-        etPath.preferredSize.height = 40;
+        var w = new Window("dialog{orientation:'column',alignChildren:['fill', 'top'],spacing:10,margins:16}"),
+            chFlatten = w.add('checkbox'),
+            pnPathSettings = w.add("panel{orientation:'column',alignChildren:['fill', 'top'],spacing:5,margins:10}"),
+            grPath = pnPathSettings.add("group{orientation:'column',alignChildren:['left', 'center'],spacing:5,margins:0}"),
+            etPath = grPath.add('edittext{preferredSize:[250,40],properties:{readonly:true, multiline: true}}'),
+            chRemove = pnPathSettings.add('checkbox'),
+            chRasterize = pnPathSettings.add('checkbox'),
+            pnShow = w.add("panel{orientation:'column',alignChildren:['left', 'top'],spacing:0,margins:10}"),
+            chInpaitnigFill = pnShow.add('checkbox'),
+            chCheckpoint = pnShow.add('checkbox'),
+            chVae = pnShow.add('checkbox'),
+            chPrompt = pnShow.add('checkbox'),
+            chNegative = pnShow.add('checkbox'),
+            chSampling = pnShow.add('checkbox'),
+            chSheldule = pnShow.add('checkbox'),
+            chSteps = pnShow.add('checkbox'),
+            chCfg = pnShow.add('checkbox'),
+            chResize = pnShow.add('checkbox'),
+            pnBrush = w.add("panel{orientation:'column',alignChildren:['fill', 'top'],spacing:10,margins:10}"),
+            chSelectBrush = pnBrush.add('checkbox'),
+            grOpacity = pnBrush.add("group{orientation:'column',alignChildren:['fill', 'center'],spacing:5,margins:0}"),
+            grOpacityTitle = grOpacity.add("group{orientation:'row',alignChildren:['left', 'center'],spacing:10,margins:0}"),
+            stOpacityTitle = grOpacityTitle.add('statictext{preferredSize:[180,-1]}'),
+            stOpacityValue = grOpacityTitle.add('statictext{preferredSize:[65,-1],justify:"right"}'),
+            slOpacity = grOpacity.add('slider{minvalue:0,maxvalue:100}'),
+            pnResize = w.add("panel{orientation:'column',alignChildren:['fill', 'top'],spacing:10,margins:10}"),
+            chAutoResize = pnResize.add('checkbox'),
+            grChResize = pnResize.add("group{orientation:'column',alignChildren:['fill', 'center'],spacing:10,margins:0}"),
+            grResizeSl = grChResize.add("group{orientation:'row',alignChildren:['left', 'center'],spacing:10,margins:0}"),
+            grLess = grResizeSl.add("group{orientation:'row',alignChildren:['left', 'center'],spacing:0,margins:0,preferredSize:[100,-1]}"),
+            slLess = grLess.add('slider{minvalue:128,maxvalue:1024,preferredSize:[90,-1]}'),
+            stLess = grLess.add('statictext{preferredSize:[30,-1],justify:"right"}'),
+            grAbove = grResizeSl.add("group{orientation:'row',alignChildren:['left', 'center'],spacing:0,margins:0,preferredSize:[100,-1]}"),
+            slAbove = grAbove.add('slider{minvalue:1024,maxvalue:2048,preferredSize:[90,-1]}'),
+            stAbove = grAbove.add('statictext{preferredSize:[30,-1],justify:"right"}'),
+            chRecordSettings = w.add('checkbox'),
+            grBn = w.add("group{orientation:'row',alignChildren:['center', 'center'],spacing:10,margins:[0, 10, 0, 0]}"),
+            ok = grBn.add('button', undefined, undefined, { name: 'ok' });
+        chAutoResize.text = str.autoResizeCaption
+        chCfg.text = str.cfgScale;
+        chCheckpoint.text = str.checkpoint
+        chFlatten.text = str.flatten
+        chInpaitnigFill.text = str.fill;
+        chNegative.text = str.negativePrompt
+        chPrompt.text = str.prompt
+        chRasterize.text = str.rasterize
+        chRecordSettings.text = str.actionMode
+        chRemove.text = str.remove
+        chResize.text = str.resize
+        chSampling.text = str.sampling
+        chSelectBrush.text = str.selctBrush
+        chSheldule.text = str.schedule
+        chSteps.text = str.steps
+        chVae.text = str.vae
         etPath.text = (new File(SD['data_dir'] + '/' + SD['outdir_img2img_samples'])).fsName
-        var chRemove = pnPathSettings.add("checkbox");
-        chRemove.text = "remove image after placing";
-        chRemove.value = cfg.removeImage
-        chRemove.onClick = function () { cfg.removeImage = this.value }
-        var chRasterize = pnPathSettings.add("checkbox");
-        chRasterize.text = "rasterize placed image";
-        chRasterize.value = cfg.rasterizeImage
-        chRasterize.onClick = function () { cfg.rasterizeImage = this.value }
-        var pnShow = w.add("panel");
-        pnShow.text = "Show items";
-        pnShow.orientation = "column";
-        pnShow.alignChildren = ["left", "top"];
-        pnShow.spacing = 0;
-        pnShow.margins = 10;
-        var chCheckpoint = pnShow.add("checkbox");
-        chCheckpoint.text = "Stable Diffusion checkpoint";
-        chCheckpoint.value = cfg.showSd_model_checkpoint
-        chCheckpoint.onClick = function () { cfg.showSd_model_checkpoint = this.value }
-        var chVae = pnShow.add("checkbox");
-        chVae.text = "SD VAE";
-        chVae.value = cfg.showSd_vae
-        chVae.onClick = function () { cfg.showSd_vae = this.value }
-        var chPrompt = pnShow.add("checkbox");
-        chPrompt.text = "Prompt";
-        chPrompt.value = cfg.showPrompt
-        chPrompt.onClick = function () { cfg.showPrompt = this.value }
-        var chNegative = pnShow.add("checkbox");
-        chNegative.text = "Negative prompt";
-        chNegative.value = cfg.showNegative_prompt
-        chNegative.onClick = function () { cfg.showNegative_prompt = this.value }
-        var chSampling = pnShow.add("checkbox");
-        chSampling.text = "Sampling method";
-        chSampling.value = cfg.showSampler_name
-        chSampling.onClick = function () { cfg.showSampler_name = this.value }
-        var chSheldule = pnShow.add("checkbox");
-        chSheldule.text = "Schedule type";
-        chSheldule.value = cfg.showScheduler
-        chSheldule.onClick = function () { cfg.showScheduler = this.value }
-        var chSteps = pnShow.add("checkbox");
-        chSteps.text = "Sampling steps";
-        chSteps.value = cfg.showSteps
-        chSteps.onClick = function () { cfg.showSteps = this.value }
-        var chCfg = pnShow.add("checkbox");
-        chCfg.text = "CFG Scale";
-        chCfg.value = cfg.showCfg_scale
-        chCfg.onClick = function () { cfg.showCfg_scale = this.value }
-        var chResize = pnShow.add("checkbox");
-        chResize.text = "Resize by scale";
-        chResize.value = cfg.showResize
-        chResize.onClick = function () { cfg.showResize = this.value }
-        var pnBrush = w.add("panel");
-        pnBrush.text = "Brush settings";
-        pnBrush.orientation = "column";
-        pnBrush.alignChildren = ["fill", "top"];
-        pnBrush.spacing = 10;
-        pnBrush.margins = 10;
-        var chSelectBrush = pnBrush.add("checkbox");
-        chSelectBrush.text = "Select brush after processing";
-        chSelectBrush.value = cfg.selectBrush
-        chSelectBrush.onClick = function () {
-            cfg.selectBrush = this.value
-        }
-        var grOpacity = pnBrush.add("group");
-        grOpacity.orientation = "column";
-        grOpacity.alignChildren = ["fill", "center"];
-        grOpacity.spacing = 5;
-        grOpacity.margins = 0;
-        var grOpacityTitle = grOpacity.add("group");
-        grOpacityTitle.orientation = "row";
-        grOpacityTitle.alignChildren = ["left", "center"];
-        grOpacityTitle.spacing = 10;
-        grOpacityTitle.margins = 0;
-        var stOpacityTitle = grOpacityTitle.add("statictext");
-        stOpacityTitle.text = "Brush opacity";
-        stOpacityTitle.preferredSize.width = 180;
-        var stOpacityValue = grOpacityTitle.add("statictext");
-        stOpacityValue.preferredSize.width = 65;
-        stOpacityValue.justify = "right";
-        var slOpacity = grOpacity.add("slider");
-        slOpacity.minvalue = 0;
-        slOpacity.maxvalue = 100;
-        slOpacity.active = true
-        slOpacity.value = stOpacityValue.text = cfg.brushOpacity
-        slOpacity.onChange = function () {
-            stOpacityValue.text = cfg.brushOpacity = mathTrunc(this.value)
-        }
+        ok.text = str.apply
+        pnBrush.text = str.brush
+        pnPathSettings.text = str.output
+        pnResize.text = str.autoResize
+        pnShow.text = str.showItems
+        slAbove.helpTip = str.max
+        slLess.helpTip = str.min
+        stOpacityTitle.text = str.opacity
+        w.text = str.settings
+        chAutoResize.value = grResizeSl.enabled = cfg.current.autoResize
+        chCfg.value = cfg.current.showCfg_scale
+        chCheckpoint.value = cfg.current.showSd_model_checkpoint
+        chFlatten.value = cfg.current.flatten
+        chInpaitnigFill.value = cfg.current.showInpaintingFill
+        chNegative.value = cfg.current.showNegative_prompt
+        chPrompt.value = cfg.current.showPrompt
+        chRasterize.value = cfg.current.rasterizeImage
+        chRecordSettings.value = !cfg.current.recordToAction
+        chRemove.value = cfg.current.removeImage
+        chResize.value = cfg.current.showResize
+        chSampling.value = cfg.current.showSampler_name
+        chSelectBrush.value = cfg.current.selectBrush
+        chSheldule.value = cfg.current.showScheduler
+        chSteps.value = cfg.current.showSteps
+        chVae.value = cfg.current.showSd_vae
+        slAbove.value = stAbove.text = cfg.current.autoResizeAbove;
+        slLess.value = stLess.text = cfg.current.autoResizeLess;
+        slOpacity.value = stOpacityValue.text = cfg.current.brushOpacity
+        chFlatten.onClick = function () { cfg.current.flatten = this.value }
+        chRemove.onClick = function () { cfg.current.removeImage = this.value }
+        chRasterize.onClick = function () { cfg.current.rasterizeImage = this.value }
+        chInpaitnigFill.onClick = function () { cfg.current.showInpaintingFill = this.value }
+        chCheckpoint.onClick = function () { cfg.current.showSd_model_checkpoint = this.value }
+        chVae.onClick = function () { cfg.current.showSd_vae = this.value }
+        chPrompt.onClick = function () { cfg.current.showPrompt = this.value }
+        chNegative.onClick = function () { cfg.current.showNegative_prompt = this.value }
+        chSampling.onClick = function () { cfg.current.showSampler_name = this.value }
+        chSheldule.onClick = function () { cfg.current.showScheduler = this.value }
+        chSteps.onClick = function () { cfg.current.showSteps = this.value }
+        chCfg.onClick = function () { cfg.current.showCfg_scale = this.value }
+        chResize.onClick = function () { cfg.current.showResize = this.value }
+        chSelectBrush.onClick = function () { cfg.current.selectBrush = this.value }
+        slOpacity.onChange = function () { stOpacityValue.text = cfg.current.brushOpacity = mathTrunc(this.value) }
         slOpacity.onChanging = function () { slOpacity.onChange() }
         slOpacity.addEventListener('keydown', commonHandler)
         function commonHandler(evt) {
@@ -656,63 +652,10 @@ function dialogWindow(b, s) {
                 }
             }
         }
-        var pnResize = w.add("panel", undefined, undefined, { name: "pnResize" });
-        pnResize.text = "Auto resize";
-        pnResize.orientation = "column";
-        pnResize.alignChildren = ["fill", "top"];
-        pnResize.spacing = 10;
-        pnResize.margins = 10;
-        var chAutoResize = pnResize.add("checkbox", undefined, undefined, { name: "chResize1" });
-        chAutoResize.text = "Set scale value based on selection size";
-        var grChResize = pnResize.add("group", undefined, { name: "grChResize" });
-        grChResize.orientation = "column";
-        grChResize.alignChildren = ["fill", "center"];
-        grChResize.spacing = 10;
-        grChResize.margins = 0;
-        var grResizeSl = grChResize.add("group", undefined, { name: "grResizeSl" });
-        grResizeSl.orientation = "row";
-        grResizeSl.alignChildren = ["left", "center"];
-        grResizeSl.spacing = 10;
-        grResizeSl.margins = 0;
-        chAutoResize.value = grResizeSl.enabled = cfg.autoResize
-        var grLess = grResizeSl.add("group", undefined, { name: "grLess" });
-        grLess.preferredSize.width = 100;
-        grLess.orientation = "row";
-        grLess.alignChildren = ["left", "center"];
-        grLess.spacing = 0;
-        grLess.margins = 0;
-        var slLess = grLess.add("slider", undefined, undefined, undefined, undefined, { name: "slLess" });
-        slLess.minvalue = 128;
-        slLess.maxvalue = 1024;
-        slLess.helpTip = 'minimum, px'
-        slLess.preferredSize.width = 90;
-        var stLess = grLess.add("statictext", undefined, undefined, { name: "statictext1" });
-        stLess.preferredSize.width = 30;
-        stLess.justify = "right";
-        slLess.value = stLess.text = cfg.autoResizeLess;
-        slLess.onChange = function () {
-            stLess.text = cfg.autoResizeLess = mathTrunc(this.value / 32) * 32
-        }
+        slLess.onChange = function () { stLess.text = cfg.current.autoResizeLess = mathTrunc(this.value / 32) * 32 }
         slLess.onChanging = function () { slLess.onChange() }
         slLess.addEventListener('keydown', resizeHandler)
-        var grAbove = grResizeSl.add("group", undefined, { name: "slAbove" });
-        grAbove.preferredSize.width = 100;
-        grAbove.orientation = "row";
-        grAbove.alignChildren = ["left", "center"];
-        grAbove.spacing = 0;
-        grAbove.margins = 0;
-        var slAbove = grAbove.add("slider", undefined, undefined, undefined, undefined, { name: "slOpacity1" });
-        slAbove.minvalue = 1024;
-        slAbove.maxvalue = 2048;
-        slAbove.helpTip = 'maximum, px'
-        slAbove.preferredSize.width = 90;
-        var stAbove = grAbove.add("statictext", undefined, undefined, { name: "statictext2" });
-        stAbove.preferredSize.width = 30;
-        stAbove.justify = "right";
-        slAbove.value = stAbove.text = cfg.autoResizeAbove;
-        slAbove.onChange = function () {
-            stAbove.text = cfg.autoResizeAbove = mathTrunc(this.value / 32) * 32
-        }
+        slAbove.onChange = function () { stAbove.text = cfg.current.autoResizeAbove = mathTrunc(this.value / 32) * 32 }
         slAbove.onChanging = function () { slAbove.onChange() }
         slAbove.addEventListener('keydown', resizeHandler)
         function resizeHandler(evt) {
@@ -724,23 +667,8 @@ function dialogWindow(b, s) {
                 }
             }
         }
-        chAutoResize.onClick = function () {
-            cfg.autoResize = grResizeSl.enabled = this.value
-            cfg.resize = 1;
-        }
-        var chRecordSettings = w.add("checkbox");
-        chRecordSettings.text = "Do not record generation settings to action";
-        chRecordSettings.value = !cfg.recordToAction
-        chRecordSettings.onClick = function () {
-            cfg.recordToAction = !this.value
-        }
-        var grBn = w.add("group");
-        grBn.orientation = "row";
-        grBn.alignChildren = ["center", "center"];
-        grBn.spacing = 10;
-        grBn.margins = [0, 10, 0, 0];
-        var ok = grBn.add("button", undefined, undefined, { name: "ok" });
-        ok.text = "Apply settings";
+        chAutoResize.onClick = function () { cfg.current.autoResize = grResizeSl.enabled = this.value; cfg.current.resize = 1; }
+        chRecordSettings.onClick = function () { cfg.current.recordToAction = !this.value }
         return w
     }
 }
@@ -751,48 +679,53 @@ function autoScale(b) {
     var less = b.width < b.height ? b.width : b.height,
         above = b.width > b.height ? b.width : b.height,
         result = 0;
-    if (less < cfg.autoResizeLess) result = Math.ceil(cfg.autoResizeLess / less * 1000) / 1000
-    if (above > cfg.autoResizeAbove) result = Math.floor(cfg.autoResizeAbove / above * 1000) / 1000
-    if (less > cfg.autoResizeLess && above < cfg.autoResizeAbove) result = 1
+    if (less < cfg.current.autoResizeLess) result = Math.ceil(cfg.current.autoResizeLess / less * 1000) / 1000
+    if (above > cfg.current.autoResizeAbove) result = Math.floor(cfg.current.autoResizeAbove / above * 1000) / 1000
+    if (less > cfg.current.autoResizeLess && above < cfg.current.autoResizeAbove) result = 1
     return (result > 4 ? 4 : result)
 }
 function cloneObject(o1, o2) {
     var tmp = o1.reflect.properties;
     for (a in tmp) {
         var k = tmp[a].name.toString();
-        if (k == "__proto__" || k == "__count__" || k == "__class__" || k == "reflect") continue;
+        if (k == '__proto__' || k == '__count__' || k == '__class__' || k == 'reflect') continue;
         o2[k] = o1[k]
     }
 }
-function checkSelection() {
+function checkSelection(result) {
     if (apl.getProperty('numberOfDocuments')) {
-        if (doc.hasProperty('quickMask')) doc.clearQuickMask();
-        if (lr.getProperty('name') == LAYER_NAME && lr.getProperty('hasUserMask') && !doc.hasProperty('selection')) {
-            lr.selectUserMask()
-            doc.makeSelectionFromLayer('targetEnum');
-            targetID = lr.getProperty('layerID');
-        }
-        if (doc.hasProperty('selection')) {
-            if (!targetID) {
-                doc.makeLayer(LAYER_NAME)
-                doc.makeSelectionMask()
-                doc.makeSelectionFromLayer('targetEnum');
-                targetID = lr.getProperty('layerID');
-                cleanup = true;
+        if (doc.getProperty('quickMask')) {
+            var selection = null;
+            if (doc.hasProperty('selection')) selection = doc.descToObject(doc.getProperty('selection').value)
+            doc.quickMask('clearEvent');
+            var hasSelection = doc.hasProperty('selection')
+            if (hasSelection) {
+                result.result = true
+                result.bounds = selection ? selection : doc.descToObject(doc.getProperty('selection').value)
             }
-            var b = doc.descToObject(doc.getProperty('selection').value),
-                w = Math.round((b.right - b.left) / 8) * 8,
-                h = Math.round((b.bottom - b.top) / 8) * 8;
-            if (w != (b.right - b.left) || h != (b.bottom - b.top)) {
-                b.bottom = b.top + h;
-                b.right = b.left + w;
+            doc.quickMask('set');
+            if (selection) doc.makeSelection(selection)
+            return
+        } else {
+            if (doc.hasProperty('selection')) {
+                result.result = true
+                result.bounds = doc.descToObject(doc.getProperty('selection').value)
+                return
             }
-            b.width = b.right - b.left
-            b.height = b.bottom - b.top
-            return b
+            if (lr.getProperty('name') == LAYER_NAME) {
+                doc.makeSelectionFromLayer('transparencyEnum')
+                var hasSelection = doc.hasProperty('selection')
+                if (hasSelection) {
+                    result.result = true
+                    result.bounds = doc.descToObject(doc.getProperty('selection').value)
+                    result.previousGeneration = lr.getProperty('layerID')
+                }
+                doc.deselect()
+                return
+            }
         }
     }
-    return null
+    return
 }
 function findSDChannel(title) {
     var idx = 1;
@@ -805,69 +738,74 @@ function SDApi(host, sdPort, portSend, portListen, apiFile) {
     var SdCfg = this;
     this.initialize = function () {
         if (!apiFile.exists)
-            throw new Error('Модуль sd-webui-api\n' + apiFile.fsName + '\nне найден!')
+            throw new Error(str.module + apiFile.fsName + str.notFound)
         if (!checkConnecton(host + ':' + sdPort))
-            throw new Error('Невозможно установить соединение c ' + host + ':' + sdPort + '\nStable Diffusion не отвечает!')
+            throw new Error(str.errConnection + host + ':' + sdPort + '\nStable Diffusion ' + str.errAnswer)
         apiFile.execute();
         if (!checkConnecton(host + ':' + portSend))
-            throw new Error('Невозможно установить соединение c ' + host + ':' + portSend + '\nМодуль sd-webui-api не отвечает!')
-        var result = sendMessage({ type: "get", message: "sdapi/v1/options" }, true);
+            throw new Error(str.errConnection + host + ':' + portSend + '\n' + str.module + str.errAnswer)
+        var result = sendMessage({ type: 'get', message: 'sdapi/v1/options' }, true);
         if (result) {
             SdCfg['outdir_img2img_samples'] = result['outdir_img2img_samples']
             SdCfg['sd_model_checkpoint'] = result['sd_model_checkpoint']
             SdCfg['sd_vae'] = result['sd_vae']
             if (result['forge_additional_modules']) SdCfg.forgeUI = true;
-        } else { throw new Error('Невозможно получить параметры sdapi/v1/options\nПревышено время ожидания ответа!') }
-        var result = sendMessage({ type: "get", message: "sdapi/v1/sd-models" }, true);
+        } else { throw new Error(str.errSettings + 'sdapi/v1/options' + str.errTimeout) }
+        var result = sendMessage({ type: 'get', message: 'sdapi/v1/sd-models' }, true);
         if (result) {
             SdCfg['sd-models'] = []
-            if (!result.length) throw new Error('Список sdapi/v1/sd-models пуст!\nНеобходимо добавить хотя бы одну модель в Stable Diffusion')
+            if (!result.length) throw new Error(str.errList + 'sdapi/v1/sd-models' + str.errExists)
             for (var i = 0; i < result.length; i++) SdCfg['sd-models'].push(result[i].title)
-        } else { throw new Error('Невозможно получить параметры sdapi/v1/sd-models\nПревышено время ожидания ответа!') }
+        } else { throw new Error(str.errSettings + 'sdapi/v1/sd-models' + str.errTimeout) }
         var vaes = ['sdapi/v1/sd-vae', 'sdapi/v1/sd-modules']
         cfg.vae = (SdCfg.forgeUI ? vaes[1] : vaes[0])
-        var result = sendMessage({ type: "get", message: cfg.vae }, true);
+        var result = sendMessage({ type: 'get', message: cfg.vae }, true);
         if (result) {
             SdCfg['sd-vaes'] = []
-            SdCfg['sd-vaes'].push("Automatic")
-            SdCfg['sd-vaes'].push("None")
+            SdCfg['sd-vaes'].push('Automatic')
+            SdCfg['sd-vaes'].push('None')
             if (SdCfg.forgeUI) {
                 SdCfg['forge_additional_modules'] = [];
                 for (var i = 0; i < result.length; i++) SdCfg['forge_additional_modules'].push(result[i].filename.replace(/\\/g, '\\\\'))
             }
             for (var i = 0; i < result.length; i++) SdCfg['sd-vaes'].push(result[i].model_name)
-        } else { throw new Error('Невозможно получить параметры ' + cfg.vae + '\nПревышено время ожидания ответа!') }
-        var result = sendMessage({ type: "get", message: "sdapi/v1/schedulers" }, true);
+        } else { throw new Error(str.errSettings + + cfg.vae + str.errTimeout) }
+        var result = sendMessage({ type: 'get', message: 'sdapi/v1/schedulers' }, true);
         if (result) {
             SdCfg['schedulers'] = []
-            if (!result.length) throw new Error('Список sdapi/v1/schedulers пуст!\nНеобходимо добавить хотя бы один планировщик в Stable Diffusion')
+            if (!result.length) throw new Error(str.errList + 'sdapi/v1/schedulers' + str.errExists)
             for (var i = 0; i < result.length; i++) SdCfg['schedulers'].push(result[i].label)
-        } else { throw new Error('Невозможно получить параметры sdapi/v1/schedulers\nПревышено время ожидания ответа!') }
-        var result = sendMessage({ type: "get", message: "sdapi/v1/samplers" }, true);
+        } else { throw new Error(str.errSettings + 'sdapi/v1/schedulers' + str.errTimeout) }
+        var result = sendMessage({ type: 'get', message: 'sdapi/v1/samplers' }, true);
         if (result) {
             SdCfg['samplers'] = []
-            if (!result.length) throw new Error('Список sdapi/v1/samplers пуст!\nНеобходимо добавить хотя бы один сэмплер в Stable Diffusion')
+            if (!result.length) throw new Error(str.errList + 'sdapi/v1/samplers' + str.errExists)
             for (var i = 0; i < result.length; i++) SdCfg['samplers'].push(result[i].name)
-        } else { throw new Error('Невозможно получить параметры sdapi/v1/samplers\nПревышено время ожидания ответа!') }
-        var result = sendMessage({ type: "get", message: "sdapi/v1/cmd-flags" }, true);
+        } else { throw new Error(str.errSettings + 'sdapi/v1/samplers' + str.errTimeout) }
+        var result = sendMessage({ type: 'get', message: 'sdapi/v1/cmd-flags' }, true);
         if (result) {
             SdCfg['data_dir'] = result['data_dir']
-        } else { throw new Error('Невозможно получить параметры sdapi/v1/cmd-flags\nПревышено время ожидания ответа!') }
+        } else { throw new Error(str.errSettings + 'sdapi/v1/cmd-flags' + str.errTimeout) }
         return true
     }
     this.exit = function () {
-        sendMessage({ type: "exit" })
+        sendMessage({ type: 'exit' })
     }
     this.setOptions = function (checkpoint, vae, vae_path) {
         var message = {}
         message['sd_model_checkpoint'] = checkpoint
         message['sd_vae'] = vae
         if (SdCfg.forgeUI) message['forge_additional_modules'] = vae_path
-        if (sendMessage({ type: "update", message: message }, true, SD_RELOAD_CHECKPOINT_DELAY)) return true
+        if (sendMessage({ type: 'update', message: message }, true, SD_RELOAD_CHECKPOINT_DELAY)) return true
         return false;
     }
     this.sendPayload = function (payload) {
-        var result = sendMessage({ type: "payload", message: payload }, true, SD_GENERATION_DELAY)
+        var result = sendMessage({ type: 'payload', message: payload }, true, SD_GENERATION_DELAY)
+        if (result) return result['message']
+        return null;
+    }
+    this.translate = function (s) {
+        var result = sendMessage({ type: 'translate', message: s }, true, SD_RELOAD_CHECKPOINT_DELAY)
         if (result) return result['message']
         return null;
     }
@@ -880,14 +818,14 @@ function SDApi(host, sdPort, portSend, portListen, apiFile) {
     function sendMessage(o, getAnswer, delay) {
         var tcp = new Socket,
             delay = delay ? delay : SD_GET_OPTIONS_DELAY;
-        tcp.open(host + ':' + portSend, "UTF-8")
+        tcp.open(host + ':' + portSend, 'UTF-8')
         tcp.writeln(objectToJSON(o))
         tcp.close()
         if (getAnswer) {
             var t1 = (new Date).getTime(),
                 t2 = 0;
             var tcp = new Socket;
-            if (tcp.listen(portListen, "UTF-8")) {
+            if (tcp.listen(portListen, 'UTF-8')) {
                 for (; ;) {
                     t2 = (new Date).getTime()
                     if (t2 - t1 > delay) return null;
@@ -932,25 +870,28 @@ function SDApi(host, sdPort, portSend, portListen, apiFile) {
 }
 function AM(target, order) {
     var s2t = stringIDToTypeID,
-        t2s = typeIDToStringID;
+        t2s = typeIDToStringID,
+        AR = ActionReference,
+        AD = ActionDescriptor,
+        AL = ActionList;
     target = target ? s2t(target) : null;
     this.getProperty = function (property, descMode, id, idxMode) {
         property = s2t(property);
-        (r = new ActionReference()).putProperty(s2t('property'), property);
+        (r = new AR).putProperty(s2t('property'), property);
         id != undefined ? (idxMode ? r.putIndex(target, id) : r.putIdentifier(target, id)) :
             r.putEnumerated(target, s2t('ordinal'), order ? s2t(order) : s2t('targetEnum'));
         return descMode ? executeActionGet(r) : getDescValue(executeActionGet(r), property);
     }
     this.hasProperty = function (property, id, idxMode) {
         property = s2t(property);
-        (r = new ActionReference()).putProperty(s2t('property'), property);
+        (r = new AR).putProperty(s2t('property'), property);
         id ? (idxMode ? r.putIndex(target, id) : r.putIdentifier(target, id))
             : r.putEnumerated(target, s2t('ordinal'), s2t('targetEnum'));
         try { return executeActionGet(r).hasKey(property) } catch (e) { return false }
     }
     this.setProperty = function (property, desc) {
         property = s2t(property);
-        (r = new ActionReference()).putProperty(s2t('property'), property);
+        (r = new AR).putProperty(s2t('property'), property);
         r.putEnumerated(target, s2t('ordinal'), s2t('targetEnum'));
         (d = new ActionDescriptor).putReference(s2t('null'), r);
         d.putObject(s2t('to'), property, desc);
@@ -964,122 +905,143 @@ function AM(target, order) {
         }
         return o
     }
-    this.flatten = function () { executeAction(s2t("flattenImage"), undefined, DialogModes.NO); }
+    this.flatten = function () { executeAction(s2t('flattenImage'), undefined, DialogModes.NO); }
     this.saveACopy = function (pth) {
-        (d1 = new ActionDescriptor()).putInteger(s2t("extendedQuality"), 12);
-        d1.putEnumerated(s2t("matteColor"), s2t("matteColor"), s2t("none"));
-        (d = new ActionDescriptor()).putObject(s2t("as"), s2t("JPEG"), d1);
-        d.putPath(s2t("in"), pth);
-        d.putBoolean(s2t("copy"), true);
-        executeAction(s2t("save"), d, DialogModes.NO);
+        (d1 = new AD).putInteger(s2t('extendedQuality'), 12);
+        d1.putEnumerated(s2t('matteColor'), s2t('matteColor'), s2t('none'));
+        (d = new AD).putObject(s2t('as'), s2t('JPEG'), d1);
+        d.putPath(s2t('in'), pth);
+        d.putBoolean(s2t('copy'), true);
+        executeAction(s2t('save'), d, DialogModes.NO);
     }
-    this.makeSelection = function (top, left, bottom, right) {
-        (r = new ActionReference()).putProperty(s2t('channel'), s2t('selection'));
-        (d = new ActionDescriptor()).putReference(s2t('null'), r);
-        (d1 = new ActionDescriptor()).putUnitDouble(s2t('top'), s2t('pixelsUnit'), top);
-        d1.putUnitDouble(s2t('left'), s2t('pixelsUnit'), left);
-        d1.putUnitDouble(s2t('bottom'), s2t('pixelsUnit'), bottom);
-        d1.putUnitDouble(s2t('right'), s2t('pixelsUnit'), right);
+    this.makeSelection = function (bounds, addTo) {
+        (r = new AR).putProperty(s2t('channel'), s2t('selection'));
+        (d = new AD).putReference(s2t('null'), r);
+        (d1 = new AD).putUnitDouble(s2t('top'), s2t('pixelsUnit'), bounds.top);
+        d1.putUnitDouble(s2t('left'), s2t('pixelsUnit'), bounds.left);
+        d1.putUnitDouble(s2t('bottom'), s2t('pixelsUnit'), bounds.bottom);
+        d1.putUnitDouble(s2t('right'), s2t('pixelsUnit'), bounds.right);
         d.putObject(s2t('to'), s2t('rectangle'), d1);
-        executeAction(s2t('set'), d, DialogModes.NO);
+        executeAction(s2t(addTo ? 'addTo' : 'set'), d, DialogModes.NO);
     }
     this.deleteLayer = function (id) {
-        (r = new ActionReference()).putIdentifier(s2t("layer"), id);
-        (d = new ActionDescriptor()).putReference(s2t('null'), r);
+        (r = new AR).putIdentifier(s2t('layer'), id);
+        (d = new AD).putReference(s2t('null'), r);
         executeAction(s2t('delete'), d, DialogModes.NO);
     }
     this.makeSelectionFromLayer = function (targetEnum, id) {
-        (r = new ActionReference()).putProperty(s2t('channel'), s2t('selection'));
-        (d = new ActionDescriptor()).putReference(s2t('null'), r);
-        (r1 = new ActionReference()).putEnumerated(s2t('channel'), s2t('channel'), s2t(targetEnum));
-        if (id) r1.putIdentifier(s2t("layer"), id);
+        (r = new AR).putProperty(s2t('channel'), s2t('selection'));
+        (d = new AD).putReference(s2t('null'), r);
+        (r1 = new AR).putEnumerated(s2t('channel'), s2t('channel'), s2t(targetEnum));
+        if (id) r1.putIdentifier(s2t('layer'), id);
         d.putReference(s2t('to'), r1);
         executeAction(s2t('set'), d, DialogModes.NO);
     }
+    this.deselect = function () {
+        (r = new AR).putProperty(s2t('channel'), s2t('selection'));
+        (d = new AD).putReference(s2t('null'), r);
+        d.putEnumerated(s2t('to'), s2t('ordinal'), s2t('none'));
+        executeAction(s2t('set'), d, DialogModes.NO);
+    }
     this.selectBrush = function () {
-        (r = new ActionReference()).putClass(s2t("paintbrushTool"));
-        (d = new ActionDescriptor()).putReference(s2t("null"), r);
-        executeAction(s2t("select"), d, DialogModes.NO);
+        (r = new AR).putClass(s2t('paintbrushTool'));
+        (d = new AD).putReference(s2t('null'), r);
+        executeAction(s2t('select'), d, DialogModes.NO);
     }
     this.setBrushOpacity = function (opacity) {
-        (r = new ActionReference()).putProperty(s2t('property'), p = s2t('currentToolOptions'));
+        (r = new AR).putProperty(s2t('property'), p = s2t('currentToolOptions'));
         r.putEnumerated(s2t('application'), s2t('ordinal'), s2t('targetEnum'));
         var tool = executeActionGet(r).getObjectValue(p);
         tool.putInteger(s2t('opacity'), opacity);
-        (r = new ActionReference()).putClass(s2t(currentTool));
-        (d = new ActionDescriptor()).putReference(s2t("target"), r);
-        d.putObject(s2t("to"), s2t("target"), tool);
-        executeAction(s2t("set"), d, DialogModes.NO);
+        (r = new AR).putClass(s2t(currentTool));
+        (d = new AD).putReference(s2t('target'), r);
+        d.putObject(s2t('to'), s2t('target'), tool);
+        executeAction(s2t('set'), d, DialogModes.NO);
     }
     this.resetSwatches = function () {
-        (r = new ActionReference()).putProperty(s2t("color"), s2t("colors"));
-        (d = new ActionDescriptor()).putReference(s2t("null"), r);
-        executeAction(s2t("reset"), d, DialogModes.NO);
+        (r = new AR).putProperty(s2t('color'), s2t('colors'));
+        (d = new AD).putReference(s2t('null'), r);
+        executeAction(s2t('reset'), d, DialogModes.NO);
     }
-    this.selectUserMask = function () {
-        (r = new ActionReference()).putEnumerated(s2t("channel"), s2t("channel"), s2t("mask"));
-        (d = new ActionDescriptor()).putReference(s2t("null"), r);
-        executeAction(s2t("select"), d, DialogModes.NO);
+    this.selectChannel = function (channel) {
+        (r = new AR).putEnumerated(s2t('channel'), s2t('channel'), s2t(channel));
+        (d = new AD).putReference(s2t('null'), r);
+        executeAction(s2t('select'), d, DialogModes.NO);
     }
-    this.clearQuickMask = function () {
-        (r = new ActionReference()).putProperty(s2t("property"), s2t("quickMask"));
-        r.putEnumerated(s2t("document"), s2t("ordinal"), s2t("targetEnum"));
-        (d = new ActionDescriptor()).putReference(s2t("null"), r);
-        executeAction(s2t("clearEvent"), d, DialogModes.NO);
+    this.quickMask = function (evt) {
+        (r = new AR).putProperty(s2t('property'), s2t('quickMask'));
+        r.putEnumerated(s2t('document'), s2t('ordinal'), s2t('targetEnum'));
+        (d = new AD).putReference(s2t('null'), r);
+        executeAction(s2t(evt), d, DialogModes.NO);
     }
     this.crop = function (deletePixels) {
-        (d = new ActionDescriptor()).putBoolean(s2t("delete"), deletePixels);
-        executeAction(s2t("crop"), d, DialogModes.NO);
+        (d = new AD).putBoolean(s2t('delete'), deletePixels);
+        executeAction(s2t('crop'), d, DialogModes.NO);
     }
     this.selectLayersByIDList = function (IDList) {
-        (d = new ActionDescriptor()).putReference(s2t("null"), IDList)
-        executeAction(s2t("select"), d, DialogModes.NO)
+        (d = new AD).putReference(s2t('null'), IDList)
+        executeAction(s2t('select'), d, DialogModes.NO)
     }
     this.hideSelectedLayers = function () {
-        (r = new ActionReference()).putEnumerated(s2t("layer"), s2t("ordinal"), s2t("targetEnum"));
-        (l = new ActionList()).putReference(r);
-        (d = new ActionDescriptor()).putList(s2t("null"), l);
-        executeAction(s2t("hide"), d, DialogModes.NO);
+        (r = new AR).putEnumerated(s2t('layer'), s2t('ordinal'), s2t('targetEnum'));
+        (l = new AL).putReference(r);
+        (d = new AD).putList(s2t('null'), l);
+        executeAction(s2t('hide'), d, DialogModes.NO);
     }
     this.setName = function (title) {
-        (r = new ActionReference()).putEnumerated(s2t("layer"), s2t("ordinal"), s2t("targetEnum"));
-        (d = new ActionDescriptor()).putReference(s2t("null"), r);
-        (d1 = new ActionDescriptor()).putString(s2t("name"), title);
-        d.putObject(s2t("to"), s2t("layer"), d1);
-        executeAction(s2t("set"), d, DialogModes.NO);
+        (r = new AR).putEnumerated(s2t('layer'), s2t('ordinal'), s2t('targetEnum'));
+        (d = new AD).putReference(s2t('null'), r);
+        (d1 = new AD).putString(s2t('name'), title);
+        d.putObject(s2t('to'), s2t('layer'), d1);
+        executeAction(s2t('set'), d, DialogModes.NO);
     }
     this.place = function (pth) {
-        var descriptor = new ActionDescriptor();
-        descriptor.putPath(s2t("null"), pth);
-        descriptor.putBoolean(s2t("linked"), false);
-        executeAction(s2t("placeEvent"), descriptor, DialogModes.NO);
+        var descriptor = new AD;
+        descriptor.putPath(s2t('null'), pth);
+        descriptor.putBoolean(s2t('linked'), false);
+        executeAction(s2t('placeEvent'), descriptor, DialogModes.NO);
     }
     this.rasterize = function () {
-        (d = new ActionDescriptor()).putReference(s2t('target'), r);
+        (d = new AD).putReference(s2t('target'), r);
         executeAction(s2t('rasterizePlaced'), d, DialogModes.NO);
     }
     this.makeSelectionMask = function () {
-        (d = new ActionDescriptor()).putClass(s2t("new"), s2t("channel"));
-        (r = new ActionReference()).putEnumerated(s2t("channel"), s2t("channel"), s2t("mask"));
-        d.putReference(s2t("at"), r);
-        d.putEnumerated(s2t("using"), s2t("userMask"), s2t("revealSelection"));
-        executeAction(s2t("make"), d, DialogModes.NO);
+        (d = new AD).putClass(s2t('new'), s2t('channel'));
+        (r = new AR).putEnumerated(s2t('channel'), s2t('channel'), s2t('mask'));
+        d.putReference(s2t('at'), r);
+        d.putEnumerated(s2t('using'), s2t('userMask'), s2t('revealSelection'));
+        executeAction(s2t('make'), d, DialogModes.NO);
     }
     this.transform = function (dw, dh) {
-        (d = new ActionDescriptor()).putEnumerated(s2t("freeTransformCenterState"), s2t("quadCenterState"), s2t("QCSAverage"));
-        (d1 = new ActionDescriptor()).putUnitDouble(s2t("horizontal"), s2t("pixelsUnit"), 0);
-        d1.putUnitDouble(s2t("vertical"), s2t("pixelsUnit"), 0);
-        d.putObject(s2t("offset"), s2t("offset"), d1);
-        d.putUnitDouble(s2t("width"), s2t("percentUnit"), dw);
-        d.putUnitDouble(s2t("height"), s2t("percentUnit"), dh);
-        executeAction(s2t("transform"), d, DialogModes.NO);
+        (d = new AD).putEnumerated(s2t('freeTransformCenterState'), s2t('quadCenterState'), s2t('QCSAverage'));
+        (d1 = new AD).putUnitDouble(s2t('horizontal'), s2t('pixelsUnit'), 0);
+        d1.putUnitDouble(s2t('vertical'), s2t('pixelsUnit'), 0);
+        d.putObject(s2t('offset'), s2t('offset'), d1);
+        d.putUnitDouble(s2t('width'), s2t('percentUnit'), dw);
+        d.putUnitDouble(s2t('height'), s2t('percentUnit'), dh);
+        executeAction(s2t('transform'), d, DialogModes.NO);
     }
     this.makeLayer = function (title) {
-        (r = new ActionReference()).putClass(s2t("layer"));
-        (d = new ActionDescriptor()).putReference(s2t("null"), r);
-        (d1 = new ActionDescriptor()).putString(s2t("name"), title)
-        d.putObject(s2t("using"), s2t("layer"), d1);
-        executeAction(s2t("make"), d, DialogModes.NO);
+        (r = new AR).putClass(s2t('layer'));
+        (d = new AD).putReference(s2t('null'), r);
+        (d1 = new AD).putString(s2t('name'), title)
+        d.putObject(s2t('using'), s2t('layer'), d1);
+        executeAction(s2t('make'), d, DialogModes.NO);
+    }
+    this.selectAllPixels = function () {
+        (r = new AR).putProperty(s2t('channel'), s2t('selection'));
+        (d = new AD).putReference(s2t('null'), r);
+        d.putEnumerated(s2t('to'), s2t('ordinal'), s2t('allEnum'));
+        executeAction(s2t('set'), d, DialogModes.NO);
+    }
+    this.copyPixels = function () {
+        (d = new AD).putString(s2t('copyHint'), 'pixels');
+        executeAction(s2t('copyEvent'), d, DialogModes.NO);
+    }
+    this.pastePixels = function () {
+        (d = new AD).putEnumerated(s2t('antiAlias'), s2t('antiAliasType'), s2t('antiAliasNone'));
+        d.putClass(s2t('as'), s2t('pixel'));
+        executeAction(s2t('paste'), d, DialogModes.NO);
     }
     function getDescValue(d, p) {
         switch (d.getType(p)) {
@@ -1100,41 +1062,54 @@ function AM(target, order) {
     }
 }
 function Config() {
-    this.dialogMode = true
-    this.sd_model_checkpoint = ""
-    this.sd_vae = "Automatic"
-    this.scheduler = "Automatic"
-    this.sampler_name = "DPM++ 2M"
-    this.cfg_scale = 7
-    this.steps = 20
-    this.denoising_strength = 0.22
-    this.prompt = ""
-    this.negative_prompt = "(deformed, distorted, disfigured:1.3), poorly drawn, bad anatomy, wrong anatomy, extra limb, missing limb, floating limbs, (mutated hands and fingers:1.4), disconnected limbs, mutation, mutated, ugly, disgusting, blurry, amputation"
-    this.resize = 1
-    this.flatten = false
-    this.removeImage = true
-    this.rasterizeImage = true
-    this.showSd_model_checkpoint = true
-    this.showSd_vae = true
-    this.showPrompt = true
-    this.showNegative_prompt = true
-    this.showSampler_name = true
-    this.showScheduler = true
-    this.showSteps = true
-    this.showCfg_scale = true
-    this.showResize = true
-    this.selectBrush = true
-    this.brushOpacity = 50
-    this.recordToAction = true
-    this.autoResize = false
-    this.autoResizeLess = 512
-    this.autoResizeAbove = 1408
+    this.inpaintMode = false
+    this.current = new scriptSettings();
+    this.img2img = new scriptSettings();
+    this.inpaint = new scriptSettings();
     this.vae = 'sdapi/v1/sd-vae'
-    this.vaePath = ''
+    function scriptSettings() {
+        this.sd_model_checkpoint = ''
+        this.sd_vae = 'Automatic'
+        this.scheduler = 'Automatic'
+        this.sampler_name = 'DPM++ 2M'
+        this.cfg_scale = 7
+        this.steps = 20
+        this.denoising_strength = 0.22
+        this.prompt = ''
+        this.negative_prompt = '(deformed, distorted, disfigured:1.3), poorly drawn, bad anatomy, wrong anatomy, extra limb, missing limb, floating limbs, (mutated hands and fingers:1.4), disconnected limbs, mutation, mutated, ugly, disgusting, blurry, amputation'
+        this.resize = 1
+        this.flatten = false
+        this.removeImage = true
+        this.rasterizeImage = true
+        this.inpaintingFill = 1
+        this.showInpaintingFill = true
+        this.showSd_model_checkpoint = true
+        this.showSd_vae = true
+        this.showPrompt = true
+        this.showNegative_prompt = true
+        this.showSampler_name = true
+        this.showScheduler = true
+        this.showSteps = true
+        this.showCfg_scale = true
+        this.showResize = true
+        this.selectBrush = true
+        this.brushOpacity = 50
+        this.recordToAction = true
+        this.autoResize = false
+        this.autoResizeLess = 512
+        this.autoResizeAbove = 1408
+    }
     settingsObj = this;
     this.getScriptSettings = function (fromAction) {
-        if (fromAction) d = playbackParameters else try { var d = getCustomOptions(UUID) } catch (e) { };
-        if (d != undefined) descriptorToObject(settingsObj, d)
+        if (fromAction) var d = playbackParameters; else try { var d = getCustomOptions(UUID) } catch (e) { };
+        if (d != undefined)
+            if (d.hasKey(s2t('dialogMode'))) eraseCustomOptions(UUID)
+            else descriptorToObject(settingsObj, d)
+        if (settingsObj.inpaintMode) {
+            settingsObj.current = settingsObj.inpaint
+        } else {
+            settingsObj.current = settingsObj.img2img
+        }
         function descriptorToObject(o, d) {
             var l = d.count;
             for (var i = 0; i < l; i++) {
@@ -1145,11 +1120,20 @@ function Config() {
                     case DescValueType.BOOLEANTYPE: o[s] = d.getBoolean(k); break;
                     case DescValueType.STRINGTYPE: o[s] = d.getString(k); break;
                     case DescValueType.DOUBLETYPE: o[s] = d.getDouble(k); break;
+                    case DescValueType.OBJECTTYPE: descriptorToObject(o[s], d.getObjectValue(k)); break;
                 }
             }
         }
     }
-    this.putScriptSettings = function (toAction) {
+    this.putScriptSettings = function (toAction, swapSettings) {
+        if (!swapSettings) {
+            if (settingsObj.inpaintMode) {
+                settingsObj.inpaint = settingsObj.current
+            } else {
+                settingsObj.img2img = settingsObj.current
+            }
+            delete settingsObj.current;
+        }
         var d = objectToDescriptor(settingsObj, UUID)
         if (toAction) playbackParameters = d else putCustomOptions(UUID, d, true);
         function objectToDescriptor(o) {
@@ -1157,16 +1141,65 @@ function Config() {
             var l = o.reflect.properties.length;
             for (var i = 0; i < l; i++) {
                 var k = o.reflect.properties[i].toString();
-                if (k == "__proto__" || k == "__count__" || k == "__class__" || k == "reflect") continue;
+                if (k == '__proto__' || k == '__count__' || k == '__class__' || k == 'reflect') continue;
                 var v = o[k];
                 k = app.stringIDToTypeID(k);
                 switch (typeof (v)) {
-                    case "boolean": d.putBoolean(k, v); break;
-                    case "string": d.putString(k, v); break;
-                    case "number": d.putDouble(k, v); break;
+                    case 'boolean': d.putBoolean(k, v); break;
+                    case 'string': d.putString(k, v); break;
+                    case 'number': d.putDouble(k, v); break;
+                    case 'object':
+                        d.putObject(k, s2t('object'), objectToDescriptor(v));
+                        break;
                 }
             }
             return d;
         }
     }
+}
+function Locale() {
+    this.actionMode = { ru: 'Не записывать параметры генерации в экшен', en: 'Do not record generation settings to action' }
+    this.apply = { ru: 'Применить настройки', en: 'Apply settingsa' }
+    this.autoResize = { ru: 'Авто масштаб', en: 'Auto resize' }
+    this.autoResizeCaption = { ru: 'Масштаб зависит от размера выделения', en: 'Set scale value based on selection size' }
+    this.brush = { ru: 'Настройки кисти', en: 'Brush settings' }
+    this.cfgScale = 'CFG Scale'
+    this.checkpoint = 'Stable Diffusion checkpoint'
+    this.errAnswer = { ru: 'не отвечает!', en: 'not answering!' }
+    this.errConnection = { ru: 'Невозможно установить соединение c ', en: 'Impossible to establish a connection with ' }
+    this.errExists = { ru: ' пуст!\nУбедитесь что они добавлены в папку Stable Diffusion', en: ' is empty!\nMake sure that it exists in the Stable Diffusion folder' }
+    this.errGenerating = { ru: 'Превышено время ожидания ответа Stable Diffusion!', en: 'Exceeded time waiting for the response of Stable Diffusion!' }
+    this.errList = { ru: 'Список ', en: 'List ' }
+    this.errSettings = { ru: 'Невозможно получить параметры ', en: 'Impossible to get the settings ' }
+    this.errTimeout = { ru: '\nПревышено время ожидания ответа!', en: '\nExceeding the response time!' }
+    this.errTranslate = { ru: 'Модуль перевода недоступен!', en: 'The translation module is not available!' }
+    this.errUpdating = { ru: 'Переключение на выбранную модель завершилось с ошибкой!\nПревышено время ожидания ответа!', en: 'Switching to the selected checkpoint ended with the error!\nExceeded the response time!' }
+    this.fill = 'Inpainting fill mode'
+    this.flatten = { ru: 'Склеивать слои перед генерацией', en: 'Flatten layers before generation' }
+    this.generate = { ru: 'Генерация', en: 'Generate' }
+    this.max = { ru: 'максимум, px', en: 'maximum, px' }
+    this.min = { ru: 'минимум, px', en: 'minimum, px' }
+    this.module = { ru: 'Модуль sd-webui-api ', en: 'Module sd-webui-api ' }
+    this.negativePrompt = 'Negative prompt'
+    this.notFound = { ru: '\nне найден!', en: 'not found!' }
+    this.opacity = { ru: 'Непрозрачность кисти', en: 'Brush opacity' }
+    this.output = { ru: 'Сгенерированное изображение', en: 'Output' }
+    this.progressDocument = { ru: 'Подготовка документа...', en: 'Preparation of a document...' }
+    this.progressGenerate = { ru: 'Генерация изображения...', en: 'Image generation...' }
+    this.progressPlace = { ru: 'Вставка изображения...', en: 'Image placing...' }
+    this.progressUpdating = { ru: 'Обновление параметров генерации...', en: 'Update generation parameters...' }
+    this.prompt = 'Prompt'
+    this.rasterize = { ru: 'Растеризовать вставленное изображение', en: 'Rasterize placed image' }
+    this.remove = { ru: 'Удалить файл изображения после вставки', en: 'Remove image file after placing' }
+    this.resize = 'Resize by scale'
+    this.sampling = 'Sampling method'
+    this.schedule = 'Schedule type'
+    this.selctBrush = { ru: 'Активировать кисть после генерации', en: 'Select brush after processing' }
+    this.selection = { ru: 'Выделение: ', en: 'Selection: ' }
+    this.settings = { ru: 'Настройки скрпта', en: 'Script settings' }
+    this.showItems = { ru: 'Показывать опции', en: 'Show items' }
+    this.steps = 'Sampling steps'
+    this.strength = 'Denoising strength'
+    this.translate = { ru: 'перевести: ', en: 'translate: ' }
+    this.vae = 'SD VAE'
 }
