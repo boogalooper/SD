@@ -681,7 +681,7 @@ function autoScale(b) {
         result = 0;
     if (less < cfg.current.autoResizeLess) result = Math.ceil(cfg.current.autoResizeLess / less * 1000) / 1000
     if (above > cfg.current.autoResizeAbove) result = Math.floor(cfg.current.autoResizeAbove / above * 1000) / 1000
-    if (less > cfg.current.autoResizeLess && above < cfg.current.autoResizeAbove) result = 1
+    if (less >= cfg.current.autoResizeLess && above <= cfg.current.autoResizeAbove) result = 1
     return (result > 4 ? 4 : result)
 }
 function cloneObject(o1, o2) {
