@@ -1196,7 +1196,7 @@ function Locale() {
     this.schedule = 'Schedule type'
     this.selctBrush = { ru: 'Активировать кисть после генерации', en: 'Select brush after processing' }
     this.selection = { ru: 'Выделение: ', en: 'Selection: ' }
-    this.settings = { ru: 'Настройки скрпта', en: 'Script settings' }
+    this.settings = { ru: 'Настройки скрипта', en: 'Script settings' }
     this.showItems = { ru: 'Показывать опции', en: 'Show items' }
     this.steps = 'Sampling steps'
     this.strength = 'Denoising strength'

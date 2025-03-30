@@ -63,11 +63,15 @@ def call_api(api_endpoint, payload):
     return json.loads(response.read().decode("utf-8"))
 
 
-def call_img2img_api(payload, out_dir):
-    response = call_api("sdapi/v1/img2img", payload)
-    for index, image in enumerate(response.get("images")):
-        save_path = os.path.join(out_dir, f"{timestamp()}-{index}.png")
-        decode_and_save_base64(image, save_path)
+def call_generate_api(payload, out_dir, module):
+    response = call_api(module, payload)
+    if "images" in response:
+        for index, image in enumerate(response.get("images")):
+            save_path = os.path.join(out_dir, f"{timestamp()}-{index}.png")
+            decode_and_save_base64(image, save_path)
+    elif "image" in response:
+            save_path = os.path.join(out_dir, f"{timestamp()}.png")
+            decode_and_save_base64(response.get("image"), save_path)
     return save_path
 
 
@@ -147,7 +151,7 @@ def start_local_server():
                 elif message["type"] == "payload":
                     print("Получен запрос на генерацию изображения")
                     data = message["message"]
-                    init_images = [encode_file_to_base64(data["input"])]
+                    init_image = [encode_file_to_base64(data["input"])]
                     payload = {
                         "prompt": data["prompt"],
                         "negative_prompt": data["negative_prompt"],
@@ -160,7 +164,7 @@ def start_local_server():
                         "height": data["height"],
                         "denoising_strength": data["denoising_strength"],
                         "n_iter": 1,
-                        "init_images": init_images,
+                        "init_images": init_image,
                     }
                     if "mask" in data:
                         payload["mask"] = encode_file_to_base64(data["mask"])
@@ -169,7 +173,26 @@ def start_local_server():
                         payload["inpaint_full_res"] = 0
                         payload["initial_noise_multiplier"] = 1
                         payload["resize_mode"] = 0
-                    outfile = call_img2img_api(payload, data["output"])
+                    outfile = call_generate_api(
+                        payload, data["output"], "sdapi/v1/img2img"
+                    )
+                    print("Генерация завершена!")
+                    send_data_to_jsx({"type": "answer", "message": outfile})
+                elif message["type"] == "faceRestore":
+                    print("Получен запрос на воссстановление лица")
+                    data = message["message"]
+                    init_image = encode_file_to_base64(data["input"])
+                    payload = {
+                        "image": init_image
+                    }
+                    if data["gfpgan"] == "true":
+                        payload["gfpgan_visibility"] = data["gfpgan_visibility"]
+                    if data["codeformer"] == "true":
+                        payload["codeformer_visibility"] = data["codeformer_visibility"]
+                        payload["codeformer_weight"] = data["codeformer_weight"]
+                    outfile = call_generate_api(
+                        payload, data["output"], "sdapi/v1/extra-single-image"
+                    )
                     print("Генерация завершена!")
                     send_data_to_jsx({"type": "answer", "message": outfile})
                 elif message["type"] == "translate":
