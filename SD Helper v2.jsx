@@ -436,20 +436,9 @@ function dialogWindow(b, s) {
                 slSteps = grSteps.add('slider{minvalue:1,maxvalue:100}');
             stSteps.text = str.steps
             slSteps.value = stStepsValue.text = cfg.current.steps
-            slSteps.onChange = function () {
-                stStepsValue.text = cfg.current.steps = mathTrunc(this.value)
-            }
+            slSteps.onChange = function () { stStepsValue.text = cfg.current.steps = mathTrunc(this.value) }
             slSteps.onChanging = function () { slSteps.onChange() }
             slSteps.addEventListener('keydown', commonHandler)
-            function commonHandler(evt) {
-                if (evt.shiftKey) {
-                    if (evt.keyIdentifier == 'Right' || evt.keyIdentifier == 'Up') {
-                        slSteps.value = Math.floor(slSteps.value / 5) * 5 + 4
-                    } else if (evt.keyIdentifier == 'Left' || evt.keyIdentifier == 'Down') {
-                        slSteps.value = Math.ceil(slSteps.value / 5) * 5 - 4
-                    }
-                }
-            }
         }
         function cfgScale(p) {
             var grCfg = p.add("group{orientation:'column',alignChildren:['fill', 'top'],spacing:0,margins:0}"),
@@ -465,15 +454,6 @@ function dialogWindow(b, s) {
             }
             slCfg.onChanging = function () { slCfg.onChange() }
             slCfg.addEventListener('keydown', commonHandler)
-            function commonHandler(evt) {
-                if (evt.shiftKey) {
-                    if (evt.keyIdentifier == 'Right' || evt.keyIdentifier == 'Up') {
-                        slCfg.value = Math.floor(slCfg.value / 5) * 5 + 4
-                    } else if (evt.keyIdentifier == 'Left' || evt.keyIdentifier == 'Down') {
-                        slCfg.value = Math.ceil(slCfg.value / 5) * 5 - 4
-                    }
-                }
-            }
         }
         function resizeScale(p) {
             var grResize = p.add("group{orientation:'column',alignChildren:['fill', 'top'],spacing:0,margins:0}"),
@@ -489,17 +469,6 @@ function dialogWindow(b, s) {
             }
             slResize.onChanging = function () { slResize.onChange() }
             slResize.addEventListener('keydown', commonHandler)
-            function commonHandler(evt) {
-                if (evt.shiftKey) {
-                    isDitry = true
-                    if (evt.keyIdentifier == 'Right' || evt.keyIdentifier == 'Up') {
-                        slResize.value = Math.floor(slResize.value / 5) * 5 + 4
-                    } else if (evt.keyIdentifier == 'Left' || evt.keyIdentifier == 'Down') {
-                        slResize.value = Math.ceil(slResize.value / 5) * 5 - 4
-                    }
-                }
-            }
-
             if (cfg.current.autoResize) {
                 cfg.current.resize = autoScale(b)
                 slResize.value = cfg.current.resize * 10
@@ -510,7 +479,6 @@ function dialogWindow(b, s) {
                 stResizeValue.text = cfg.current.resize = mathTrunc(slResize.value) / 10
                 stResize.text = setTitle()
             }
-
             function setTitle() {
                 var s = str.resize
                 return cfg.current.resize != 1 ? s + ' ' + (mathTrunc((b.width * cfg.current.resize) / 8) * 8) + 'x' + (mathTrunc((b.height * cfg.current.resize) / 8) * 8) : s
@@ -531,15 +499,6 @@ function dialogWindow(b, s) {
             }
             slStrength.onChanging = function () { slStrength.onChange() }
             slStrength.addEventListener('keydown', commonHandler)
-            function commonHandler(evt) {
-                if (evt.shiftKey) {
-                    if (evt.keyIdentifier == 'Right' || evt.keyIdentifier == 'Up') {
-                        slStrength.value = Math.floor(slStrength.value / 5) * 5 + 4
-                    } else if (evt.keyIdentifier == 'Left' || evt.keyIdentifier == 'Down') {
-                        slStrength.value = Math.ceil(slStrength.value / 5) * 5 - 4
-                    }
-                }
-            }
         }
     }
     function settingsWindow(p, cfg) {
@@ -643,15 +602,6 @@ function dialogWindow(b, s) {
         slOpacity.onChange = function () { stOpacityValue.text = cfg.current.brushOpacity = mathTrunc(this.value) }
         slOpacity.onChanging = function () { slOpacity.onChange() }
         slOpacity.addEventListener('keydown', commonHandler)
-        function commonHandler(evt) {
-            if (evt.shiftKey) {
-                if (evt.keyIdentifier == 'Right' || evt.keyIdentifier == 'Up') {
-                    slOpacity.value = Math.floor(slOpacity.value / 5) * 5 + 4
-                } else if (evt.keyIdentifier == 'Left' || evt.keyIdentifier == 'Down') {
-                    slOpacity.value = Math.ceil(slOpacity.value / 5) * 5 - 4
-                }
-            }
-        }
         slLess.onChange = function () { stLess.text = cfg.current.autoResizeLess = mathTrunc(this.value / 32) * 32 }
         slLess.onChanging = function () { slLess.onChange() }
         slLess.addEventListener('keydown', resizeHandler)
@@ -670,6 +620,15 @@ function dialogWindow(b, s) {
         chAutoResize.onClick = function () { cfg.current.autoResize = grResizeSl.enabled = this.value; cfg.current.resize = 1; }
         chRecordSettings.onClick = function () { cfg.current.recordToAction = !this.value }
         return w
+    }
+    function commonHandler(evt) {
+        if (evt.shiftKey) {
+            if (evt.keyIdentifier == 'Right' || evt.keyIdentifier == 'Up') {
+                evt.target.value = Math.floor(evt.target.value / 5) * 5 + 4
+            } else if (evt.keyIdentifier == 'Left' || evt.keyIdentifier == 'Down') {
+                evt.target.value = Math.ceil(evt.target.value / 5) * 5 - 4
+            }
+        }
     }
 }
 function mathTrunc(val) {
