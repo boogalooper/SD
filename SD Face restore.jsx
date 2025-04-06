@@ -13,8 +13,9 @@
 </javascriptresource>
 // END__HARVEST_EXCEPTION_ZSTRING
 */
-const LOCALHOST = '127.0.0.1',
+const SD_HOST = '127.0.0.1',
     SD_PORT = 7860,
+    API_HOST = '127.0.0.1',
     API_PORT_SEND = 6320,
     API_PORT_LISTEN = 6321,
     API_FILE = 'sd-webui-api v2.pyw',
@@ -24,7 +25,7 @@ const LOCALHOST = '127.0.0.1',
     SD_RELOAD_CHECKPOINT_DELAY = 10000, // максимальное время ожидания перезагрузки checkpoint или vae
     SD_GENERATION_DELAY = 60000; // максимальное время ожидания генерации изображения
 var time = (new Date).getTime(),
-    SD = new SDApi(LOCALHOST, SD_PORT, API_PORT_SEND, API_PORT_LISTEN, new File((new File($.fileName)).path + '/' + API_FILE)),
+    SD = new SDApi(SD_HOST, API_HOST, SD_PORT, API_PORT_SEND, API_PORT_LISTEN, new File((new File($.fileName)).path + '/' + API_FILE)),
     s2t = stringIDToTypeID,
     t2s = typeIDToStringID,
     cfg = new Config(),
@@ -33,7 +34,7 @@ var time = (new Date).getTime(),
     doc = new AM('document'),
     lr = new AM('layer'),
     ch = new AM('channel'),
-    ver = 0.1;
+    ver = 0.11;
 isCancelled = false;
 $.localize = true
 if (ScriptUI.environment.keyboardState.shiftKey) $.setenv('showDialog', true)
@@ -68,7 +69,7 @@ function init() {
                         return;
                     } else if (result != undefined) {
                         $.setenv('showDialog', false)
-                        doProgress(str.progressGenerate, 'main(currentSelection)')
+                        doForcedProgress(str.progressGenerate[$.locale=='ru' ? 'ru':'en'], 'main(currentSelection)')
                         cfg.putScriptSettings()
                         cfg.putScriptSettings(true)
                         SD.exit()
@@ -77,7 +78,7 @@ function init() {
             } else {
                 if (SD.initialize()) {
                     $.setenv('showDialog', false)
-                    doProgress(str.progressGenerate, 'main(currentSelection)')
+                    doForcedProgress(str.progressGenerate[$.locale=='ru' ? 'ru':'en'], 'main(currentSelection)')
                     cfg.putScriptSettings(true)
                     SD.exit()
                 } else {
@@ -97,13 +98,13 @@ function init() {
                         isCancelled = true;
                         return;
                     } else if (result != undefined) {
-                        doProgress(str.progressGenerate, 'main(currentSelection)')
+                        doForcedProgress(str.progressGenerate[$.locale=='ru' ? 'ru':'en'], 'main(currentSelection)')
                         cfg.putScriptSettings(true)
                         SD.exit()
                     }
                 }
             } else {
-                if (SD.initialize()) { doProgress(str.progressGenerate, 'main(currentSelection)') }
+                if (SD.initialize()) { doForcedProgress(str.progressGenerate[$.locale=='ru' ? 'ru':'en'], 'main(currentSelection)') }
                 SD.exit()
             }
         }
@@ -147,9 +148,9 @@ function main(selection) {
     doc.saveACopy(f);
     activeDocument.activeHistoryState = hst;
     doc.setProperty('center', c);
-    var p = (new Folder(SD['data_dir'] + '/' + SD['outdir_extras_samples']))
+    var p = (new Folder(Folder.temp + '/' + SD['outdir_extras_samples']))
     if (!p.exists) p.create()
-    changeProgressText(str.progressDocument)
+    changeProgressText(str.progressDocument[$.locale=='ru' ? 'ru':'en'])
     updateProgress(0.2, 1)
     var payload = {
         'input': f.fsName.replace(/\\/g, '\\\\'),
@@ -160,8 +161,8 @@ function main(selection) {
         'codeformer_visibility': cfg.codeFormerVisiblity,
         'codeformer_weight': cfg.codeFormerWeight
     };
-    updateProgress(0.7, 1)
-    changeProgressText(str.progressGenerate)
+    updateProgress(0.3, 1)
+    changeProgressText(str.progressGenerate[$.locale=='ru' ? 'ru':'en'])
     app.refresh()
     var result = SD.sendPayload(payload);
     if (result) {
@@ -169,7 +170,7 @@ function main(selection) {
     } else throw new Error(str.errGenerating)
     function generatedImageToLayer() {
         updateProgress(1, 1)
-        changeProgressText(str.progressPlace)
+        changeProgressText(str.progressPlace[$.locale=='ru' ? 'ru':'en'])
         doc.place(new File(result))
         var placedBounds = doc.descToObject(lr.getProperty('bounds').value);
         var dW = (selection.bounds.right - selection.bounds.left) / (placedBounds.right - placedBounds.left);
@@ -186,9 +187,7 @@ function main(selection) {
             doc.selectBrush();
             doc.setBrushOpacity(cfg.brushOpacity)
         }
-        if (cfg.removeImage) {
-            (new File(result)).remove();
-        }
+        (new File(result)).remove();
     }
 }
 function dialogWindow(b, s) {
@@ -264,11 +263,8 @@ function dialogWindow(b, s) {
     return w;
     function settingsWindow(p, cfg) {
         var w = new Window("dialog{orientation:'column',alignChildren:['fill', 'top'],spacing:10,margins:16}"),
-            chFlatten = w.add('checkbox'),
             pnPathSettings = w.add("panel{orientation:'column',alignChildren:['fill', 'top'],spacing:5,margins:10}"),
-            grPath = pnPathSettings.add("group{orientation:'column',alignChildren:['left', 'center'],spacing:5,margins:0}"),
-            etPath = grPath.add('edittext{preferredSize:[250,40],properties:{readonly:true, multiline: true}}'),
-            chRemove = pnPathSettings.add('checkbox'),
+            chFlatten = pnPathSettings.add('checkbox'),
             chRasterize = pnPathSettings.add('checkbox'),
             pnBrush = w.add("panel{orientation:'column',alignChildren:['fill', 'top'],spacing:10,margins:10}"),
             chSelectBrush = pnBrush.add('checkbox'),
@@ -280,10 +276,8 @@ function dialogWindow(b, s) {
             grBn = w.add("group{orientation:'row',alignChildren:['center', 'center'],spacing:10,margins:[0, 10, 0, 0]}"),
             ok = grBn.add('button', undefined, undefined, { name: 'ok' });
         chFlatten.text = str.flatten
-        chRemove.text = str.remove
         chRasterize.text = str.rasterize
         chSelectBrush.text = str.selctBrush
-        etPath.text = (new File(SD['data_dir'] + '/' + SD['outdir_extras_samples'])).fsName
         ok.text = str.apply
         pnBrush.text = str.brush
         pnPathSettings.text = str.output
@@ -291,11 +285,9 @@ function dialogWindow(b, s) {
         w.text = str.settings
         chFlatten.value = cfg.flatten
         chRasterize.value = cfg.rasterizeImage
-        chRemove.value = cfg.removeImage
         chSelectBrush.value = cfg.selectBrush
         slOpacity.value = stOpacityValue.text = cfg.brushOpacity
         chFlatten.onClick = function () { cfg.flatten = this.value }
-        chRemove.onClick = function () { cfg.removeImage = this.value }
         chRasterize.onClick = function () { cfg.rasterizeImage = this.value }
         chSelectBrush.onClick = function () { cfg.selectBrush = this.value }
         slOpacity.onChange = function () { stOpacityValue.text = cfg.brushOpacity = mathTrunc(this.value) }
@@ -361,24 +353,21 @@ function findSDChannel(title) {
         try { if (ch.getProperty('channelName', false, idx++, true) == title) return idx - 1 } catch (e) { return 0 }
     } while (true)
 }
-function SDApi(host, sdPort, portSend, portListen, apiFile) {
+function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
     var SdCfg = this;
     this.initialize = function () {
         if (!apiFile.exists)
             throw new Error(str.module + apiFile.fsName + str.notFound)
-        if (!checkConnecton(host + ':' + sdPort))
-            throw new Error(str.errConnection + host + ':' + sdPort + '\nStable Diffusion ' + str.errAnswer)
+        if (!checkConnecton(sdHost + ':' + sdPort))
+            throw new Error(str.errConnection + sdHost + ':' + sdPort + '\nStable Diffusion ' + str.errAnswer)
         apiFile.execute();
-        if (!checkConnecton(host + ':' + portSend))
-            throw new Error(str.errConnection + host + ':' + portSend + '\n' + str.module + str.errAnswer)
+        var result = sendMessage({ type: 'handshake', message: { sdHost: sdHost, sdPort: sdPort, portSend: portSend, portListen: portListen } }, true);
+        if (!result) throw new Error(str.errConnection + apiHost + ':' + portSend + '\n' + str.module + str.errAnswer)
+        var result = sendMessage({ type: 'get', message: 'sdapi/v1/options' }, true);
         var result = sendMessage({ type: 'get', message: 'sdapi/v1/options' }, true);
         if (result) {
             SdCfg['outdir_extras_samples'] = result['outdir_extras_samples']
         } else { throw new Error(str.errSettings + 'sdapi/v1/options' + str.errTimeout) }
-        var result = sendMessage({ type: 'get', message: 'sdapi/v1/cmd-flags' }, true);
-        if (result) {
-            SdCfg['data_dir'] = result['data_dir']
-        } else { throw new Error(str.errSettings + 'sdapi/v1/cmd-flags' + str.errTimeout) }
         return true
     }
     this.exit = function () {
@@ -398,7 +387,7 @@ function SDApi(host, sdPort, portSend, portListen, apiFile) {
     function sendMessage(o, getAnswer, delay) {
         var tcp = new Socket,
             delay = delay ? delay : SD_GET_OPTIONS_DELAY;
-        tcp.open(host + ':' + portSend, 'UTF-8')
+        tcp.open(apiHost + ':' + portSend, 'UTF-8')
         tcp.writeln(objectToJSON(o))
         tcp.close()
         if (getAnswer) {
@@ -648,7 +637,6 @@ function Config() {
     this.codeFormerVisiblity = 1
     this.codeFormerWeight = 0
     this.flatten = false
-    this.removeImage = true
     this.rasterizeImage = true
     this.selectBrush = true
     this.brushOpacity = 60
@@ -706,12 +694,12 @@ function Locale() {
     this.module = { ru: 'Модуль sd-webui-api ', en: 'Module sd-webui-api ' }
     this.notFound = { ru: '\nне найден!', en: 'not found!' }
     this.opacity = { ru: 'Непрозрачность кисти', en: 'Brush opacity' }
-    this.output = { ru: 'Сгенерированное изображение', en: 'Output' }
+    this.output = { ru: 'Параметры изображения', en: 'Image settings' }
     this.progressDocument = { ru: 'Подготовка документа...', en: 'Preparation of a document...' }
     this.progressGenerate = { ru: 'Генерация изображения...', en: 'Image generation...' }
     this.progressPlace = { ru: 'Вставка изображения...', en: 'Image placing...' }
     this.progressUpdating = { ru: 'Обновление параметров генерации...', en: 'Update generation parameters...' }
-    this.rasterize = { ru: 'Растеризовать вставленное изображение', en: 'Rasterize placed image' }
+    this.rasterize = { ru: 'Растеризовать сгенерированное изображение', en: 'Rasterize generated image' }
     this.remove = { ru: 'Удалить файл изображения после вставки', en: 'Remove image file after placing' }
     this.selctBrush = { ru: 'Активировать кисть после генерации', en: 'Select brush after processing' }
     this.selection = { ru: 'Выделение: ', en: 'Selection: ' }

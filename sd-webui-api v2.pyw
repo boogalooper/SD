@@ -8,15 +8,15 @@ from datetime import datetime
 import subprocess
 import os
 
-LOCALHOST = "127.0.0.1"
-SD_PORT = 7860
+API_HOST = "127.0.0.1"
 API_PORT_SEND = 6321
 API_PORT_LISTEN = 6320
 
 
-def get_data_from_SD(api_name):
+def get_data_from_SD(api_name, SD_HOST, SD_PORT):
+    url = f"http://{SD_HOST}:{SD_PORT}/{api_name}"
+    print(f"{url}")
     try:
-        url = f"http://{LOCALHOST}:{SD_PORT}/{api_name}"
         req = urllib.request.Request(url)
         with urllib.request.urlopen(req) as response:
             data = response.read().decode("utf-8")
@@ -30,7 +30,7 @@ def get_data_from_SD(api_name):
 def send_data_to_jsx(message):
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.connect((LOCALHOST, API_PORT_SEND))
+            s.connect((API_HOST, API_PORT_SEND))
             s.sendall(json.dumps(message).encode("utf-8"))
     except Exception as e:
         print(f"Ошибка при отправке данных: {e}")
@@ -42,36 +42,34 @@ def timestamp():
 
 def encode_file_to_base64(path):
     with open(path, "rb") as file:
-        f = base64.b64encode(file.read()).decode("utf-8")
+        encoded_data = base64.b64encode(file.read()).decode("utf-8")
     os.remove(path)
-    return f
+    return encoded_data
 
 
 def decode_and_save_base64(base64_str, save_path):
     with open(save_path, "wb") as file:
         file.write(base64.b64decode(base64_str))
 
-
-def call_api(api_endpoint, payload):
+def call_generate_api(api_endpoint, payload, SD_HOST, SD_PORT, out_dir):
     data = json.dumps(payload).encode("utf-8")
     request = urllib.request.Request(
-        f"http://{LOCALHOST}:{SD_PORT}/{api_endpoint}",
+        f"http://{SD_HOST}:{SD_PORT}/{api_endpoint}",
         headers={"Content-Type": "application/json"},
         data=data,
     )
     response = urllib.request.urlopen(request)
-    return json.loads(response.read().decode("utf-8"))
 
-
-def call_generate_api(payload, out_dir, module):
-    response = call_api(module, payload)
-    if "images" in response:
-        for index, image in enumerate(response.get("images")):
+    result = json.loads(response.read().decode("utf-8"))
+    if "images" in result:
+        for index, image in enumerate(result.get("images")):
             save_path = os.path.join(out_dir, f"{timestamp()}-{index}.png")
             decode_and_save_base64(image, save_path)
-    elif "image" in response:
-            save_path = os.path.join(out_dir, f"{timestamp()}.png")
-            decode_and_save_base64(response.get("image"), save_path)
+    elif "image" in result:
+        save_path = os.path.join(out_dir, f"{timestamp()}.png")
+        decode_and_save_base64(result.get("image"), save_path)
+    else:
+        return None
     return save_path
 
 
@@ -80,10 +78,7 @@ def check_module(module_name):
         __import__(module_name)
     except ImportError:
         print(f"Модуль {module_name} не найден. Устанавливаем...")
-        if install_module(module_name):
-            return True
-        else:
-            return False
+        return install_module(module_name)
     else:
         print(f"Модуль {module_name} уже установлен.")
         return True
@@ -101,9 +96,10 @@ def install_module(module_name):
 
 def start_local_server():
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    srv.bind((LOCALHOST, API_PORT_LISTEN))
+    srv.bind((API_HOST, API_PORT_LISTEN))
     srv.listen(1)
-
+    SD_HOST = None
+    SD_PORT = None
     print("Сервер запущен и ожидает подключения...")
 
     while True:
@@ -116,15 +112,20 @@ def start_local_server():
                 print(f"Получено сообщение: {message}")
                 if message["type"] == "get":
                     print(f"Получаем данные: {message['message']}")
-                    result = get_data_from_SD(message["message"])
+                    result = get_data_from_SD(message["message"], SD_HOST, SD_PORT)
                     if result != None:
                         print(f"Отправляем данные: {message['message']}")
                         send_data_to_jsx(result)
+                elif message["type"] == "handshake":
+                    data = message["message"]
+                    SD_HOST = data["sdHost"]
+                    SD_PORT = int(data["sdPort"])
+                    send_data_to_jsx({"type": "answer", "message": "success"})
                 elif message["type"] == "update":
                     data = message["message"]
                     print(f"Запрос на обновление: {data}")
                     with urllib.request.urlopen(
-                        f"http://{LOCALHOST}:{SD_PORT}/sdapi/v1/options"
+                        f"http://{SD_HOST}:{SD_PORT}/sdapi/v1/options"
                     ) as response:
                         options = json.load(response)
                         if data["sd_model_checkpoint"]:
@@ -137,7 +138,7 @@ def start_local_server():
                             ]
                         payload = json.dumps(options).encode("utf-8")
                         req = urllib.request.Request(
-                            f"http://{LOCALHOST}:{SD_PORT}/sdapi/v1/options",
+                            f"http://{SD_HOST}:{SD_PORT}/sdapi/v1/options",
                             data=payload,
                             headers={"Content-Type": "application/json"},
                             method="POST",
@@ -174,7 +175,7 @@ def start_local_server():
                         payload["initial_noise_multiplier"] = 1
                         payload["resize_mode"] = 0
                     outfile = call_generate_api(
-                        payload, data["output"], "sdapi/v1/img2img"
+                        "sdapi/v1/img2img", payload, SD_HOST, SD_PORT, data["output"]
                     )
                     print("Генерация завершена!")
                     send_data_to_jsx({"type": "answer", "message": outfile})
@@ -182,16 +183,18 @@ def start_local_server():
                     print("Получен запрос на воссстановление лица")
                     data = message["message"]
                     init_image = encode_file_to_base64(data["input"])
-                    payload = {
-                        "image": init_image
-                    }
+                    payload = {"image": init_image}
                     if data["gfpgan"] == "true":
                         payload["gfpgan_visibility"] = data["gfpgan_visibility"]
                     if data["codeformer"] == "true":
                         payload["codeformer_visibility"] = data["codeformer_visibility"]
                         payload["codeformer_weight"] = data["codeformer_weight"]
                     outfile = call_generate_api(
-                        payload, data["output"], "sdapi/v1/extra-single-image"
+                        "sdapi/v1/extra-single-image",
+                        payload,
+                        SD_HOST,
+                        SD_PORT,
+                        data["output"],
                     )
                     print("Генерация завершена!")
                     send_data_to_jsx({"type": "answer", "message": outfile})
@@ -217,6 +220,5 @@ def start_local_server():
             sys.exit()
         finally:
             client_socket.close()
-
 
 start_local_server()

@@ -14,18 +14,19 @@
 </javascriptresource>
 // END__HARVEST_EXCEPTION_ZSTRING
 */
-const LOCALHOST = '127.0.0.1',
+const SD_HOST = '127.0.0.1',
     SD_PORT = 7860,
+    API_HOST = '127.0.0.1',
     API_PORT_SEND = 6320,
     API_PORT_LISTEN = 6321,
     API_FILE = 'sd-webui-api v2.pyw',
     LAYER_NAME = 'SD generated image',
     UUID = '338cc304-fb6f-4b1f-8ad4-13bbd65f117c',
-    SD_GET_OPTIONS_DELAY = 2000, // максимальное время ожидания ответа Stable Diffusion при запросе текущих параметров
+    SD_GET_OPTIONS_DELAY = 2500, // максимальное время ожидания ответа Stable Diffusion при запросе текущих параметров
     SD_RELOAD_CHECKPOINT_DELAY = 10000, // максимальное время ожидания перезагрузки checkpoint или vae
     SD_GENERATION_DELAY = 60000; // максимальное время ожидания генерации изображения
 var time = (new Date).getTime(),
-    SD = new SDApi(LOCALHOST, SD_PORT, API_PORT_SEND, API_PORT_LISTEN, new File((new File($.fileName)).path + '/' + API_FILE)),
+    SD = new SDApi(SD_HOST, API_HOST, SD_PORT, API_PORT_SEND, API_PORT_LISTEN, new File((new File($.fileName)).path + '/' + API_FILE)),
     s2t = stringIDToTypeID,
     t2s = typeIDToStringID,
     cfg = new Config(),
@@ -34,7 +35,7 @@ var time = (new Date).getTime(),
     doc = new AM('document'),
     lr = new AM('layer'),
     ch = new AM('channel'),
-    ver = 0.25,
+    ver = 0.26,
     isDitry = false;
 isCancelled = false;
 $.localize = true
@@ -70,7 +71,7 @@ function init() {
                         return;
                     } else if (result != undefined) {
                         $.setenv('dialogMode', false)
-                        doProgress(str.progressGenerate, 'main(currentSelection)')
+                        doForcedProgress(str.progressGenerate[$.locale=='ru' ? 'ru':'en'], 'main(currentSelection)')
                         cfg.putScriptSettings()
                         cfg.putScriptSettings(true, true)
                         SD.exit()
@@ -79,7 +80,7 @@ function init() {
             } else {
                 if (SD.initialize()) {
                     $.setenv('dialogMode', false)
-                    doProgress(str.progressGenerate, 'main(currentSelection)')
+                    doForcedProgress(str.progressGenerate[$.locale=='ru' ? 'ru':'en'], 'main(currentSelection)')
                     cfg.putScriptSettings(true)
                     SD.exit()
                 } else {
@@ -103,13 +104,13 @@ function init() {
                         isCancelled = true;
                         return;
                     } else if (result != undefined) {
-                        doProgress(str.progressGenerate, 'main(currentSelection)')
+                        doForcedProgress(str.progressGenerate[$.locale=='ru' ? 'ru':'en'], 'main(currentSelection)')
                         if (cfg.current.recordToAction) cfg.putScriptSettings(true) else cfg.putScriptSettings()
                         SD.exit()
                     }
                 }
             } else {
-                if (SD.initialize()) { doProgress(str.progressGenerate, 'main(currentSelection)') }
+                if (SD.initialize()) { doForcedProgress(str.progressGenerate[$.locale=='ru' ? 'ru':'en'], 'main(currentSelection)') }
                 SD.exit()
             }
         }
@@ -166,7 +167,7 @@ function main(selection) {
     }
     activeDocument.activeHistoryState = hst;
     doc.setProperty('center', c);
-    var p = (new Folder(SD['data_dir'] + '/' + SD['outdir_img2img_samples']))
+    var p = (new Folder(Folder.temp + '/' + SD['outdir_img2img_samples']))
     if (!p.exists) p.create()
     if (checkpoint || vae) {
         var vae_path = [];
@@ -178,11 +179,11 @@ function main(selection) {
                 }
             }
         }
-        changeProgressText(str.progressUpdating)
+        changeProgressText(str.progressUpdating[$.locale=='ru' ? 'ru':'en'])
         updateProgress(0.1, 1)
         if (!SD.setOptions(checkpoint, vae, vae_path)) throw new Error(str.errUpdating)
     }
-    changeProgressText(str.progressDocument)
+    changeProgressText(str.progressDocument[$.locale=='ru' ? 'ru':'en'])
     updateProgress(0.2, 1)
     if (cfg.current.autoResize && !isDitry) cfg.current.resize = autoScale(selection.bounds)
     var width = cfg.current.resize != 1 ? (mathTrunc((selection.bounds.width * cfg.current.resize) / 8) * 8) : selection.bounds.width,
@@ -206,8 +207,8 @@ function main(selection) {
         payload['mask'] = f1.fsName.replace(/\\/g, '\\\\')
         payload['inpainting_fill'] = cfg.current.inpaintingFill
     }
-    updateProgress(0.7, 1)
-    changeProgressText(str.progressGenerate)
+    updateProgress(0.3, 1)
+    changeProgressText(str.progressGenerate[$.locale=='ru' ? 'ru':'en'])
     app.refresh()
     var result = SD.sendPayload(payload);
     if (result) {
@@ -215,7 +216,7 @@ function main(selection) {
     } else throw new Error(str.errGenerating)
     function generatedImageToLayer() {
         updateProgress(1, 1)
-        changeProgressText(str.progressPlace)
+        changeProgressText(str.progressPlace[$.locale=='ru' ? 'ru':'en'])
         doc.place(new File(result))
         var placedBounds = doc.descToObject(lr.getProperty('bounds').value);
         var dW = (selection.bounds.right - selection.bounds.left) / (placedBounds.right - placedBounds.left);
@@ -232,9 +233,7 @@ function main(selection) {
             doc.selectBrush();
             doc.setBrushOpacity(cfg.current.brushOpacity)
         }
-        if (cfg.current.removeImage) {
-            (new File(result)).remove();
-        }
+        (new File(result)).remove();
     }
     function findOption(s, o, def) {
         for (a in o) if (o[a] == s) return s;
@@ -262,19 +261,19 @@ function dialogWindow(b, s) {
     cfg.inpaintMode ? (rbInpaint.value = true) : (rbImg.value = true);
     bnSettings.onClick = function () {
         var tempSettings = {}
-        cloneObject(cfg, tempSettings)
+        cloneObject(cfg.current, tempSettings)
         var s = settingsWindow(w, tempSettings),
             result = s.show();
         if (result == 1) {
             var changed = false;
-            for (var a in tempSettings.current) {
+            for (var a in tempSettings) {
                 if (a.indexOf('show') == -1 && a.indexOf('autoResize') == -1) continue;
                 if (tempSettings[a] != cfg.current[a]) {
                     changed = true
                     break;
                 }
             }
-            cloneObject(tempSettings, cfg)
+            cloneObject(tempSettings, cfg.current)
             if (changed) {
                 showControls(grSettings)
                 w.layout.layout(true)
@@ -503,12 +502,6 @@ function dialogWindow(b, s) {
     }
     function settingsWindow(p, cfg) {
         var w = new Window("dialog{orientation:'column',alignChildren:['fill', 'top'],spacing:10,margins:16}"),
-            chFlatten = w.add('checkbox'),
-            pnPathSettings = w.add("panel{orientation:'column',alignChildren:['fill', 'top'],spacing:5,margins:10}"),
-            grPath = pnPathSettings.add("group{orientation:'column',alignChildren:['left', 'center'],spacing:5,margins:0}"),
-            etPath = grPath.add('edittext{preferredSize:[250,40],properties:{readonly:true, multiline: true}}'),
-            chRemove = pnPathSettings.add('checkbox'),
-            chRasterize = pnPathSettings.add('checkbox'),
             pnShow = w.add("panel{orientation:'column',alignChildren:['left', 'top'],spacing:0,margins:10}"),
             chInpaitnigFill = pnShow.add('checkbox'),
             chCheckpoint = pnShow.add('checkbox'),
@@ -520,6 +513,9 @@ function dialogWindow(b, s) {
             chSteps = pnShow.add('checkbox'),
             chCfg = pnShow.add('checkbox'),
             chResize = pnShow.add('checkbox'),
+            pnOutput = w.add("panel{orientation:'column',alignChildren:['fill', 'top'],spacing:5,margins:10}"),
+            chFlatten = pnOutput.add('checkbox'),
+            chRasterize = pnOutput.add('checkbox'),
             pnBrush = w.add("panel{orientation:'column',alignChildren:['fill', 'top'],spacing:10,margins:10}"),
             chSelectBrush = pnBrush.add('checkbox'),
             grOpacity = pnBrush.add("group{orientation:'column',alignChildren:['fill', 'center'],spacing:5,margins:0}"),
@@ -549,63 +545,59 @@ function dialogWindow(b, s) {
         chPrompt.text = str.prompt
         chRasterize.text = str.rasterize
         chRecordSettings.text = str.actionMode
-        chRemove.text = str.remove
         chResize.text = str.resize
         chSampling.text = str.sampling
         chSelectBrush.text = str.selctBrush
         chSheldule.text = str.schedule
         chSteps.text = str.steps
         chVae.text = str.vae
-        etPath.text = (new File(SD['data_dir'] + '/' + SD['outdir_img2img_samples'])).fsName
         ok.text = str.apply
         pnBrush.text = str.brush
-        pnPathSettings.text = str.output
+        pnOutput.text = str.output
         pnResize.text = str.autoResize
         pnShow.text = str.showItems
         slAbove.helpTip = str.max
         slLess.helpTip = str.min
         stOpacityTitle.text = str.opacity
         w.text = str.settings
-        chAutoResize.value = grResizeSl.enabled = cfg.current.autoResize
-        chCfg.value = cfg.current.showCfg_scale
-        chCheckpoint.value = cfg.current.showSd_model_checkpoint
-        chFlatten.value = cfg.current.flatten
-        chInpaitnigFill.value = cfg.current.showInpaintingFill
-        chNegative.value = cfg.current.showNegative_prompt
-        chPrompt.value = cfg.current.showPrompt
-        chRasterize.value = cfg.current.rasterizeImage
-        chRecordSettings.value = !cfg.current.recordToAction
-        chRemove.value = cfg.current.removeImage
-        chResize.value = cfg.current.showResize
-        chSampling.value = cfg.current.showSampler_name
-        chSelectBrush.value = cfg.current.selectBrush
-        chSheldule.value = cfg.current.showScheduler
-        chSteps.value = cfg.current.showSteps
-        chVae.value = cfg.current.showSd_vae
-        slAbove.value = stAbove.text = cfg.current.autoResizeAbove;
-        slLess.value = stLess.text = cfg.current.autoResizeLess;
-        slOpacity.value = stOpacityValue.text = cfg.current.brushOpacity
-        chFlatten.onClick = function () { cfg.current.flatten = this.value }
-        chRemove.onClick = function () { cfg.current.removeImage = this.value }
-        chRasterize.onClick = function () { cfg.current.rasterizeImage = this.value }
-        chInpaitnigFill.onClick = function () { cfg.current.showInpaintingFill = this.value }
-        chCheckpoint.onClick = function () { cfg.current.showSd_model_checkpoint = this.value }
-        chVae.onClick = function () { cfg.current.showSd_vae = this.value }
-        chPrompt.onClick = function () { cfg.current.showPrompt = this.value }
-        chNegative.onClick = function () { cfg.current.showNegative_prompt = this.value }
-        chSampling.onClick = function () { cfg.current.showSampler_name = this.value }
-        chSheldule.onClick = function () { cfg.current.showScheduler = this.value }
-        chSteps.onClick = function () { cfg.current.showSteps = this.value }
-        chCfg.onClick = function () { cfg.current.showCfg_scale = this.value }
-        chResize.onClick = function () { cfg.current.showResize = this.value }
-        chSelectBrush.onClick = function () { cfg.current.selectBrush = this.value }
-        slOpacity.onChange = function () { stOpacityValue.text = cfg.current.brushOpacity = mathTrunc(this.value) }
+        chAutoResize.value = grResizeSl.enabled = cfg.autoResize
+        chCfg.value = cfg.showCfg_scale
+        chCheckpoint.value = cfg.showSd_model_checkpoint
+        chFlatten.value = cfg.flatten
+        chInpaitnigFill.value = cfg.showInpaintingFill
+        chNegative.value = cfg.showNegative_prompt
+        chPrompt.value = cfg.showPrompt
+        chRasterize.value = cfg.rasterizeImage
+        chRecordSettings.value = !cfg.recordToAction
+        chResize.value = cfg.showResize
+        chSampling.value = cfg.showSampler_name
+        chSelectBrush.value = cfg.selectBrush
+        chSheldule.value = cfg.showScheduler
+        chSteps.value = cfg.showSteps
+        chVae.value = cfg.showSd_vae
+        slAbove.value = stAbove.text = cfg.autoResizeAbove;
+        slLess.value = stLess.text = cfg.autoResizeLess;
+        slOpacity.value = stOpacityValue.text = cfg.brushOpacity
+        chFlatten.onClick = function () { cfg.flatten = this.value }
+        chRasterize.onClick = function () { cfg.rasterizeImage = this.value }
+        chInpaitnigFill.onClick = function () { cfg.showInpaintingFill = this.value }
+        chCheckpoint.onClick = function () { cfg.showSd_model_checkpoint = this.value }
+        chVae.onClick = function () { cfg.showSd_vae = this.value }
+        chPrompt.onClick = function () { cfg.showPrompt = this.value }
+        chNegative.onClick = function () { cfg.showNegative_prompt = this.value }
+        chSampling.onClick = function () { cfg.showSampler_name = this.value }
+        chSheldule.onClick = function () { cfg.showScheduler = this.value }
+        chSteps.onClick = function () { cfg.showSteps = this.value }
+        chCfg.onClick = function () { cfg.showCfg_scale = this.value }
+        chResize.onClick = function () { cfg.showResize = this.value }
+        chSelectBrush.onClick = function () { cfg.selectBrush = this.value }
+        slOpacity.onChange = function () { stOpacityValue.text = cfg.brushOpacity = mathTrunc(this.value) }
         slOpacity.onChanging = function () { slOpacity.onChange() }
         slOpacity.addEventListener('keydown', commonHandler)
-        slLess.onChange = function () { stLess.text = cfg.current.autoResizeLess = mathTrunc(this.value / 32) * 32 }
+        slLess.onChange = function () { stLess.text = cfg.autoResizeLess = mathTrunc(this.value / 32) * 32 }
         slLess.onChanging = function () { slLess.onChange() }
         slLess.addEventListener('keydown', resizeHandler)
-        slAbove.onChange = function () { stAbove.text = cfg.current.autoResizeAbove = mathTrunc(this.value / 32) * 32 }
+        slAbove.onChange = function () { stAbove.text = cfg.autoResizeAbove = mathTrunc(this.value / 32) * 32 }
         slAbove.onChanging = function () { slAbove.onChange() }
         slAbove.addEventListener('keydown', resizeHandler)
         function resizeHandler(evt) {
@@ -617,8 +609,8 @@ function dialogWindow(b, s) {
                 }
             }
         }
-        chAutoResize.onClick = function () { cfg.current.autoResize = grResizeSl.enabled = this.value; cfg.current.resize = 1; }
-        chRecordSettings.onClick = function () { cfg.current.recordToAction = !this.value }
+        chAutoResize.onClick = function () { cfg.autoResize = grResizeSl.enabled = this.value; cfg.resize = 1; }
+        chRecordSettings.onClick = function () { cfg.recordToAction = !this.value }
         return w
     }
     function commonHandler(evt) {
@@ -692,17 +684,17 @@ function findSDChannel(title) {
         try { if (ch.getProperty('channelName', false, idx++, true) == title) return idx - 1 } catch (e) { return 0 }
     } while (true)
 }
-function SDApi(host, sdPort, portSend, portListen, apiFile) {
+function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
     this.forgeUI = false;
     var SdCfg = this;
     this.initialize = function () {
         if (!apiFile.exists)
             throw new Error(str.module + apiFile.fsName + str.notFound)
-        if (!checkConnecton(host + ':' + sdPort))
-            throw new Error(str.errConnection + host + ':' + sdPort + '\nStable Diffusion ' + str.errAnswer)
+        if (!checkConnecton(sdHost + ':' + sdPort))
+            throw new Error(str.errConnection + sdHost + ':' + sdPort + '\nStable Diffusion ' + str.errAnswer)
         apiFile.execute();
-        if (!checkConnecton(host + ':' + portSend))
-            throw new Error(str.errConnection + host + ':' + portSend + '\n' + str.module + str.errAnswer)
+        var result = sendMessage({ type: 'handshake', message: { sdHost: sdHost, sdPort: sdPort } }, true);
+        if (!result) throw new Error(str.errConnection + apiHost + ':' + portSend + '\n' + str.module + str.errAnswer)
         var result = sendMessage({ type: 'get', message: 'sdapi/v1/options' }, true);
         if (result) {
             SdCfg['outdir_img2img_samples'] = result['outdir_img2img_samples']
@@ -741,10 +733,6 @@ function SDApi(host, sdPort, portSend, portListen, apiFile) {
             if (!result.length) throw new Error(str.errList + 'sdapi/v1/samplers' + str.errExists)
             for (var i = 0; i < result.length; i++) SdCfg['samplers'].push(result[i].name)
         } else { throw new Error(str.errSettings + 'sdapi/v1/samplers' + str.errTimeout) }
-        var result = sendMessage({ type: 'get', message: 'sdapi/v1/cmd-flags' }, true);
-        if (result) {
-            SdCfg['data_dir'] = result['data_dir']
-        } else { throw new Error(str.errSettings + 'sdapi/v1/cmd-flags' + str.errTimeout) }
         return true
     }
     this.exit = function () {
@@ -777,7 +765,7 @@ function SDApi(host, sdPort, portSend, portListen, apiFile) {
     function sendMessage(o, getAnswer, delay) {
         var tcp = new Socket,
             delay = delay ? delay : SD_GET_OPTIONS_DELAY;
-        tcp.open(host + ':' + portSend, 'UTF-8')
+        tcp.open(apiHost + ':' + portSend, 'UTF-8')
         tcp.writeln(objectToJSON(o))
         tcp.close()
         if (getAnswer) {
@@ -792,6 +780,7 @@ function SDApi(host, sdPort, portSend, portListen, apiFile) {
                     if (answer != null) {
                         var a = eval('(' + answer.readln() + ')');
                         answer.close();
+                        $.writeln(answer)
                         return a;
                     }
                 }
@@ -1038,7 +1027,6 @@ function Config() {
         this.negative_prompt = '(deformed, distorted, disfigured:1.3), poorly drawn, bad anatomy, wrong anatomy, extra limb, missing limb, floating limbs, (mutated hands and fingers:1.4), disconnected limbs, mutation, mutated, ugly, disgusting, blurry, amputation'
         this.resize = 1
         this.flatten = false
-        this.removeImage = true
         this.rasterizeImage = true
         this.inpaintingFill = 1
         this.showInpaintingFill = true
@@ -1142,14 +1130,13 @@ function Locale() {
     this.negativePrompt = 'Negative prompt'
     this.notFound = { ru: '\nне найден!', en: 'not found!' }
     this.opacity = { ru: 'Непрозрачность кисти', en: 'Brush opacity' }
-    this.output = { ru: 'Сгенерированное изображение', en: 'Output' }
+    this.output = { ru: 'Параметры изображения', en: 'Image settings' }
     this.progressDocument = { ru: 'Подготовка документа...', en: 'Preparation of a document...' }
     this.progressGenerate = { ru: 'Генерация изображения...', en: 'Image generation...' }
     this.progressPlace = { ru: 'Вставка изображения...', en: 'Image placing...' }
     this.progressUpdating = { ru: 'Обновление параметров генерации...', en: 'Update generation parameters...' }
     this.prompt = 'Prompt'
-    this.rasterize = { ru: 'Растеризовать вставленное изображение', en: 'Rasterize placed image' }
-    this.remove = { ru: 'Удалить файл изображения после вставки', en: 'Remove image file after placing' }
+    this.rasterize = { ru: 'Растеризовать сгенерированное изображение', en: 'Rasterize generated image' }
     this.resize = 'Resize by scale'
     this.sampling = 'Sampling method'
     this.schedule = 'Schedule type'
