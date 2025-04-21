@@ -69,7 +69,7 @@ function init() {
                         return;
                     } else if (result != undefined) {
                         $.setenv('showDialog', false)
-                        doForcedProgress(str.progressGenerate[$.locale=='ru' ? 'ru':'en'], 'main(currentSelection)')
+                        doForcedProgress(str.progressGenerate[$.locale == 'ru' ? 'ru' : 'en'], 'main(currentSelection)')
                         cfg.putScriptSettings()
                         cfg.putScriptSettings(true)
                         SD.exit()
@@ -78,7 +78,7 @@ function init() {
             } else {
                 if (SD.initialize()) {
                     $.setenv('showDialog', false)
-                    doForcedProgress(str.progressGenerate[$.locale=='ru' ? 'ru':'en'], 'main(currentSelection)')
+                    doForcedProgress(str.progressGenerate[$.locale == 'ru' ? 'ru' : 'en'], 'main(currentSelection)')
                     cfg.putScriptSettings(true)
                     SD.exit()
                 } else {
@@ -98,13 +98,13 @@ function init() {
                         isCancelled = true;
                         return;
                     } else if (result != undefined) {
-                        doForcedProgress(str.progressGenerate[$.locale=='ru' ? 'ru':'en'], 'main(currentSelection)')
+                        doForcedProgress(str.progressGenerate[$.locale == 'ru' ? 'ru' : 'en'], 'main(currentSelection)')
                         cfg.putScriptSettings(true)
                         SD.exit()
                     }
                 }
             } else {
-                if (SD.initialize()) { doForcedProgress(str.progressGenerate[$.locale=='ru' ? 'ru':'en'], 'main(currentSelection)') }
+                if (SD.initialize()) { doForcedProgress(str.progressGenerate[$.locale == 'ru' ? 'ru' : 'en'], 'main(currentSelection)') }
                 SD.exit()
             }
         }
@@ -150,7 +150,7 @@ function main(selection) {
     doc.setProperty('center', c);
     var p = (new Folder(Folder.temp + '/' + SD['outdir_extras_samples']))
     if (!p.exists) p.create()
-    changeProgressText(str.progressDocument[$.locale=='ru' ? 'ru':'en'])
+    changeProgressText(str.progressDocument[$.locale == 'ru' ? 'ru' : 'en'])
     updateProgress(0.2, 1)
     var payload = {
         'input': f.fsName.replace(/\\/g, '\\\\'),
@@ -162,7 +162,7 @@ function main(selection) {
         'codeformer_weight': cfg.codeFormerWeight
     };
     updateProgress(0.3, 1)
-    changeProgressText(str.progressGenerate[$.locale=='ru' ? 'ru':'en'])
+    changeProgressText(str.progressGenerate[$.locale == 'ru' ? 'ru' : 'en'])
     app.refresh()
     var result = SD.sendPayload(payload);
     if (result) {
@@ -170,13 +170,13 @@ function main(selection) {
     } else throw new Error(str.errGenerating)
     function generatedImageToLayer() {
         updateProgress(1, 1)
-        changeProgressText(str.progressPlace[$.locale=='ru' ? 'ru':'en'])
+        changeProgressText(str.progressPlace[$.locale == 'ru' ? 'ru' : 'en'])
         doc.place(new File(result))
         var placedBounds = doc.descToObject(lr.getProperty('bounds').value);
         var dW = (selection.bounds.right - selection.bounds.left) / (placedBounds.right - placedBounds.left);
         var dH = (selection.bounds.bottom - selection.bounds.top) / (placedBounds.bottom - placedBounds.top)
         lr.transform(dW * 100, dH * 100);
-        if (cfg.rasterizeImage) lr.rasterize();
+        if (cfg.rasterizeImage) { try { lr.rasterize() } catch (e) { } };
         lr.setName(LAYER_NAME)
         doc.makeSelectionFromLayer('mask', selection.junk)
         doc.makeSelectionMask()
