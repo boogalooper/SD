@@ -181,7 +181,7 @@ function main(selection) {
         }
         changeProgressText(str.progressUpdating[$.locale == 'ru' ? 'ru' : 'en'])
         updateProgress(0.1, 1)
-        if (!SD.setOptions(checkpoint.replace(/\\/g, '\\\\'), vae, vae_path)) throw new Error(str.errUpdating)
+        if (!SD.setOptions(checkpoint, vae, vae_path)) throw new Error(str.errUpdating)
     }
     changeProgressText(str.progressDocument[$.locale == 'ru' ? 'ru' : 'en'])
     updateProgress(0.2, 1)
@@ -740,7 +740,7 @@ function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
     }
     this.setOptions = function (checkpoint, vae, vae_path) {
         var message = {}
-        message['sd_model_checkpoint'] = checkpoint
+        message['sd_model_checkpoint'] = checkpoint ? checkpoint.replace(/\\/g, '\\\\') : null
         message['sd_vae'] = vae
         if (SdCfg.forgeUI) message['forge_additional_modules'] = vae_path
         if (sendMessage({ type: 'update', message: message }, true, SD_RELOAD_CHECKPOINT_DELAY)) return true
