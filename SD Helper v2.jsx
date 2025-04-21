@@ -65,6 +65,7 @@ function init() {
             if (($.getenv('dialogMode') == 'true' || $.getenv('dialogMode') == null)) {
                 if (SD.initialize()) {
                     var w = dialogWindow(currentSelection.bounds, (((new Date).getTime() - time) / 1000)); var result = w.show()
+                    $.setenv('dialogMode', false)
                     if (result == 2) {
                         SD.exit()
                         isCancelled = true;
@@ -75,7 +76,6 @@ function init() {
                         cfg.putScriptSettings(true, true)
                         SD.exit()
                     }
-                    $.setenv('dialogMode', false)
                 }
             } else {
                 if (SD.initialize()) {
