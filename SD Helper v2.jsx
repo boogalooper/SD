@@ -71,7 +71,7 @@ function init() {
                         return;
                     } else if (result != undefined) {
                         $.setenv('dialogMode', false)
-                        doForcedProgress(str.progressGenerate[$.locale=='ru' ? 'ru':'en'], 'main(currentSelection)')
+                        doForcedProgress(str.progressGenerate[$.locale == 'ru' ? 'ru' : 'en'], 'main(currentSelection)')
                         cfg.putScriptSettings()
                         cfg.putScriptSettings(true, true)
                         SD.exit()
@@ -80,7 +80,7 @@ function init() {
             } else {
                 if (SD.initialize()) {
                     $.setenv('dialogMode', false)
-                    doForcedProgress(str.progressGenerate[$.locale=='ru' ? 'ru':'en'], 'main(currentSelection)')
+                    doForcedProgress(str.progressGenerate[$.locale == 'ru' ? 'ru' : 'en'], 'main(currentSelection)')
                     cfg.putScriptSettings(true)
                     SD.exit()
                 } else {
@@ -104,13 +104,13 @@ function init() {
                         isCancelled = true;
                         return;
                     } else if (result != undefined) {
-                        doForcedProgress(str.progressGenerate[$.locale=='ru' ? 'ru':'en'], 'main(currentSelection)')
+                        doForcedProgress(str.progressGenerate[$.locale == 'ru' ? 'ru' : 'en'], 'main(currentSelection)')
                         if (cfg.current.recordToAction) cfg.putScriptSettings(true) else cfg.putScriptSettings()
                         SD.exit()
                     }
                 }
             } else {
-                if (SD.initialize()) { doForcedProgress(str.progressGenerate[$.locale=='ru' ? 'ru':'en'], 'main(currentSelection)') }
+                if (SD.initialize()) { doForcedProgress(str.progressGenerate[$.locale == 'ru' ? 'ru' : 'en'], 'main(currentSelection)') }
                 SD.exit()
             }
         }
@@ -179,11 +179,11 @@ function main(selection) {
                 }
             }
         }
-        changeProgressText(str.progressUpdating[$.locale=='ru' ? 'ru':'en'])
+        changeProgressText(str.progressUpdating[$.locale == 'ru' ? 'ru' : 'en'])
         updateProgress(0.1, 1)
         if (!SD.setOptions(checkpoint, vae, vae_path)) throw new Error(str.errUpdating)
     }
-    changeProgressText(str.progressDocument[$.locale=='ru' ? 'ru':'en'])
+    changeProgressText(str.progressDocument[$.locale == 'ru' ? 'ru' : 'en'])
     updateProgress(0.2, 1)
     if (cfg.current.autoResize && !isDitry) cfg.current.resize = autoScale(selection.bounds)
     var width = cfg.current.resize != 1 ? (mathTrunc((selection.bounds.width * cfg.current.resize) / 8) * 8) : selection.bounds.width,
@@ -208,7 +208,7 @@ function main(selection) {
         payload['inpainting_fill'] = cfg.current.inpaintingFill
     }
     updateProgress(0.3, 1)
-    changeProgressText(str.progressGenerate[$.locale=='ru' ? 'ru':'en'])
+    changeProgressText(str.progressGenerate[$.locale == 'ru' ? 'ru' : 'en'])
     app.refresh()
     var result = SD.sendPayload(payload);
     if (result) {
@@ -216,13 +216,13 @@ function main(selection) {
     } else throw new Error(str.errGenerating)
     function generatedImageToLayer() {
         updateProgress(1, 1)
-        changeProgressText(str.progressPlace[$.locale=='ru' ? 'ru':'en'])
+        changeProgressText(str.progressPlace[$.locale == 'ru' ? 'ru' : 'en'])
         doc.place(new File(result))
         var placedBounds = doc.descToObject(lr.getProperty('bounds').value);
         var dW = (selection.bounds.right - selection.bounds.left) / (placedBounds.right - placedBounds.left);
         var dH = (selection.bounds.bottom - selection.bounds.top) / (placedBounds.bottom - placedBounds.top)
         lr.transform(dW * 100, dH * 100);
-        if (cfg.current.rasterizeImage) lr.rasterize();
+        if (cfg.current.rasterizeImage) { try { lr.rasterize() } catch (e) { } }
         lr.setName(LAYER_NAME)
         doc.makeSelectionFromLayer('mask', selection.junk)
         doc.makeSelectionMask()
@@ -780,7 +780,6 @@ function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
                     if (answer != null) {
                         var a = eval('(' + answer.readln() + ')');
                         answer.close();
-                        $.writeln(answer)
                         return a;
                     }
                 }
@@ -944,10 +943,9 @@ function AM(target, order) {
         executeAction(s2t('set'), d, DialogModes.NO);
     }
     this.place = function (pth) {
-        var descriptor = new AD;
-        descriptor.putPath(s2t('null'), pth);
-        descriptor.putBoolean(s2t('linked'), false);
-        executeAction(s2t('placeEvent'), descriptor, DialogModes.NO);
+        (d = new AD).putPath(s2t('null'), pth);
+        d.putBoolean(s2t('linked'), false);
+        executeAction(s2t('placeEvent'), d, DialogModes.NO);
     }
     this.rasterize = function () {
         (d = new AD).putReference(s2t('target'), r);
