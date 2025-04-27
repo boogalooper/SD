@@ -217,6 +217,7 @@ def start_local_server():
                     sys.exit()
         except Exception as e:
             print(f"Произошла ошибка: {e}")
+            send_data_to_jsx({"type": "answer", "message": None})
             sys.exit()
         finally:
             client_socket.close()

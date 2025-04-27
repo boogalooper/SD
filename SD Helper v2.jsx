@@ -7,7 +7,7 @@
 <terminology><![CDATA[<< /Version 1
                         /Events <<
                         /338cc304-fb6f-4b1f-8ad4-13bbd65f117c [(SD helper) <<
-                        /inpaintMode [(Inpaint mode) /boolean] 
+                        /recordToAction [(recordered settings) /boolean] 
                         >>]
                          >>
                       >> ]]></terminology>
@@ -22,9 +22,9 @@ const SD_HOST = '127.0.0.1',
     API_FILE = 'sd-webui-api v2.pyw',
     LAYER_NAME = 'SD generated image',
     UUID = '338cc304-fb6f-4b1f-8ad4-13bbd65f117c',
-    SD_GET_OPTIONS_DELAY = 2500, // максимальное время ожидания ответа Stable Diffusion при запросе текущих параметров
-    SD_RELOAD_CHECKPOINT_DELAY = 10000, // максимальное время ожидания перезагрузки checkpoint или vae
-    SD_GENERATION_DELAY = 60000; // максимальное время ожидания генерации изображения
+    SD_GET_OPTIONS_DELAY = 3000, // максимальное время ожидания ответа Stable Diffusion при запросе текущих параметров
+    SD_RELOAD_CHECKPOINT_DELAY = 12000, // максимальное время ожидания перезагрузки checkpoint или vae
+    SD_GENERATION_DELAY = 80000; // максимальное время ожидания генерации изображения
 var time = (new Date).getTime(),
     SD = new SDApi(SD_HOST, API_HOST, SD_PORT, API_PORT_SEND, API_PORT_LISTEN, new File((new File($.fileName)).path + '/' + API_FILE)),
     s2t = stringIDToTypeID,
@@ -35,7 +35,7 @@ var time = (new Date).getTime(),
     doc = new AM('document'),
     lr = new AM('layer'),
     ch = new AM('channel'),
-    ver = 0.26,
+    ver = 0.271,
     isDitry = false;
 isCancelled = false;
 $.localize = true
@@ -43,6 +43,7 @@ if (ScriptUI.environment.keyboardState.shiftKey) $.setenv('dialogMode', true)
 try { init() } catch (e) {
     SD.exit()
     alert(e)
+    $.setenv('dialogMode', true)
     isCancelled = true;
 }
 isCancelled ? 'cancel' : undefined
@@ -67,24 +68,25 @@ function init() {
                     var w = dialogWindow(currentSelection.bounds, (((new Date).getTime() - time) / 1000)); var result = w.show()
                     $.setenv('dialogMode', false)
                     if (result == 2) {
+                        cfg.putScriptSettings()
+                        $.setenv('dialogMode', true)
                         SD.exit()
                         isCancelled = true;
                         return;
                     } else if (result != undefined) {
-                        doForcedProgress(str.progressGenerate[$.locale == 'ru' ? 'ru' : 'en'], 'main(currentSelection)')
                         cfg.putScriptSettings()
-                        cfg.putScriptSettings(true, true)
+                        cfg.putScriptSettings(true)
+                        doForcedProgress(str.progressGenerate[$.locale == 'ru' ? 'ru' : 'en'], 'main(currentSelection)')
                         SD.exit()
                     }
                 }
             } else {
-                if (SD.initialize()) {
+                if (SD.initialize(true)) {
                     $.setenv('dialogMode', false)
-                    doForcedProgress(str.progressGenerate[$.locale == 'ru' ? 'ru' : 'en'], 'main(currentSelection)')
                     cfg.putScriptSettings(true)
+                    doForcedProgress(str.progressGenerate[$.locale == 'ru' ? 'ru' : 'en'], 'main(currentSelection, true)')
                     SD.exit()
                 } else {
-                    if (cleanup && targetID) doc.deleteLayer(targetID)
                     SD.exit()
                     isCancelled = true
                 }
@@ -92,9 +94,9 @@ function init() {
         }
         else {
             cfg.getScriptSettings(true)
-            if (!cfg.current.recordToAction) {
+            if (!cfg.recordToAction) {
                 cfg.getScriptSettings()
-                cfg.current.recordToAction = false
+                cfg.recordToAction = false
             }
             if (app.playbackDisplayDialogs == DialogModes.ALL) {
                 if (SD.initialize()) {
@@ -104,23 +106,26 @@ function init() {
                         isCancelled = true;
                         return;
                     } else if (result != undefined) {
+                        cfg.putScriptSettings(true)
+                        if (!cfg.recordToAction) cfg.putScriptSettings()
                         doForcedProgress(str.progressGenerate[$.locale == 'ru' ? 'ru' : 'en'], 'main(currentSelection)')
-                        if (cfg.current.recordToAction) cfg.putScriptSettings(true) else cfg.putScriptSettings()
                         SD.exit()
                     }
                 }
             } else {
-                if (SD.initialize()) { doForcedProgress(str.progressGenerate[$.locale == 'ru' ? 'ru' : 'en'], 'main(currentSelection)') }
+                if (SD.initialize(true)) { doForcedProgress(str.progressGenerate[$.locale == 'ru' ? 'ru' : 'en'], 'main(currentSelection,true)') }
                 SD.exit()
             }
         }
     }
 }
-function main(selection) {
-    var checkpoint = (cfg.current.sd_model_checkpoint == SD['sd_model_checkpoint'] ? null : findOption(cfg.current.sd_model_checkpoint, SD['sd-models'], SD['sd_model_checkpoint'])),
-        vae = (cfg.current.sd_vae == SD['sd_vae'] ? null : findOption(cfg.current.sd_vae, SD['sd-vaes'], SD['sd_vae']));
-    if (vae != cfg.current.sd_vae && vae != null) cfg.current.sd_vae = vae
-    if (checkpoint != cfg.current.sd_model_checkpoint && checkpoint != null) cfg.current.sd_model_checkpoint = checkpoint
+function main(selection, fastMode) {
+    if (!fastMode) {
+        var checkpoint = (cfg.sd_model_checkpoint == SD['sd_model_checkpoint'] ? null : findOption(cfg.sd_model_checkpoint, SD['sd-models'], SD['sd_model_checkpoint'])),
+            vae = (cfg.current.sd_vae == SD['sd_vae'] ? null : findOption(cfg.current.sd_vae, SD['sd-vaes'], SD['sd_vae']));
+        if (vae != cfg.current.sd_vae && vae != null) cfg.current.sd_vae = vae
+        if (checkpoint != cfg.sd_model_checkpoint && checkpoint != null) cfg.sd_model_checkpoint = checkpoint
+    }
     if (selection.previousGeneration) doc.hideSelectedLayers()
     if (doc.getProperty('quickMask')) {
         doc.quickMask('clearEvent');
@@ -143,7 +148,7 @@ function main(selection) {
     var hst = activeDocument.activeHistoryState,
         c = doc.getProperty('center').value;
     doc.crop(true);
-    if (cfg.current.flatten) { doc.flatten() } else {
+    if (cfg.flatten) { doc.flatten() } else {
         var len = doc.getProperty('numberOfLayers'),
             start = lr.getProperty('itemIndex'),
             lrsList = new ActionReference();
@@ -157,7 +162,7 @@ function main(selection) {
     var f = new File(Folder.temp + '/SDH.jpg');
     var f1 = new File(Folder.temp + '/SDH_MASK.jpg');
     doc.saveACopy(f);
-    if (cfg.inpaintMode) {
+    if (cfg.current.inpaintingFill != -1) {
         lr.selectChannel('mask');
         lr.selectAllPixels();
         doc.copyPixels()
@@ -167,32 +172,34 @@ function main(selection) {
     }
     activeDocument.activeHistoryState = hst;
     doc.setProperty('center', c);
-    var p = (new Folder(Folder.temp + '/' + SD['outdir_img2img_samples']))
+    var p = (new Folder(Folder.temp + '/' + cfg.outdir))
     if (!p.exists) p.create()
-    if (checkpoint || vae) {
-        var vae_path = [];
-        if (SD.forgeUI) {
-            for (var i = 0; i < SD['forge_additional_modules'].length; i++) {
-                if (SD['forge_additional_modules'][i].indexOf(cfg.current.sd_vae) != -1) {
-                    vae_path.push(SD['forge_additional_modules'][i])
-                    break;
+    if (!fastMode) {
+        if (checkpoint || vae) {
+            var vae_path = [];
+            if (SD.forgeUI) {
+                for (var i = 0; i < SD['forge_additional_modules'].length; i++) {
+                    if (SD['forge_additional_modules'][i].indexOf(cfg.current.sd_vae) != -1) {
+                        vae_path.push(SD['forge_additional_modules'][i])
+                        break;
+                    }
                 }
             }
+            changeProgressText(str.progressUpdating[$.locale == 'ru' ? 'ru' : 'en'])
+            updateProgress(0.1, 1)
+            if (!SD.setOptions(checkpoint, vae, vae_path)) throw new Error(str.errUpdating)
         }
-        changeProgressText(str.progressUpdating[$.locale == 'ru' ? 'ru' : 'en'])
-        updateProgress(0.1, 1)
-        if (!SD.setOptions(checkpoint, vae, vae_path)) throw new Error(str.errUpdating)
     }
     changeProgressText(str.progressDocument[$.locale == 'ru' ? 'ru' : 'en'])
     updateProgress(0.2, 1)
-    if (cfg.current.autoResize && !isDitry) cfg.current.resize = autoScale(selection.bounds)
+    if (cfg.autoResize && !isDitry) cfg.current.resize = autoScale(selection.bounds)
     var width = cfg.current.resize != 1 ? (mathTrunc((selection.bounds.width * cfg.current.resize) / 8) * 8) : selection.bounds.width,
         height = cfg.current.resize != 1 ? (mathTrunc((selection.bounds.height * cfg.current.resize) / 8) * 8) : selection.bounds.height
     var payload = {
         'input': f.fsName.replace(/\\/g, '\\\\'),
         'output': p.fsName.replace(/\\/g, '\\\\'),
-        'prompt': cfg.current.prompt,
-        'negative_prompt': cfg.current.negative_prompt,
+        'prompt': cfg.current.prompt.toString(),
+        'negative_prompt': cfg.current.negative_prompt.toString(),
         'sampler_name': cfg.current.sampler_name,
         'scheduler': cfg.current.scheduler,
         'cfg_scale': cfg.current.cfg_scale,
@@ -203,9 +210,9 @@ function main(selection) {
         'denoising_strength': cfg.current.denoising_strength,
         'n_iter': 1,
     };
-    if (cfg.inpaintMode) {
+    if (cfg.current.inpaintingFill != -1) {
         payload['mask'] = f1.fsName.replace(/\\/g, '\\\\')
-        payload['inpainting_fill'] = cfg.current.inpaintingFill
+        payload['inpainting_fill'] = cfg.current.inpaintingFill + 1
     }
     updateProgress(0.3, 1)
     changeProgressText(str.progressGenerate[$.locale == 'ru' ? 'ru' : 'en'])
@@ -222,16 +229,16 @@ function main(selection) {
         var dW = (selection.bounds.right - selection.bounds.left) / (placedBounds.right - placedBounds.left);
         var dH = (selection.bounds.bottom - selection.bounds.top) / (placedBounds.bottom - placedBounds.top)
         lr.transform(dW * 100, dH * 100);
-        if (cfg.current.rasterizeImage) { try { lr.rasterize() } catch (e) { } }
+        if (cfg.rasterizeImage) { try { lr.rasterize() } catch (e) { } }
         lr.setName(LAYER_NAME)
         doc.makeSelectionFromLayer('mask', selection.junk)
         doc.makeSelectionMask()
         doc.deleteLayer(selection.junk)
         lr.selectChannel('mask');
-        if (cfg.current.selectBrush) {
+        if (cfg.selectBrush) {
             doc.resetSwatches()
             doc.selectBrush();
-            doc.setBrushOpacity(cfg.current.brushOpacity)
+            doc.setBrushOpacity(cfg.brushOpacity)
         }
         (new File(result)).remove();
     }
@@ -243,56 +250,52 @@ function main(selection) {
 function dialogWindow(b, s) {
     var w = new Window("dialog{orientation:'column',alignChildren:['fill', 'top'],spacing:10,margins:16}"),
         grGlobal = w.add("group{orientation:'row',alignChildren:['left', 'center'],spacing:0,margins:0}"),
-        stWH = grGlobal.add("statictext{preferredSize:[130,-1]}"),
-        rbImg = grGlobal.add("radiobutton{preferredSize:[65,-1]}"),
-        rbInpaint = grGlobal.add("radiobutton{preferredSize:[65,-1]}"),
+        grCheckoint = w.add("group{orientation:'column',alignChildren:['fill', 'center'],spacing:0,margins:0}"),
+        stCheckpoint = grCheckoint.add('statictext'),
+        dlCheckpoint = grCheckoint.add('dropdownlist{preferredSize: [285, -1] }'),
+        stWH = grGlobal.add("statictext{preferredSize:[265,-1]}"),
         bnSettings = grGlobal.add("button{preferredSize:[25, 25]}"),
         grSettings = w.add("group{orientation:'column',alignChildren:['fill', 'left'],spacing:5,margins:0}");
-    showControls(grSettings);
-    var grOk = w.add("group{orientation:'row',alignChildren:['center', 'center'],spacing:10,margins:[0, 10, 0, 0]}"),
+    showControls(grSettings, true);
+    var grOk = w.add("group{orientation:'row',alignChildren:['center','center'],spacing:10,margins:[0, 10, 0, 0]}"),
         Ok = grOk.add('button', undefined, undefined, { name: 'ok' });
     w.text = 'SD Helper v.' + ver + ' - responce time ' + s + 's';
     stWH.text = str.selection + b.width + 'x' + b.height;
-    rbImg.text = 'Img2Img'
-    rbInpaint.text = 'Inpaint'
     bnSettings.text = '⚙';
+    stCheckpoint.text = str.checkpoint;
     Ok.text = str.generate;
     bnSettings.helpTip = str.settings
-    cfg.inpaintMode ? (rbInpaint.value = true) : (rbImg.value = true);
+    if (SD['sd-models'].length) for (var i = 0; i < SD['sd-models'].length; i++) dlCheckpoint.add('item', SD['sd-models'][i])
+    var current = dlCheckpoint.find(cfg.sd_model_checkpoint) ? dlCheckpoint.find(cfg.sd_model_checkpoint) : dlCheckpoint.find(SD['sd_model_checkpoint']);
+    dlCheckpoint.selection = current ? current.index : 0
+    cfg.sd_model_checkpoint = dlCheckpoint.selection.text
+    dlCheckpoint.onChange = function () {
+        cfg.presets[cfg.sd_model_checkpoint] = cfg.current
+        cfg.sd_model_checkpoint = this.selection.text
+        if (cfg.presets[cfg.sd_model_checkpoint]) cfg.current = cfg.presets[cfg.sd_model_checkpoint] else cfg.current = new cfg.checkpointSettings()
+        showControls(grSettings)
+        w.layout.layout(true)
+    }
     bnSettings.onClick = function () {
         var tempSettings = {}
-        cloneObject(cfg.current, tempSettings)
+        cloneObject(cfg, tempSettings)
         var s = settingsWindow(w, tempSettings),
             result = s.show();
         if (result == 1) {
             var changed = false;
             for (var a in tempSettings) {
                 if (a.indexOf('show') == -1 && a.indexOf('autoResize') == -1) continue;
-                if (tempSettings[a] != cfg.current[a]) {
+                if (tempSettings[a] != cfg[a]) {
                     changed = true
                     break;
                 }
             }
-            cloneObject(tempSettings, cfg.current)
+            cloneObject(tempSettings, cfg)
             if (changed) {
                 showControls(grSettings)
                 w.layout.layout(true)
             }
         }
-    }
-    rbImg.onClick = function () {
-        cfg.inpaint = cfg.current
-        cfg.current = cfg.img2img
-        cfg.inpaintMode = false
-        showControls(grSettings)
-        w.layout.layout(true)
-    }
-    rbInpaint.onClick = function () {
-        cfg.img2img = cfg.current
-        cfg.current = cfg.inpaint
-        cfg.inpaintMode = true
-        showControls(grSettings)
-        w.layout.layout(true)
     }
     return w;
     function showControls(p) {
@@ -300,38 +303,23 @@ function dialogWindow(b, s) {
         for (var i = 0; i < len; i++) {
             p.remove(p.children[0])
         }
-        if (cfg.current.showInpaintingFill && cfg.inpaintMode) inpaintingFill(p)
-        if (cfg.current.showSd_model_checkpoint) checkpoint(p);
-        if (cfg.current.showSd_vae) vae(p)
-        if (cfg.current.showPrompt) prompt(p)
-        if (cfg.current.showNegative_prompt) negativePrompt(p)
-        if (cfg.current.showSampler_name) sampler(p)
-        if (cfg.current.showScheduler) shelduler(p)
-        if (cfg.current.showSteps) steps(p)
-        if (cfg.current.showCfg_scale) cfgScale(p)
-        if (cfg.current.showResize) resizeScale(p)
+        if (cfg.showSd_vae) vae(p)
+        if (cfg.showInpaintingFill) inpaintingFill(p)
+        if (cfg.showPrompt) prompt(p)
+        if (cfg.showNegative_prompt) negativePrompt(p)
+        if (cfg.showSampler_name) sampler(p)
+        if (cfg.showScheduler) shelduler(p)
+        if (cfg.showSteps) steps(p)
+        if (cfg.showCfg_scale) cfgScale(p)
+        if (cfg.showResize) resizeScale(p)
         denoisingStrength(p)
         function inpaintingFill(p) {
-            var grCheckoint = p.add("group{orientation:'column',alignChildren:['fill', 'center'],spacing:0,margins:0}"),
-                stCheckpoint = grCheckoint.add('statictext'),
-                dlCheckpoint = grCheckoint.add('dropdownlist', undefined, undefined, { items: ['fill', 'original', 'latent noise', 'latent nothing'], preferredSize: [285, -1] });
-            stCheckpoint.text = str.fill
-            dlCheckpoint.selection = cfg.current.inpaintingFill
-            dlCheckpoint.onChange = function () {
-                cfg.current.inpaintingFill = this.selection.index
-            }
-        }
-        function checkpoint(p) {
-            var grCheckoint = p.add("group{orientation:'column',alignChildren:['fill', 'center'],spacing:0,margins:0}"),
-                stCheckpoint = grCheckoint.add('statictext'),
-                dlCheckpoint = grCheckoint.add('dropdownlist{preferredSize:[285,-1]}');
-            stCheckpoint.text = str.checkpoint;
-            if (SD['sd-models'].length) for (var i = 0; i < SD['sd-models'].length; i++) dlCheckpoint.add('item', SD['sd-models'][i])
-            var current = dlCheckpoint.find(cfg.current.sd_model_checkpoint) ? dlCheckpoint.find(cfg.current.sd_model_checkpoint) : dlCheckpoint.find(SD['sd_model_checkpoint']);
-            dlCheckpoint.selection = current ? current.index : 0
-            dlCheckpoint.onChange = function () {
-                cfg.current.sd_model_checkpoint = this.selection.text
-            }
+            var grInpainting = p.add("group{orientation:'column',alignChildren:['fill', 'center'],spacing:0,margins:0}"),
+                stInpainting = grInpainting.add('statictext'),
+                dlInpainting = grInpainting.add('dropdownlist', undefined, undefined, { items: ['none', 'fill', 'original', 'latent noise', 'latent nothing'] });
+            stInpainting.text = str.fill
+            dlInpainting.onChange = function () { cfg.current.inpaintingFill = this.selection.index - 1 }
+            dlInpainting.selection = cfg.current.inpaintingFill + 1
         }
         function vae(p) {
             var grVae = p.add("group{orientation:'column',alignChildren:['fill', 'center'],spacing:0,margins:0}"),
@@ -339,24 +327,19 @@ function dialogWindow(b, s) {
                 dlVae = grVae.add('dropdownlist{preferredSize:[285,-1]}')
             stVae.text = str.vae;
             if (SD['sd-vaes'].length) for (var i = 0; i < SD['sd-vaes'].length; i++) dlVae.add('item', SD['sd-vaes'][i])
-            var current = dlVae.find(cfg.current.sd_vae) ? dlVae.find(cfg.current.sd_vae) : dlVae.find(SD['sd_vae']);
-            dlVae.selection = current ? current.index : 0
             dlVae.onChange = function () {
                 cfg.current.sd_vae = this.selection.text
             }
+            var current = dlVae.find(cfg.current.sd_vae) ? dlVae.find(cfg.current.sd_vae) : dlVae.find(SD['sd_vae']);
+            dlVae.selection = current ? current.index : 0
         }
         function prompt(p) {
             var grPrompt = p.add("group{orientation:'column',alignChildren:['fill', 'top'],spacing:0,margins:0}"),
                 stPrompt = grPrompt.add('statictext'),
                 etPrompt = grPrompt.add('edittext{preferredSize:[285,80],properties:{multiline: true, scrollable: true}}'),
                 bnTranslate = grPrompt.add('button');
-            stPrompt.text = str.prompt
-            etPrompt.text = cfg.current.prompt
             bnTranslate.text = str.translate + 'ru -> en';
-            bnTranslate.enabled = cfg.current.prompt.length
-            etPrompt.onChange = function () {
-                cfg.current.prompt = this.text
-            }
+            etPrompt.onChange = function () { cfg.current.prompt = this.text }
             bnTranslate.onClick = function () {
                 if (etPrompt.text != '') {
                     var result = SD.translate(etPrompt.text)
@@ -365,27 +348,23 @@ function dialogWindow(b, s) {
                         etPrompt.onChange()
                     } else {
                         alert(str.errTranslate)
-                        this.enabled = false;
-                        etPrompt.locked = true
                     }
                 }
             }
             etPrompt.onChanging = function () {
                 if (!this.locked) bnTranslate.enabled = this.text.length
             }
+            stPrompt.text = str.prompt
+            etPrompt.text = cfg.current.prompt
+            bnTranslate.enabled = cfg.current.prompt.length
         }
         function negativePrompt(p) {
             var grNegative = p.add("group{orientation:'column',alignChildren:['fill', 'top'],spacing:0,margins:0}"),
                 stNegative = grNegative.add('statictext'),
                 etNegative = grNegative.add('edittext {preferredSize:[285,80],properties: {multiline: true, scrollable: true}}}'),
                 bnTranslate = grNegative.add('button');
-            stNegative.text = str.negativePrompt
-            etNegative.text = cfg.current.negative_prompt;
             bnTranslate.text = str.translate + 'ru -> en';
-            bnTranslate.enabled = cfg.current.negative_prompt.length
-            etNegative.onChange = function () {
-                cfg.current.negative_prompt = this.text
-            }
+            etNegative.onChange = function () { cfg.current.negative_prompt = this.text }
             bnTranslate.onClick = function () {
                 if (etNegative.text != '') {
                     var result = SD.translate(etNegative.text)
@@ -394,14 +373,15 @@ function dialogWindow(b, s) {
                         etNegative.onChange()
                     } else {
                         alert(str.errTranslate)
-                        this.enabled = false;
-                        etNegative.locked = true
                     }
                 }
             }
             etNegative.onChanging = function () {
                 if (!this.locked) bnTranslate.enabled = this.text.length
             }
+            stNegative.text = str.negativePrompt
+            etNegative.text = cfg.current.negative_prompt;
+            bnTranslate.enabled = cfg.current.negative_prompt.length
         }
         function sampler(p) {
             var grSampler = p.add("group{orientation:'column',alignChildren:['fill', 'center'],spacing:0,margins:0}"),
@@ -409,11 +389,9 @@ function dialogWindow(b, s) {
                 dlSampler = grSampler.add('dropdownlist{preferredSize:[285,-1]}');
             stSampler.text = str.sampling
             if (SD['samplers'].length) for (var i = 0; i < SD['samplers'].length; i++) dlSampler.add('item', SD['samplers'][i])
+            dlSampler.onChange = function () { cfg.current.sampler_name = this.selection.text }
             var current = dlSampler.find(cfg.current.sampler_name);
             dlSampler.selection = current ? current.index : 0
-            dlSampler.onChange = function () {
-                cfg.current.sampler_name = this.selection.text
-            }
         }
         function shelduler(p) {
             var grSheldue = p.add("group{orientation:'column',alignChildren:['fill', 'center'],spacing:0,margins:0}"),
@@ -421,11 +399,9 @@ function dialogWindow(b, s) {
                 dlSheldue = grSheldue.add('dropdownlist{preferredSize:[285,-1]}');
             stSheldue.text = str.schedule;
             if (SD['schedulers'].length) for (var i = 0; i < SD['schedulers'].length; i++) dlSheldue.add('item', SD['schedulers'][i])
+            dlSheldue.onChange = function () { cfg.current.scheduler = this.selection.text }
             var current = dlSheldue.find(cfg.current.scheduler);
             dlSheldue.selection = current ? current.index : 0
-            dlSheldue.onChange = function () {
-                cfg.current.scheduler = this.selection.text
-            }
         }
         function steps(p) {
             var grSteps = p.add("group{orientation:'column',alignChildren:['fill', 'top'],spacing:0,margins:0}"),
@@ -434,10 +410,10 @@ function dialogWindow(b, s) {
                 stStepsValue = grStepsTitle.add('statictext{preferredSize:[65,-1],justify:"right"}'),
                 slSteps = grSteps.add('slider{minvalue:1,maxvalue:100}');
             stSteps.text = str.steps
-            slSteps.value = stStepsValue.text = cfg.current.steps
             slSteps.onChange = function () { stStepsValue.text = cfg.current.steps = mathTrunc(this.value) }
             slSteps.onChanging = function () { slSteps.onChange() }
             slSteps.addEventListener('keydown', commonHandler)
+            slSteps.value = stStepsValue.text = cfg.current.steps
         }
         function cfgScale(p) {
             var grCfg = p.add("group{orientation:'column',alignChildren:['fill', 'top'],spacing:0,margins:0}"),
@@ -446,13 +422,11 @@ function dialogWindow(b, s) {
                 stCfgValue = grCfgTitle.add('statictext{preferredSize:[65,-1],justify:"right"}'),
                 slCfg = grCfg.add('slider{minvalue:2,maxvalue:30}');
             stCfg.text = str.cfgScale
-            slCfg.value = cfg.current.cfg_scale * 2
-            stCfgValue.text = cfg.current.cfg_scale
-            slCfg.onChange = function () {
-                stCfgValue.text = cfg.current.cfg_scale = mathTrunc(this.value) / 2
-            }
+            slCfg.onChange = function () { stCfgValue.text = cfg.current.cfg_scale = mathTrunc(this.value) / 2 }
             slCfg.onChanging = function () { slCfg.onChange() }
             slCfg.addEventListener('keydown', commonHandler)
+            slCfg.value = cfg.current.cfg_scale * 2
+            stCfgValue.text = cfg.current.cfg_scale
         }
         function resizeScale(p) {
             var grResize = p.add("group{orientation:'column',alignChildren:['fill', 'top'],spacing:0,margins:0}"),
@@ -468,7 +442,11 @@ function dialogWindow(b, s) {
             }
             slResize.onChanging = function () { slResize.onChange() }
             slResize.addEventListener('keydown', commonHandler)
-            if (cfg.current.autoResize) {
+            function setTitle() {
+                var s = str.resize
+                return cfg.current.resize != 1 ? s + ' ' + (mathTrunc((b.width * cfg.current.resize) / 8) * 8) + 'x' + (mathTrunc((b.height * cfg.current.resize) / 8) * 8) : s
+            }
+            if (cfg.autoResize) {
                 cfg.current.resize = autoScale(b)
                 slResize.value = cfg.current.resize * 10
                 stResizeValue.text = cfg.current.resize
@@ -478,10 +456,6 @@ function dialogWindow(b, s) {
                 stResizeValue.text = cfg.current.resize = mathTrunc(slResize.value) / 10
                 stResize.text = setTitle()
             }
-            function setTitle() {
-                var s = str.resize
-                return cfg.current.resize != 1 ? s + ' ' + (mathTrunc((b.width * cfg.current.resize) / 8) * 8) + 'x' + (mathTrunc((b.height * cfg.current.resize) / 8) * 8) : s
-            }
         }
         function denoisingStrength(p) {
             var grStrength = p.add("group{orientation:'column',alignChildren:['fill', 'top'],spacing:0,margins:0}"),
@@ -490,22 +464,21 @@ function dialogWindow(b, s) {
                 stStrengthValue = grStrengthTitle.add('statictext{preferredSize:[65,-1],justify:"right"}'),
                 slStrength = grStrength.add('slider{minvalue:0,maxvalue:100}');
             stStrength.text = str.strength
-            slStrength.value = cfg.current.denoising_strength * 100
-            stStrengthValue.text = cfg.current.denoising_strength
             slStrength.active = true
             slStrength.onChange = function () {
                 stStrengthValue.text = cfg.current.denoising_strength = mathTrunc(this.value) / 100
             }
             slStrength.onChanging = function () { slStrength.onChange() }
             slStrength.addEventListener('keydown', commonHandler)
+            slStrength.value = cfg.current.denoising_strength * 100
+            stStrengthValue.text = cfg.current.denoising_strength
         }
     }
     function settingsWindow(p, cfg) {
         var w = new Window("dialog{orientation:'column',alignChildren:['fill', 'top'],spacing:10,margins:16}"),
             pnShow = w.add("panel{orientation:'column',alignChildren:['left', 'top'],spacing:0,margins:10}"),
-            chInpaitnigFill = pnShow.add('checkbox'),
-            chCheckpoint = pnShow.add('checkbox'),
             chVae = pnShow.add('checkbox'),
+            chInpaitnigFill = pnShow.add('checkbox'),
             chPrompt = pnShow.add('checkbox'),
             chNegative = pnShow.add('checkbox'),
             chSampling = pnShow.add('checkbox'),
@@ -538,7 +511,6 @@ function dialogWindow(b, s) {
             ok = grBn.add('button', undefined, undefined, { name: 'ok' });
         chAutoResize.text = str.autoResizeCaption
         chCfg.text = str.cfgScale;
-        chCheckpoint.text = str.checkpoint
         chFlatten.text = str.flatten
         chInpaitnigFill.text = str.fill;
         chNegative.text = str.negativePrompt
@@ -562,7 +534,6 @@ function dialogWindow(b, s) {
         w.text = str.settings
         chAutoResize.value = grResizeSl.enabled = cfg.autoResize
         chCfg.value = cfg.showCfg_scale
-        chCheckpoint.value = cfg.showSd_model_checkpoint
         chFlatten.value = cfg.flatten
         chInpaitnigFill.value = cfg.showInpaintingFill
         chNegative.value = cfg.showNegative_prompt
@@ -581,7 +552,6 @@ function dialogWindow(b, s) {
         chFlatten.onClick = function () { cfg.flatten = this.value }
         chRasterize.onClick = function () { cfg.rasterizeImage = this.value }
         chInpaitnigFill.onClick = function () { cfg.showInpaintingFill = this.value }
-        chCheckpoint.onClick = function () { cfg.showSd_model_checkpoint = this.value }
         chVae.onClick = function () { cfg.showSd_vae = this.value }
         chPrompt.onClick = function () { cfg.showPrompt = this.value }
         chNegative.onClick = function () { cfg.showNegative_prompt = this.value }
@@ -630,9 +600,9 @@ function autoScale(b) {
     var less = b.width < b.height ? b.width : b.height,
         above = b.width > b.height ? b.width : b.height,
         result = 0;
-    if (less < cfg.current.autoResizeLess) result = Math.ceil(cfg.current.autoResizeLess / less * 1000) / 1000
-    if (above > cfg.current.autoResizeAbove) result = Math.floor(cfg.current.autoResizeAbove / above * 1000) / 1000
-    if (less >= cfg.current.autoResizeLess && above <= cfg.current.autoResizeAbove) result = 1
+    if (less < cfg.autoResizeLess) result = Math.ceil(cfg.autoResizeLess / less * 1000) / 1000
+    if (above > cfg.autoResizeAbove) result = Math.floor(cfg.autoResizeAbove / above * 1000) / 1000
+    if (less >= cfg.autoResizeLess && above <= cfg.autoResizeAbove) result = 1
     return (result > 4 ? 4 : result)
 }
 function cloneObject(o1, o2) {
@@ -687,7 +657,7 @@ function findSDChannel(title) {
 function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
     this.forgeUI = false;
     var SdCfg = this;
-    this.initialize = function () {
+    this.initialize = function (fastMode) {
         if (!apiFile.exists)
             throw new Error(str.module + apiFile.fsName + str.notFound)
         if (!checkConnecton(sdHost + ':' + sdPort))
@@ -695,44 +665,45 @@ function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
         apiFile.execute();
         var result = sendMessage({ type: 'handshake', message: { sdHost: sdHost, sdPort: sdPort } }, true);
         if (!result) throw new Error(str.errConnection + apiHost + ':' + portSend + '\n' + str.module + str.errAnswer)
-        var result = sendMessage({ type: 'get', message: 'sdapi/v1/options' }, true);
-        if (result) {
-            SdCfg['outdir_img2img_samples'] = result['outdir_img2img_samples']
-            SdCfg['sd_model_checkpoint'] = result['sd_model_checkpoint']
-            SdCfg['sd_vae'] = result['sd_vae']
-            if (result['forge_additional_modules']) SdCfg.forgeUI = true;
-        } else { throw new Error(str.errSettings + 'sdapi/v1/options' + str.errTimeout) }
-        var result = sendMessage({ type: 'get', message: 'sdapi/v1/sd-models' }, true);
-        if (result) {
-            SdCfg['sd-models'] = []
-            if (!result.length) throw new Error(str.errList + 'sdapi/v1/sd-models' + str.errExists)
-            for (var i = 0; i < result.length; i++) SdCfg['sd-models'].push(result[i].title)
-        } else { throw new Error(str.errSettings + 'sdapi/v1/sd-models' + str.errTimeout) }
-        var vaes = ['sdapi/v1/sd-vae', 'sdapi/v1/sd-modules']
-        cfg.vae = (SdCfg.forgeUI ? vaes[1] : vaes[0])
-        var result = sendMessage({ type: 'get', message: cfg.vae }, true);
-        if (result) {
-            SdCfg['sd-vaes'] = []
-            SdCfg['sd-vaes'].push('Automatic')
-            SdCfg['sd-vaes'].push('None')
-            if (SdCfg.forgeUI) {
-                SdCfg['forge_additional_modules'] = [];
-                for (var i = 0; i < result.length; i++) SdCfg['forge_additional_modules'].push(result[i].filename.replace(/\\/g, '\\\\'))
-            }
-            for (var i = 0; i < result.length; i++) SdCfg['sd-vaes'].push(result[i].model_name)
-        } else { throw new Error(str.errSettings + + cfg.vae + str.errTimeout) }
-        var result = sendMessage({ type: 'get', message: 'sdapi/v1/schedulers' }, true);
-        if (result) {
-            SdCfg['schedulers'] = []
-            if (!result.length) throw new Error(str.errList + 'sdapi/v1/schedulers' + str.errExists)
-            for (var i = 0; i < result.length; i++) SdCfg['schedulers'].push(result[i].label)
-        } else { throw new Error(str.errSettings + 'sdapi/v1/schedulers' + str.errTimeout) }
-        var result = sendMessage({ type: 'get', message: 'sdapi/v1/samplers' }, true);
-        if (result) {
-            SdCfg['samplers'] = []
-            if (!result.length) throw new Error(str.errList + 'sdapi/v1/samplers' + str.errExists)
-            for (var i = 0; i < result.length; i++) SdCfg['samplers'].push(result[i].name)
-        } else { throw new Error(str.errSettings + 'sdapi/v1/samplers' + str.errTimeout) }
+        if (!fastMode) {
+            var result = sendMessage({ type: 'get', message: 'sdapi/v1/options' }, true);
+            if (result) {
+                SdCfg['sd_model_checkpoint'] = result['sd_model_checkpoint']
+                SdCfg['sd_vae'] = result['sd_vae']
+                if (result['forge_additional_modules']) SdCfg.forgeUI = true;
+            } else { throw new Error(str.errSettings + 'sdapi/v1/options' + str.errTimeout) }
+            var result = sendMessage({ type: 'get', message: 'sdapi/v1/sd-models' }, true);
+            if (result) {
+                SdCfg['sd-models'] = []
+                if (!result.length) throw new Error(str.errList + 'sdapi/v1/sd-models' + str.errExists)
+                for (var i = 0; i < result.length; i++) SdCfg['sd-models'].push(result[i].title)
+            } else { throw new Error(str.errSettings + 'sdapi/v1/sd-models' + str.errTimeout) }
+            var vaes = ['sdapi/v1/sd-vae', 'sdapi/v1/sd-modules']
+            cfg.vae = (SdCfg.forgeUI ? vaes[1] : vaes[0])
+            var result = sendMessage({ type: 'get', message: cfg.vae }, true);
+            if (result) {
+                SdCfg['sd-vaes'] = []
+                SdCfg['sd-vaes'].push('Automatic')
+                SdCfg['sd-vaes'].push('None')
+                if (SdCfg.forgeUI) {
+                    SdCfg['forge_additional_modules'] = [];
+                    for (var i = 0; i < result.length; i++) SdCfg['forge_additional_modules'].push(result[i].filename.replace(/\\/g, '\\\\'))
+                }
+                for (var i = 0; i < result.length; i++) SdCfg['sd-vaes'].push(result[i].model_name)
+            } else { throw new Error(str.errSettings + + cfg.vae + str.errTimeout) }
+            var result = sendMessage({ type: 'get', message: 'sdapi/v1/schedulers' }, true);
+            if (result) {
+                SdCfg['schedulers'] = []
+                if (!result.length) throw new Error(str.errList + 'sdapi/v1/schedulers' + str.errExists)
+                for (var i = 0; i < result.length; i++) SdCfg['schedulers'].push(result[i].label)
+            } else { throw new Error(str.errSettings + 'sdapi/v1/schedulers' + str.errTimeout) }
+            var result = sendMessage({ type: 'get', message: 'sdapi/v1/samplers' }, true);
+            if (result) {
+                SdCfg['samplers'] = []
+                if (!result.length) throw new Error(str.errList + 'sdapi/v1/samplers' + str.errExists)
+                for (var i = 0; i < result.length; i++) SdCfg['samplers'].push(result[i].name)
+            } else { throw new Error(str.errSettings + 'sdapi/v1/samplers' + str.errTimeout) }
+        }
         return true
     }
     this.exit = function () {
@@ -1008,13 +979,7 @@ function AM(target, order) {
     }
 }
 function Config() {
-    this.inpaintMode = false
-    this.current = new scriptSettings();
-    this.img2img = new scriptSettings();
-    this.inpaint = new scriptSettings();
-    this.vae = 'sdapi/v1/sd-vae'
-    function scriptSettings() {
-        this.sd_model_checkpoint = ''
+    this.checkpointSettings = function () {
         this.sd_vae = 'Automatic'
         this.scheduler = 'Automatic'
         this.sampler_name = 'DPM++ 2M'
@@ -1024,36 +989,38 @@ function Config() {
         this.prompt = ''
         this.negative_prompt = '(deformed, distorted, disfigured:1.3), poorly drawn, bad anatomy, wrong anatomy, extra limb, missing limb, floating limbs, (mutated hands and fingers:1.4), disconnected limbs, mutation, mutated, ugly, disgusting, blurry, amputation'
         this.resize = 1
-        this.flatten = false
-        this.rasterizeImage = true
-        this.inpaintingFill = 1
-        this.showInpaintingFill = true
-        this.showSd_model_checkpoint = true
-        this.showSd_vae = true
-        this.showPrompt = true
-        this.showNegative_prompt = true
-        this.showSampler_name = true
-        this.showScheduler = true
-        this.showSteps = true
-        this.showCfg_scale = true
-        this.showResize = true
-        this.selectBrush = true
-        this.brushOpacity = 50
-        this.recordToAction = true
-        this.autoResize = false
-        this.autoResizeLess = 512
-        this.autoResizeAbove = 1408
+        this.inpaintingFill = -1
     }
     settingsObj = this;
+    this.current = new settingsObj.checkpointSettings();
+    this.sd_model_checkpoint = ''
+    this.presets = {}
+    this.vae = 'sdapi/v1/sd-vae'
+    this.flatten = false
+    this.rasterizeImage = true
+    this.showInpaintingFill = true
+    this.showSd_vae = true
+    this.showPrompt = true
+    this.showNegative_prompt = true
+    this.showSampler_name = true
+    this.showScheduler = true
+    this.showSteps = true
+    this.showCfg_scale = true
+    this.showResize = true
+    this.selectBrush = true
+    this.brushOpacity = 50
+    this.recordToAction = true
+    this.autoResize = false
+    this.autoResizeLess = 512
+    this.autoResizeAbove = 1408
+    this.outdir = 'outputs/img2img-images'
     this.getScriptSettings = function (fromAction) {
         if (fromAction) var d = playbackParameters; else try { var d = getCustomOptions(UUID) } catch (e) { };
         if (d != undefined)
-            if (d.hasKey(s2t('dialogMode'))) eraseCustomOptions(UUID)
+            if (d.hasKey(s2t('dialogMode')) || d.hasKey(s2t('inpaintMode'))) eraseCustomOptions(UUID)
             else descriptorToObject(settingsObj, d)
-        if (settingsObj.inpaintMode) {
-            settingsObj.current = settingsObj.inpaint
-        } else {
-            settingsObj.current = settingsObj.img2img
+        if (settingsObj.presets[settingsObj.sd_model_checkpoint]) {
+            settingsObj.current = settingsObj.presets[settingsObj.sd_model_checkpoint]
         }
         function descriptorToObject(o, d) {
             var l = d.count;
@@ -1065,20 +1032,13 @@ function Config() {
                     case DescValueType.BOOLEANTYPE: o[s] = d.getBoolean(k); break;
                     case DescValueType.STRINGTYPE: o[s] = d.getString(k); break;
                     case DescValueType.DOUBLETYPE: o[s] = d.getDouble(k); break;
-                    case DescValueType.OBJECTTYPE: descriptorToObject(o[s], d.getObjectValue(k)); break;
+                    case DescValueType.OBJECTTYPE: o[s] = {}; descriptorToObject(o[s], d.getObjectValue(k)); break;
                 }
             }
         }
     }
-    this.putScriptSettings = function (toAction, swapSettings) {
-        if (!swapSettings) {
-            if (settingsObj.inpaintMode) {
-                settingsObj.inpaint = settingsObj.current
-            } else {
-                settingsObj.img2img = settingsObj.current
-            }
-            delete settingsObj.current;
-        }
+    this.putScriptSettings = function (toAction) {
+        settingsObj.presets[settingsObj.sd_model_checkpoint] = settingsObj.current
         var d = objectToDescriptor(settingsObj, UUID)
         if (toAction) playbackParameters = d else putCustomOptions(UUID, d, true);
         function objectToDescriptor(o) {
@@ -1113,7 +1073,7 @@ function Locale() {
     this.errAnswer = { ru: 'не отвечает!', en: 'not answering!' }
     this.errConnection = { ru: 'Невозможно установить соединение c ', en: 'Impossible to establish a connection with ' }
     this.errExists = { ru: ' пуст!\nУбедитесь что они добавлены в папку Stable Diffusion', en: ' is empty!\nMake sure that it exists in the Stable Diffusion folder' }
-    this.errGenerating = { ru: 'Превышено время ожидания ответа Stable Diffusion!', en: 'Exceeded time waiting for the response of Stable Diffusion!' }
+    this.errGenerating = { ru: 'Произошла ошибка в процессе генерации изображения!', en: 'An error occurred in the process of generating the image!' }
     this.errList = { ru: 'Список ', en: 'List ' }
     this.errSettings = { ru: 'Невозможно получить параметры ', en: 'Impossible to get the settings ' }
     this.errTimeout = { ru: '\nПревышено время ожидания ответа!', en: '\nExceeding the response time!' }

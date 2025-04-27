@@ -34,13 +34,14 @@ var time = (new Date).getTime(),
     doc = new AM('document'),
     lr = new AM('layer'),
     ch = new AM('channel'),
-    ver = 0.11;
+    ver = 0.12;
 isCancelled = false;
 $.localize = true
 if (ScriptUI.environment.keyboardState.shiftKey) $.setenv('showDialog', true)
 try { init() } catch (e) {
     SD.exit()
     alert(e)
+    $.setenv('showDialog', true)
     isCancelled = true;
 }
 isCancelled ? 'cancel' : undefined
@@ -148,7 +149,7 @@ function main(selection) {
     doc.saveACopy(f);
     activeDocument.activeHistoryState = hst;
     doc.setProperty('center', c);
-    var p = (new Folder(Folder.temp + '/' + SD['outdir_extras_samples']))
+    var p = (new Folder(Folder.temp + '/' + cfg.outdir))
     if (!p.exists) p.create()
     changeProgressText(str.progressDocument[$.locale == 'ru' ? 'ru' : 'en'])
     updateProgress(0.2, 1)
@@ -355,7 +356,7 @@ function findSDChannel(title) {
 }
 function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
     var SdCfg = this;
-    this.initialize = function () {
+    this.initialize = function (fastMode) {
         if (!apiFile.exists)
             throw new Error(str.module + apiFile.fsName + str.notFound)
         if (!checkConnecton(sdHost + ':' + sdPort))
@@ -363,11 +364,6 @@ function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
         apiFile.execute();
         var result = sendMessage({ type: 'handshake', message: { sdHost: sdHost, sdPort: sdPort, portSend: portSend, portListen: portListen } }, true);
         if (!result) throw new Error(str.errConnection + apiHost + ':' + portSend + '\n' + str.module + str.errAnswer)
-        var result = sendMessage({ type: 'get', message: 'sdapi/v1/options' }, true);
-        var result = sendMessage({ type: 'get', message: 'sdapi/v1/options' }, true);
-        if (result) {
-            SdCfg['outdir_extras_samples'] = result['outdir_extras_samples']
-        } else { throw new Error(str.errSettings + 'sdapi/v1/options' + str.errTimeout) }
         return true
     }
     this.exit = function () {
@@ -641,6 +637,7 @@ function Config() {
     this.selectBrush = true
     this.brushOpacity = 60
     this.vae = 'sdapi/v1/sd-vae'
+    this.outdir = 'outputs/extras-images'
     settingsObj = this;
     this.getScriptSettings = function (fromAction) {
         if (fromAction) var d = playbackParameters; else try { var d = getCustomOptions(UUID) } catch (e) { };
