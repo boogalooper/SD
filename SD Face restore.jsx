@@ -34,14 +34,14 @@ var time = (new Date).getTime(),
     doc = new AM('document'),
     lr = new AM('layer'),
     ch = new AM('channel'),
-    ver = 0.12;
+    ver = 0.121;
 isCancelled = false;
 $.localize = true
-if (ScriptUI.environment.keyboardState.shiftKey) $.setenv('showDialog', true)
+if (ScriptUI.environment.keyboardState.shiftKey) $.setenv('showRestoreDialog', true)
 try { init() } catch (e) {
     SD.exit()
     alert(e)
-    $.setenv('showDialog', true)
+    $.setenv('showRestoreDialog', true)
     isCancelled = true;
 }
 isCancelled ? 'cancel' : undefined
@@ -60,8 +60,8 @@ function init() {
         b.height = b.bottom - b.top
         if (!app.playbackParameters.count || app.playbackParameters.count == 1) {
             cfg.getScriptSettings();
-            if (app.playbackParameters.count == 1) $.setenv('showDialog', true)
-            if (($.getenv('showDialog') == 'true' || $.getenv('showDialog') == null)) {
+            if (app.playbackParameters.count == 1) $.setenv('showRestoreDialog', true)
+            if (($.getenv('showRestoreDialog') == 'true' || $.getenv('showRestoreDialog') == null)) {
                 if (SD.initialize()) {
                     var w = dialogWindow(currentSelection.bounds, (((new Date).getTime() - time) / 1000)); var result = w.show()
                     if (result == 2) {
@@ -69,7 +69,7 @@ function init() {
                         isCancelled = true;
                         return;
                     } else if (result != undefined) {
-                        $.setenv('showDialog', false)
+                        $.setenv('showRestoreDialog', false)
                         doForcedProgress(str.progressGenerate[$.locale == 'ru' ? 'ru' : 'en'], 'main(currentSelection)')
                         cfg.putScriptSettings()
                         cfg.putScriptSettings(true)
@@ -78,7 +78,7 @@ function init() {
                 }
             } else {
                 if (SD.initialize()) {
-                    $.setenv('showDialog', false)
+                    $.setenv('showRestoreDialog', false)
                     doForcedProgress(str.progressGenerate[$.locale == 'ru' ? 'ru' : 'en'], 'main(currentSelection)')
                     cfg.putScriptSettings(true)
                     SD.exit()

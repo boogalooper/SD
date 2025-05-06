@@ -35,7 +35,7 @@ var time = (new Date).getTime(),
     doc = new AM('document'),
     lr = new AM('layer'),
     ch = new AM('channel'),
-    ver = 0.271,
+    ver = 0.272,
     isDitry = false;
 isCancelled = false;
 $.localize = true
@@ -81,10 +81,10 @@ function init() {
                     }
                 }
             } else {
-                if (SD.initialize(true)) {
+                if (SD.initialize()) {
                     $.setenv('dialogMode', false)
                     cfg.putScriptSettings(true)
-                    doForcedProgress(str.progressGenerate[$.locale == 'ru' ? 'ru' : 'en'], 'main(currentSelection, true)')
+                    doForcedProgress(str.progressGenerate[$.locale == 'ru' ? 'ru' : 'en'], 'main(currentSelection)')
                     SD.exit()
                 } else {
                     SD.exit()
@@ -113,19 +113,18 @@ function init() {
                     }
                 }
             } else {
-                if (SD.initialize(true)) { doForcedProgress(str.progressGenerate[$.locale == 'ru' ? 'ru' : 'en'], 'main(currentSelection,true)') }
+                if (SD.initialize()) { doForcedProgress(str.progressGenerate[$.locale == 'ru' ? 'ru' : 'en'], 'main(currentSelection)') }
                 SD.exit()
             }
         }
     }
 }
-function main(selection, fastMode) {
-    if (!fastMode) {
-        var checkpoint = (cfg.sd_model_checkpoint == SD['sd_model_checkpoint'] ? null : findOption(cfg.sd_model_checkpoint, SD['sd-models'], SD['sd_model_checkpoint'])),
-            vae = (cfg.current.sd_vae == SD['sd_vae'] ? null : findOption(cfg.current.sd_vae, SD['sd-vaes'], SD['sd_vae']));
-        if (vae != cfg.current.sd_vae && vae != null) cfg.current.sd_vae = vae
-        if (checkpoint != cfg.sd_model_checkpoint && checkpoint != null) cfg.sd_model_checkpoint = checkpoint
-    }
+function main(selection) {
+    var checkpoint = (cfg.sd_model_checkpoint == SD['sd_model_checkpoint'] ? null : findOption(cfg.sd_model_checkpoint, SD['sd-models'], SD['sd_model_checkpoint'])),
+        vae = (cfg.current.sd_vae == SD['sd_vae'] ? null : findOption(cfg.current.sd_vae, SD['sd-vaes'], SD['sd_vae']));
+    if (vae != cfg.current.sd_vae && vae != null) cfg.current.sd_vae = vae
+    if (checkpoint != cfg.sd_model_checkpoint && checkpoint != null) cfg.sd_model_checkpoint = checkpoint
+
     if (selection.previousGeneration) doc.hideSelectedLayers()
     if (doc.getProperty('quickMask')) {
         doc.quickMask('clearEvent');
@@ -174,22 +173,22 @@ function main(selection, fastMode) {
     doc.setProperty('center', c);
     var p = (new Folder(Folder.temp + '/' + cfg.outdir))
     if (!p.exists) p.create()
-    if (!fastMode) {
-        if (checkpoint || vae) {
-            var vae_path = [];
-            if (SD.forgeUI) {
-                for (var i = 0; i < SD['forge_additional_modules'].length; i++) {
-                    if (SD['forge_additional_modules'][i].indexOf(cfg.current.sd_vae) != -1) {
-                        vae_path.push(SD['forge_additional_modules'][i])
-                        break;
-                    }
+
+    if (checkpoint || vae) {
+        var vae_path = [];
+        if (SD.forgeUI) {
+            for (var i = 0; i < SD['forge_additional_modules'].length; i++) {
+                if (SD['forge_additional_modules'][i].indexOf(cfg.current.sd_vae) != -1) {
+                    vae_path.push(SD['forge_additional_modules'][i])
+                    break;
                 }
             }
-            changeProgressText(str.progressUpdating[$.locale == 'ru' ? 'ru' : 'en'])
-            updateProgress(0.1, 1)
-            if (!SD.setOptions(checkpoint, vae, vae_path)) throw new Error(str.errUpdating)
         }
+        changeProgressText(str.progressUpdating[$.locale == 'ru' ? 'ru' : 'en'])
+        updateProgress(0.1, 1)
+        if (!SD.setOptions(checkpoint, vae, vae_path)) throw new Error(str.errUpdating)
     }
+
     changeProgressText(str.progressDocument[$.locale == 'ru' ? 'ru' : 'en'])
     updateProgress(0.2, 1)
     if (cfg.autoResize && !isDitry) cfg.current.resize = autoScale(selection.bounds)
@@ -657,7 +656,7 @@ function findSDChannel(title) {
 function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
     this.forgeUI = false;
     var SdCfg = this;
-    this.initialize = function (fastMode) {
+    this.initialize = function () {
         if (!apiFile.exists)
             throw new Error(str.module + apiFile.fsName + str.notFound)
         if (!checkConnecton(sdHost + ':' + sdPort))
@@ -665,7 +664,6 @@ function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
         apiFile.execute();
         var result = sendMessage({ type: 'handshake', message: { sdHost: sdHost, sdPort: sdPort } }, true);
         if (!result) throw new Error(str.errConnection + apiHost + ':' + portSend + '\n' + str.module + str.errAnswer)
-        if (!fastMode) {
             var result = sendMessage({ type: 'get', message: 'sdapi/v1/options' }, true);
             if (result) {
                 SdCfg['sd_model_checkpoint'] = result['sd_model_checkpoint']
@@ -703,7 +701,6 @@ function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
                 if (!result.length) throw new Error(str.errList + 'sdapi/v1/samplers' + str.errExists)
                 for (var i = 0; i < result.length; i++) SdCfg['samplers'].push(result[i].name)
             } else { throw new Error(str.errSettings + 'sdapi/v1/samplers' + str.errTimeout) }
-        }
         return true
     }
     this.exit = function () {
