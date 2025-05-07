@@ -34,7 +34,7 @@ var time = (new Date).getTime(),
     doc = new AM('document'),
     lr = new AM('layer'),
     ch = new AM('channel'),
-    ver = 0.121;
+    ver = 0.122;
 isCancelled = false;
 $.localize = true
 if (ScriptUI.environment.keyboardState.shiftKey) $.setenv('showRestoreDialog', true)
@@ -151,8 +151,6 @@ function main(selection) {
     doc.setProperty('center', c);
     var p = (new Folder(Folder.temp + '/' + cfg.outdir))
     if (!p.exists) p.create()
-    changeProgressText(str.progressDocument[$.locale == 'ru' ? 'ru' : 'en'])
-    updateProgress(0.2, 1)
     var payload = {
         'input': f.fsName.replace(/\\/g, '\\\\'),
         'output': p.fsName.replace(/\\/g, '\\\\'),
@@ -162,16 +160,11 @@ function main(selection) {
         'codeformer_visibility': cfg.codeFormerVisiblity,
         'codeformer_weight': cfg.codeFormerWeight
     };
-    updateProgress(0.3, 1)
-    changeProgressText(str.progressGenerate[$.locale == 'ru' ? 'ru' : 'en'])
-    app.refresh()
     var result = SD.sendPayload(payload);
     if (result) {
         activeDocument.suspendHistory('Generate image', 'generatedImageToLayer()')
     } else throw new Error(str.errGenerating)
     function generatedImageToLayer() {
-        updateProgress(1, 1)
-        changeProgressText(str.progressPlace[$.locale == 'ru' ? 'ru' : 'en'])
         doc.place(new File(result))
         var placedBounds = doc.descToObject(lr.getProperty('bounds').value);
         var dW = (selection.bounds.right - selection.bounds.left) / (placedBounds.right - placedBounds.left);

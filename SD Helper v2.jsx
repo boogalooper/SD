@@ -35,7 +35,7 @@ var time = (new Date).getTime(),
     doc = new AM('document'),
     lr = new AM('layer'),
     ch = new AM('channel'),
-    ver = 0.272,
+    ver = 0.273,
     isDitry = false;
 isCancelled = false;
 $.localize = true
@@ -188,9 +188,6 @@ function main(selection) {
         updateProgress(0.1, 1)
         if (!SD.setOptions(checkpoint, vae, vae_path)) throw new Error(str.errUpdating)
     }
-
-    changeProgressText(str.progressDocument[$.locale == 'ru' ? 'ru' : 'en'])
-    updateProgress(0.2, 1)
     if (cfg.autoResize && !isDitry) cfg.current.resize = autoScale(selection.bounds)
     var width = cfg.current.resize != 1 ? (mathTrunc((selection.bounds.width * cfg.current.resize) / 8) * 8) : selection.bounds.width,
         height = cfg.current.resize != 1 ? (mathTrunc((selection.bounds.height * cfg.current.resize) / 8) * 8) : selection.bounds.height
@@ -213,16 +210,12 @@ function main(selection) {
         payload['mask'] = f1.fsName.replace(/\\/g, '\\\\')
         payload['inpainting_fill'] = cfg.current.inpaintingFill + 1
     }
-    updateProgress(0.3, 1)
-    changeProgressText(str.progressGenerate[$.locale == 'ru' ? 'ru' : 'en'])
     app.refresh()
     var result = SD.sendPayload(payload);
     if (result) {
         activeDocument.suspendHistory('Generate image', 'generatedImageToLayer()')
     } else throw new Error(str.errGenerating)
     function generatedImageToLayer() {
-        updateProgress(1, 1)
-        changeProgressText(str.progressPlace[$.locale == 'ru' ? 'ru' : 'en'])
         doc.place(new File(result))
         var placedBounds = doc.descToObject(lr.getProperty('bounds').value);
         var dW = (selection.bounds.right - selection.bounds.left) / (placedBounds.right - placedBounds.left);
