@@ -174,10 +174,10 @@ function main(selection) {
         var p = (new Folder(Folder.temp + '/' + cfg.outdir))
         if (!p.exists) p.create()
     }
-    if (checkpoint || (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('.GGUF [') == -1 ? vae : encoders)) {
+    if (checkpoint || (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('.GGUF') == -1 ? vae : encoders)) {
         var vae_path = [];
         if (SD.forgeUI) {
-            if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('.GGUF [') == -1) {
+            if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('.GGUF') == -1) {
                 for (var i = 0; i < SD['sd_modules'].length; i++) {
                     if (SD['sd_modules'][i].indexOf(cfg.current.sd_vae) != -1) {
                         vae_path.push(SD['sd_modules'][i])
@@ -354,7 +354,7 @@ function dialogWindow(b, s) {
             var grVae = p.add("group{orientation:'column',alignChildren:['fill', 'center'],spacing:0,margins:0}"),
                 stVae = grVae.add('statictext');
             stVae.text = str.vae;
-            if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('.GGUF [') == -1) {
+            if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('.GGUF') == -1) {
                 var dlVae = grVae.add('dropdownlist{preferredSize:[285,-1]}')
                 if (SD['sd-vaes'].length) for (var i = 0; i < SD['sd-vaes'].length; i++) dlVae.add('item', SD['sd-vaes'][i])
                 dlVae.onChange = function () {
