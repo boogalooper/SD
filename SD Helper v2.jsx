@@ -14,7 +14,7 @@
 </javascriptresource>
 // END__HARVEST_EXCEPTION_ZSTRING
 */
-const ver = 0.31,
+const ver = 0.32,
     SD_HOST = '127.0.0.1',
     SD_PORT = 7860,
     API_HOST = '127.0.0.1',
@@ -22,10 +22,9 @@ const ver = 0.31,
     API_PORT_LISTEN = 6321,
     API_FILE = 'sd-webui-api v2.pyw',
     LAYER_NAME = 'SD generated image',
-    UUID = '338cc304-fb6f-4b1f-8ad4-13bbd65f117c',
     SD_GET_OPTIONS_DELAY = 3000, // максимальное время ожидания ответа Stable Diffusion при запросе текущих параметров
     SD_RELOAD_CHECKPOINT_DELAY = 12000, // максимальное время ожидания перезагрузки checkpoint или vae
-    SD_GENERATION_DELAY = 80000; // максимальное время ожидания генерации изображения
+    SD_GENERATION_DELAY = 90000; // максимальное время ожидания генерации изображения
 var time = (new Date).getTime(),
     SD = new SDApi(SD_HOST, API_HOST, SD_PORT, API_PORT_SEND, API_PORT_LISTEN, new File((new File($.fileName)).path + '/' + API_FILE)),
     s2t = stringIDToTypeID,
@@ -36,8 +35,8 @@ var time = (new Date).getTime(),
     doc = new AM('document'),
     lr = new AM('layer'),
     ch = new AM('channel'),
-    isDitry = false;
-isCancelled = false;
+    isDitry = false,
+    isCancelled = false;
 $.localize = true
 if (ScriptUI.environment.keyboardState.shiftKey) $.setenv('dialogMode', true)
 try { init() } catch (e) {
@@ -124,56 +123,54 @@ function main(selection) {
         vae = (cfg.current.sd_vae == SD['sd_vae'] ? null : findOption(cfg.current.sd_vae, SD['sd-vaes'], SD['sd_vae'])),
         encoders = checkEncoders(cfg.current.encoders, SD['forge_additional_modules'], SD['sd_modules']);
     if (checkpoint != cfg.sd_model_checkpoint && checkpoint != null) cfg.sd_model_checkpoint = checkpoint
-    {
-        if (selection.previousGeneration) doc.hideSelectedLayers()
-        if (doc.getProperty('quickMask')) {
-            doc.quickMask('clearEvent');
-            doc.makeLayer(LAYER_NAME)
+    if (selection.previousGeneration) doc.hideSelectedLayers()
+    if (doc.getProperty('quickMask')) {
+        doc.quickMask('clearEvent');
+        doc.makeLayer(LAYER_NAME)
+        doc.makeSelectionMask()
+    } else if (doc.hasProperty('selection')) {
+        doc.makeLayer(LAYER_NAME)
+        doc.makeSelectionMask()
+    } else if (lr.getProperty('name') == LAYER_NAME) {
+        if (lr.getProperty('hasUserMask')) {
+            lr.selectChannel('mask')
+            doc.makeSelectionFromLayer('targetEnum');
+        } else {
+            doc.makeSelectionFromLayer('transparencyEnum');
             doc.makeSelectionMask()
-        } else if (doc.hasProperty('selection')) {
-            doc.makeLayer(LAYER_NAME)
-            doc.makeSelectionMask()
-        } else if (lr.getProperty('name') == LAYER_NAME) {
-            if (lr.getProperty('hasUserMask')) {
-                lr.selectChannel('mask')
-                doc.makeSelectionFromLayer('targetEnum');
-            } else {
-                doc.makeSelectionFromLayer('transparencyEnum');
-                doc.makeSelectionMask()
-            }
         }
-        selection.junk = lr.getProperty('layerID')
-        doc.makeSelection(selection.bounds);
-        var hst = activeDocument.activeHistoryState,
-            c = doc.getProperty('center').value;
-        doc.crop(true);
-        if (cfg.flatten) { doc.flatten() } else {
-            var len = doc.getProperty('numberOfLayers'),
-                start = lr.getProperty('itemIndex'),
-                lrsList = new ActionReference();
-            offset = doc.getProperty('hasBackgroundLayer') ? 0 : 1;
-            for (var i = start + offset; i <= len; i++) lrsList.putIdentifier(s2t('layer'), lr.getProperty('layerID', false, i, true));
-            if (start + offset <= len) {
-                doc.selectLayersByIDList(lrsList);
-                doc.hideSelectedLayers();
-            }
-        }
-        var f = new File(Folder.temp + '/SDH.jpg');
-        var f1 = new File(Folder.temp + '/SDH_MASK.jpg');
-        doc.saveACopy(f);
-        if (cfg.current.inpaintingFill != -1) {
-            lr.selectChannel('mask');
-            lr.selectAllPixels();
-            doc.copyPixels()
-            lr.selectChannel('RGB')
-            doc.pastePixels()
-            doc.saveACopy(f1);
-        }
-        activeDocument.activeHistoryState = hst;
-        doc.setProperty('center', c);
-        var p = (new Folder(Folder.temp + '/' + cfg.outdir))
-        if (!p.exists) p.create()
     }
+    selection.junk = lr.getProperty('layerID')
+    doc.makeSelection(selection.bounds);
+    var hst = activeDocument.activeHistoryState,
+        c = doc.getProperty('center').value;
+    doc.crop(true);
+    if (cfg.flatten) { doc.flatten() } else {
+        var len = doc.getProperty('numberOfLayers'),
+            start = lr.getProperty('itemIndex'),
+            lrsList = new ActionReference();
+        offset = doc.getProperty('hasBackgroundLayer') ? 0 : 1;
+        for (var i = start + offset; i <= len; i++) lrsList.putIdentifier(s2t('layer'), lr.getProperty('layerID', false, i, true));
+        if (start + offset <= len) {
+            doc.selectLayersByIDList(lrsList);
+            doc.hideSelectedLayers();
+        }
+    }
+    var f = new File(Folder.temp + '/SDH.jpg');
+    var f1 = new File(Folder.temp + '/SDH_MASK.jpg');
+    doc.saveACopy(f);
+    if (cfg.current.inpaintingFill != -1) {
+        lr.selectChannel('mask');
+        lr.selectAllPixels();
+        doc.copyPixels()
+        lr.selectChannel('RGB')
+        doc.pastePixels()
+        doc.saveACopy(f1);
+    }
+    activeDocument.activeHistoryState = hst;
+    doc.setProperty('center', c);
+    var p = (new Folder(Folder.temp + '/outputs/img2img-images'))
+    if (!p.exists) p.create()
     if (checkpoint || (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('.GGUF') == -1 ? vae : encoders)) {
         var vae_path = [];
         if (SD.forgeUI) {
@@ -1142,7 +1139,6 @@ function Config() {
     this.autoResize = false
     this.autoResizeLess = 512
     this.autoResizeAbove = 1408
-    this.outdir = 'outputs/img2img-images'
     this.positivePreset = {}
     this.negativePreset = {
         "SD": '(deformed, distorted, disfigured:1.3), poorly drawn, bad anatomy, wrong anatomy, extra limb, missing limb, floating limbs, (mutated hands and fingers:1.4), disconnected limbs, mutation, mutated, ugly, disgusting, blurry, amputation',
