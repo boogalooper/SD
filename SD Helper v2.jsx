@@ -14,7 +14,7 @@
 </javascriptresource>
 // END__HARVEST_EXCEPTION_ZSTRING
 */
-const ver = 0.3,
+const ver = 0.31,
     SD_HOST = '127.0.0.1',
     SD_PORT = 7860,
     API_HOST = '127.0.0.1',
@@ -278,6 +278,10 @@ function dialogWindow(b, s) {
         stWH = grGlobal.add("statictext{preferredSize:[265,-1]}"),
         bnSettings = grGlobal.add("button{preferredSize:[25, 25]}"),
         grSettings = w.add("group{orientation:'column',alignChildren:['fill', 'left'],spacing:5,margins:0}");
+    if (SD['sd-models'].length) for (var i = 0; i < SD['sd-models'].length; i++) dlCheckpoint.add('item', SD['sd-models'][i])
+    var current = dlCheckpoint.find(cfg.sd_model_checkpoint) ? dlCheckpoint.find(cfg.sd_model_checkpoint) : dlCheckpoint.find(SD['sd_model_checkpoint']);
+    dlCheckpoint.selection = current ? current.index : 0
+    cfg.sd_model_checkpoint = dlCheckpoint.selection.text
     showControls(grSettings, true);
     var grOk = w.add("group{orientation:'row',alignChildren:['center','center'],spacing:10,margins:[0, 10, 0, 0]}"),
         Ok = grOk.add('button', undefined, undefined, { name: 'ok' });
@@ -287,10 +291,6 @@ function dialogWindow(b, s) {
     stCheckpoint.text = str.checkpoint;
     Ok.text = str.generate;
     bnSettings.helpTip = str.settings
-    if (SD['sd-models'].length) for (var i = 0; i < SD['sd-models'].length; i++) dlCheckpoint.add('item', SD['sd-models'][i])
-    var current = dlCheckpoint.find(cfg.sd_model_checkpoint) ? dlCheckpoint.find(cfg.sd_model_checkpoint) : dlCheckpoint.find(SD['sd_model_checkpoint']);
-    dlCheckpoint.selection = current ? current.index : 0
-    cfg.sd_model_checkpoint = dlCheckpoint.selection.text
     dlCheckpoint.onChange = function () {
         cfg.presets[cfg.sd_model_checkpoint] = cfg.current
         cfg.sd_model_checkpoint = this.selection.text
@@ -1294,7 +1294,6 @@ function Config() {
 function Locale() {
     this.actionMode = { ru: 'Не записывать параметры генерации в экшен', en: 'Do not record generation settings to action' }
     this.addVae = { ru: '+ добавить VAE/TextEncoder', en: '+ add VAE/TextEncoder' }
-    this.removeVae = { ru: '- удалить VAE/TextEncoder', en: '- remove VAE/TextEncoder' }
     this.apply = { ru: 'Применить настройки', en: 'Apply settingsa' }
     this.autoResize = { ru: 'Авто масштаб', en: 'Auto resize' }
     this.autoResizeCaption = { ru: 'Масштаб зависит от размера выделения', en: 'Set scale value based on selection size' }
@@ -1303,9 +1302,11 @@ function Locale() {
     this.checkpoint = 'Stable Diffusion checkpoint'
     this.errAnswer = { ru: 'не отвечает!', en: 'not answering!' }
     this.errConnection = { ru: 'Невозможно установить соединение c ', en: 'Impossible to establish a connection with ' }
+    this.errDefalutPreset = { ru: "Используйте другое имя при создании пресета!", en: "Use a different name when creating a preset!" }
     this.errExists = { ru: ' пуст!\nУбедитесь что они добавлены в папку Stable Diffusion', en: ' is empty!\nMake sure that it exists in the Stable Diffusion folder' }
     this.errGenerating = { ru: 'Произошла ошибка в процессе генерации изображения!', en: 'An error occurred in the process of generating the image!' }
     this.errList = { ru: 'Список ', en: 'List ' }
+    this.errPreset = { ru: "Набор с именем \"%1\" уже существует. Перезаписать?", en: "A set with the name \"%1\" already exists. Overwrite?" }
     this.errSettings = { ru: 'Невозможно получить параметры ', en: 'Impossible to get the settings ' }
     this.errTimeout = { ru: '\nПревышено время ожидания ответа!', en: '\nExceeding the response time!' }
     this.errTranslate = { ru: 'Модуль перевода недоступен!', en: 'The translation module is not available!' }
@@ -1316,16 +1317,26 @@ function Locale() {
     this.max = { ru: 'максимум, px', en: 'maximum, px' }
     this.min = { ru: 'минимум, px', en: 'minimum, px' }
     this.module = { ru: 'Модуль sd-webui-api ', en: 'Module sd-webui-api ' }
+    this.negativeDefault = '(deformed, distorted, disfigured:1.3), poorly drawn, bad anatomy, wrong anatomy, extra limb, missing limb, floating limbs, (mutated hands and fingers:1.4), disconnected limbs, mutation, mutated, ugly, disgusting, blurry, amputation'
     this.negativePrompt = 'Negative prompt'
     this.notFound = { ru: '\nне найден!', en: 'not found!' }
     this.opacity = { ru: 'Непрозрачность кисти', en: 'Brush opacity' }
     this.output = { ru: 'Параметры изображения', en: 'Image settings' }
+    this.presetAdd = { ru: "Добавить", en: "Add new" }
+    this.presetCopy = { ru: " копия", en: " copy" }
+    this.presetDefailt = { ru: "по-умолчанию", en: "default" }
+    this.presetDelete = { ru: "Удалить", en: "Delete" }
+    this.presetNew = { ru: "Сохранение пресета", en: "Saving a preset" }
+    this.presetPromt = { ru: "Укажите имя пресета\nБудут сохранены настройки имени подкаталога и файла.", en: "Specify the name of the preset\nSubdirectory and file name settings will be saved." }
+    this.presetRefresh = { ru: "Обновить", en: "Refresh" }
+    this.presetSave = { ru: "Сохранить", en: "Save" }
     this.progressDocument = { ru: 'Подготовка документа...', en: 'Preparation of a document...' }
     this.progressGenerate = { ru: 'Генерация изображения...', en: 'Image generation...' }
     this.progressPlace = { ru: 'Вставка изображения...', en: 'Image placing...' }
     this.progressUpdating = { ru: 'Обновление параметров генерации...', en: 'Update generation parameters...' }
     this.prompt = 'Prompt'
     this.rasterize = { ru: 'Растеризовать сгенерированное изображение', en: 'Rasterize generated image' }
+    this.removeVae = { ru: '- удалить VAE/TextEncoder', en: '- remove VAE/TextEncoder' }
     this.resize = 'Resize by scale'
     this.sampling = 'Sampling method'
     this.schedule = 'Schedule type'
@@ -1337,15 +1348,4 @@ function Locale() {
     this.strength = 'Denoising strength'
     this.translate = { ru: 'перевести: ', en: 'translate: ' }
     this.vae = 'SD VAE'
-    this.presetAdd = { ru: "Добавить", en: "Add new" }
-    this.presetCopy = { ru: " копия", en: " copy" }
-    this.presetDefailt = { ru: "по-умолчанию", en: "default" }
-    this.presetDelete = { ru: "Удалить", en: "Delete" }
-    this.presetNew = { ru: "Сохранение пресета", en: "Saving a preset" }
-    this.presetPromt = { ru: "Укажите имя пресета\nБудут сохранены настройки имени подкаталога и файла.", en: "Specify the name of the preset\nSubdirectory and file name settings will be saved." }
-    this.presetRefresh = { ru: "Обновить", en: "Refresh" }
-    this.presetSave = { ru: "Сохранить", en: "Save" }
-    this.errPreset = { ru: "Набор с именем \"%1\" уже существует. Перезаписать?", en: "A set with the name \"%1\" already exists. Overwrite?" }
-    this.errDefalutPreset = { ru: "Используйте другое имя при создании пресета!", en: "Use a different name when creating a preset!" }
-    this.negativeDefault = '(deformed, distorted, disfigured:1.3), poorly drawn, bad anatomy, wrong anatomy, extra limb, missing limb, floating limbs, (mutated hands and fingers:1.4), disconnected limbs, mutation, mutated, ugly, disgusting, blurry, amputation'
 }

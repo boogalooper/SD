@@ -51,6 +51,7 @@ def decode_and_save_base64(base64_str, save_path):
     with open(save_path, "wb") as file:
         file.write(base64.b64decode(base64_str))
 
+
 def call_generate_api(api_endpoint, payload, SD_HOST, SD_PORT, out_dir):
     data = json.dumps(payload).encode("utf-8")
     request = urllib.request.Request(
@@ -128,11 +129,11 @@ def start_local_server():
                         f"http://{SD_HOST}:{SD_PORT}/sdapi/v1/options"
                     ) as response:
                         options = json.load(response)
-                        if data["sd_model_checkpoint"]:
+                        if "sd_model_checkpoint" in data and data["sd_model_checkpoint"]!=None:
                             options["sd_model_checkpoint"] = data["sd_model_checkpoint"]
-                        if "sd_vae" in data:
+                        if "sd_vae" in data and data["sd_vae"]!=None:
                             options["sd_vae"] = data["sd_vae"]
-                        if "forge_additional_modules" in data:
+                        if "forge_additional_modules" in data and data["forge_additional_modules"]!=None:
                             options["forge_additional_modules"] = data[
                                 "forge_additional_modules"
                             ]
@@ -202,8 +203,11 @@ def start_local_server():
                     print("Получен запрос на перевод текста")
                     if check_module("deep_translator"):
                         from deep_translator import GoogleTranslator
+
                         try:
-                            translated_text = GoogleTranslator(source='auto', target='english').translate(message["message"])
+                            translated_text = GoogleTranslator(
+                                source="auto", target="english"
+                            ).translate(message["message"])
                             print("\nПереведённый текст на английском языке:")
                             print(translated_text)
                         except:
@@ -219,5 +223,6 @@ def start_local_server():
             sys.exit()
         finally:
             client_socket.close()
+
 
 start_local_server()
