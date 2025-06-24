@@ -130,7 +130,7 @@ def start_local_server():
                         options = json.load(response)
                         if data["sd_model_checkpoint"]:
                             options["sd_model_checkpoint"] = data["sd_model_checkpoint"]
-                        if data["sd_vae"]:
+                        if "sd_vae" in data:
                             options["sd_vae"] = data["sd_vae"]
                         if "forge_additional_modules" in data:
                             options["forge_additional_modules"] = data[
@@ -200,12 +200,10 @@ def start_local_server():
                     send_data_to_jsx({"type": "answer", "message": outfile})
                 elif message["type"] == "translate":
                     print("Получен запрос на перевод текста")
-                    if check_module("translate"):
-                        from translate import Translator
-
+                    if check_module("deep_translator"):
+                        from deep_translator import GoogleTranslator
                         try:
-                            translator = Translator(from_lang="ru", to_lang="en")
-                            translated_text = translator.translate(message["message"])
+                            translated_text = GoogleTranslator(source='auto', target='english').translate(message["message"])
                             print("\nПереведённый текст на английском языке:")
                             print(translated_text)
                         except:

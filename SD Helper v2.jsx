@@ -14,7 +14,8 @@
 </javascriptresource>
 // END__HARVEST_EXCEPTION_ZSTRING
 */
-const SD_HOST = '127.0.0.1',
+const ver = 0.3,
+    SD_HOST = '127.0.0.1',
     SD_PORT = 7860,
     API_HOST = '127.0.0.1',
     API_PORT_SEND = 6320,
@@ -35,7 +36,6 @@ var time = (new Date).getTime(),
     doc = new AM('document'),
     lr = new AM('layer'),
     ch = new AM('channel'),
-    ver = 0.273,
     isDitry = false;
 isCancelled = false;
 $.localize = true
@@ -121,73 +121,76 @@ function init() {
 }
 function main(selection) {
     var checkpoint = (cfg.sd_model_checkpoint == SD['sd_model_checkpoint'] ? null : findOption(cfg.sd_model_checkpoint, SD['sd-models'], SD['sd_model_checkpoint'])),
-        vae = (cfg.current.sd_vae == SD['sd_vae'] ? null : findOption(cfg.current.sd_vae, SD['sd-vaes'], SD['sd_vae']));
-    if (vae != cfg.current.sd_vae && vae != null) cfg.current.sd_vae = vae
+        vae = (cfg.current.sd_vae == SD['sd_vae'] ? null : findOption(cfg.current.sd_vae, SD['sd-vaes'], SD['sd_vae'])),
+        encoders = checkEncoders(cfg.current.encoders, SD['forge_additional_modules'], SD['sd_modules']);
     if (checkpoint != cfg.sd_model_checkpoint && checkpoint != null) cfg.sd_model_checkpoint = checkpoint
-
-    if (selection.previousGeneration) doc.hideSelectedLayers()
-    if (doc.getProperty('quickMask')) {
-        doc.quickMask('clearEvent');
-        doc.makeLayer(LAYER_NAME)
-        doc.makeSelectionMask()
-    } else if (doc.hasProperty('selection')) {
-        doc.makeLayer(LAYER_NAME)
-        doc.makeSelectionMask()
-    } else if (lr.getProperty('name') == LAYER_NAME) {
-        if (lr.getProperty('hasUserMask')) {
-            lr.selectChannel('mask')
-            doc.makeSelectionFromLayer('targetEnum');
-        } else {
-            doc.makeSelectionFromLayer('transparencyEnum');
+    {
+        if (selection.previousGeneration) doc.hideSelectedLayers()
+        if (doc.getProperty('quickMask')) {
+            doc.quickMask('clearEvent');
+            doc.makeLayer(LAYER_NAME)
             doc.makeSelectionMask()
+        } else if (doc.hasProperty('selection')) {
+            doc.makeLayer(LAYER_NAME)
+            doc.makeSelectionMask()
+        } else if (lr.getProperty('name') == LAYER_NAME) {
+            if (lr.getProperty('hasUserMask')) {
+                lr.selectChannel('mask')
+                doc.makeSelectionFromLayer('targetEnum');
+            } else {
+                doc.makeSelectionFromLayer('transparencyEnum');
+                doc.makeSelectionMask()
+            }
         }
-    }
-    selection.junk = lr.getProperty('layerID')
-    doc.makeSelection(selection.bounds);
-    var hst = activeDocument.activeHistoryState,
-        c = doc.getProperty('center').value;
-    doc.crop(true);
-    if (cfg.flatten) { doc.flatten() } else {
-        var len = doc.getProperty('numberOfLayers'),
-            start = lr.getProperty('itemIndex'),
-            lrsList = new ActionReference();
-        offset = doc.getProperty('hasBackgroundLayer') ? 0 : 1;
-        for (var i = start + offset; i <= len; i++) lrsList.putIdentifier(s2t('layer'), lr.getProperty('layerID', false, i, true));
-        if (start + offset <= len) {
-            doc.selectLayersByIDList(lrsList);
-            doc.hideSelectedLayers();
+        selection.junk = lr.getProperty('layerID')
+        doc.makeSelection(selection.bounds);
+        var hst = activeDocument.activeHistoryState,
+            c = doc.getProperty('center').value;
+        doc.crop(true);
+        if (cfg.flatten) { doc.flatten() } else {
+            var len = doc.getProperty('numberOfLayers'),
+                start = lr.getProperty('itemIndex'),
+                lrsList = new ActionReference();
+            offset = doc.getProperty('hasBackgroundLayer') ? 0 : 1;
+            for (var i = start + offset; i <= len; i++) lrsList.putIdentifier(s2t('layer'), lr.getProperty('layerID', false, i, true));
+            if (start + offset <= len) {
+                doc.selectLayersByIDList(lrsList);
+                doc.hideSelectedLayers();
+            }
         }
+        var f = new File(Folder.temp + '/SDH.jpg');
+        var f1 = new File(Folder.temp + '/SDH_MASK.jpg');
+        doc.saveACopy(f);
+        if (cfg.current.inpaintingFill != -1) {
+            lr.selectChannel('mask');
+            lr.selectAllPixels();
+            doc.copyPixels()
+            lr.selectChannel('RGB')
+            doc.pastePixels()
+            doc.saveACopy(f1);
+        }
+        activeDocument.activeHistoryState = hst;
+        doc.setProperty('center', c);
+        var p = (new Folder(Folder.temp + '/' + cfg.outdir))
+        if (!p.exists) p.create()
     }
-    var f = new File(Folder.temp + '/SDH.jpg');
-    var f1 = new File(Folder.temp + '/SDH_MASK.jpg');
-    doc.saveACopy(f);
-    if (cfg.current.inpaintingFill != -1) {
-        lr.selectChannel('mask');
-        lr.selectAllPixels();
-        doc.copyPixels()
-        lr.selectChannel('RGB')
-        doc.pastePixels()
-        doc.saveACopy(f1);
-    }
-    activeDocument.activeHistoryState = hst;
-    doc.setProperty('center', c);
-    var p = (new Folder(Folder.temp + '/' + cfg.outdir))
-    if (!p.exists) p.create()
-
-    if (checkpoint || vae) {
+    if (checkpoint || (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('.GGUF [') == -1 ? vae : encoders)) {
         var vae_path = [];
         if (SD.forgeUI) {
-            for (var i = 0; i < SD['forge_additional_modules'].length; i++) {
-                if (SD['forge_additional_modules'][i].indexOf(cfg.current.sd_vae) != -1) {
-                    vae_path.push(SD['forge_additional_modules'][i])
-                    break;
+            if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('.GGUF [') == -1) {
+                for (var i = 0; i < SD['sd_modules'].length; i++) {
+                    if (SD['sd_modules'][i].indexOf(cfg.current.sd_vae) != -1) {
+                        vae_path.push(SD['sd_modules'][i])
+                        break;
+                    }
                 }
-            }
+            } else vae_path = encoders
         }
         changeProgressText(str.progressUpdating[$.locale == 'ru' ? 'ru' : 'en'])
         updateProgress(0.1, 1)
         if (!SD.setOptions(checkpoint, vae, vae_path)) throw new Error(str.errUpdating)
     }
+    changeProgressText(str.progressGenerate[$.locale == 'ru' ? 'ru' : 'en'])
     if (cfg.autoResize && !isDitry) cfg.current.resize = autoScale(selection.bounds)
     var width = cfg.current.resize != 1 ? (mathTrunc((selection.bounds.width * cfg.current.resize) / 8) * 8) : selection.bounds.width,
         height = cfg.current.resize != 1 ? (mathTrunc((selection.bounds.height * cfg.current.resize) / 8) * 8) : selection.bounds.height
@@ -234,15 +237,42 @@ function main(selection) {
         }
         (new File(result)).remove();
     }
-    function findOption(s, o, def) {
-        for (a in o) if (o[a] == s) return s;
-        return def;
+}
+function findOption(s, o, def) {
+    for (a in o) if (o[a] == s) return s;
+    return def;
+}
+function checkEncoders(encoders, loaded, modules) {
+    if (!SD.forgeUI) return null
+    var filteredEncoders = [],
+        fileModules = modules.slice();
+    for (a in fileModules) fileModules[a] = new File(fileModules[a])
+    for (var i = 0; i < encoders.length; i++) {
+        for (var x = 0; x < fileModules.length; x++) {
+            if (encoders[i] == decodeURI(fileModules[x].name)) {
+                filteredEncoders.push(modules[x])
+                break;
+            }
+        }
     }
+    if (filteredEncoders.length == loaded.length) {
+        var found = 0;
+        for (var i = 0; i < filteredEncoders.length; i++) {
+            for (var x = 0; x < loaded.length; x++) {
+                if (filteredEncoders[i] == loaded[i]) {
+                    found++
+                    break;
+                }
+            }
+        }
+        if (found == loaded.length) return null
+    }
+    return filteredEncoders
 }
 function dialogWindow(b, s) {
-    var w = new Window("dialog{orientation:'column',alignChildren:['fill', 'top'],spacing:10,margins:16}"),
+    var w = new Window("dialog{orientation:'column',alignChildren:['fill', 'top'],spacing:0,margins:15}"),
         grGlobal = w.add("group{orientation:'row',alignChildren:['left', 'center'],spacing:0,margins:0}"),
-        grCheckoint = w.add("group{orientation:'column',alignChildren:['fill', 'center'],spacing:0,margins:0}"),
+        grCheckoint = w.add("group{orientation:'column',alignChildren:['fill', 'center'],spacing:0,margins:[0,10,0,5]}"),
         stCheckpoint = grCheckoint.add('statictext'),
         dlCheckpoint = grCheckoint.add('dropdownlist{preferredSize: [285, -1] }'),
         stWH = grGlobal.add("statictext{preferredSize:[265,-1]}"),
@@ -264,7 +294,13 @@ function dialogWindow(b, s) {
     dlCheckpoint.onChange = function () {
         cfg.presets[cfg.sd_model_checkpoint] = cfg.current
         cfg.sd_model_checkpoint = this.selection.text
-        if (cfg.presets[cfg.sd_model_checkpoint]) cfg.current = cfg.presets[cfg.sd_model_checkpoint] else cfg.current = new cfg.checkpointSettings()
+        if (cfg.presets[cfg.sd_model_checkpoint]) {
+            cfg.current = new cfg.checkpointSettings()
+            for (a in cfg.presets[cfg.sd_model_checkpoint]) {
+                cfg.current[a] = cfg.presets[cfg.sd_model_checkpoint][a]
+            }
+        }
+        else cfg.current = new cfg.checkpointSettings()
         showControls(grSettings)
         w.layout.layout(true)
     }
@@ -289,6 +325,7 @@ function dialogWindow(b, s) {
             }
         }
     }
+    w.layout.layout(true)
     return w;
     function showControls(p) {
         var len = p.children.length
@@ -315,21 +352,46 @@ function dialogWindow(b, s) {
         }
         function vae(p) {
             var grVae = p.add("group{orientation:'column',alignChildren:['fill', 'center'],spacing:0,margins:0}"),
-                stVae = grVae.add('statictext'),
-                dlVae = grVae.add('dropdownlist{preferredSize:[285,-1]}')
+                stVae = grVae.add('statictext');
             stVae.text = str.vae;
-            if (SD['sd-vaes'].length) for (var i = 0; i < SD['sd-vaes'].length; i++) dlVae.add('item', SD['sd-vaes'][i])
-            dlVae.onChange = function () {
-                cfg.current.sd_vae = this.selection.text
+            if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('.GGUF [') == -1) {
+                var dlVae = grVae.add('dropdownlist{preferredSize:[285,-1]}')
+                if (SD['sd-vaes'].length) for (var i = 0; i < SD['sd-vaes'].length; i++) dlVae.add('item', SD['sd-vaes'][i])
+                dlVae.onChange = function () {
+                    cfg.current.sd_vae = this.selection.text
+                }
+                var current = dlVae.find(cfg.current.sd_vae) ? dlVae.find(cfg.current.sd_vae) : dlVae.find(SD['sd_vae']);
+                dlVae.selection = current ? current.index : 0
+            } else {
+                var lEncoders = grVae.add('listbox', [0, 0, 285, 90], undefined, { multiselect: true });
+                stVae.text += '/Text encoder'
+                if (SD['sd-vaes'].length) for (var i = 0; i < SD['sd-vaes'].length; i++) lEncoders.add('item', SD['sd-vaes'][i])
+                for (var i = 0; i < cfg.current.encoders.length; i++) {
+                    var result = lEncoders.find(cfg.current.encoders[i])
+                    if (result)
+                        lEncoders.items[result.index].selected = true
+                }
+                if (!lEncoders.selection) lEncoders.items[0].selected = true
+                lEncoders.onChange = function () {
+                    if (lEncoders.items[0].selected) {
+                        for (var i = 1; i < lEncoders.items.length; i++) {
+                            lEncoders.items[i].selected = false
+                        }
+                    }
+                    cfg.current.encoders = [];
+                    for (var i = 0; i < lEncoders.items.length; i++) {
+                        if (lEncoders.items[i].selected) cfg.current.encoders.push(lEncoders.items[i].text)
+                    }
+                }
             }
-            var current = dlVae.find(cfg.current.sd_vae) ? dlVae.find(cfg.current.sd_vae) : dlVae.find(SD['sd_vae']);
-            dlVae.selection = current ? current.index : 0
         }
         function prompt(p) {
             var grPrompt = p.add("group{orientation:'column',alignChildren:['fill', 'top'],spacing:0,margins:0}"),
-                stPrompt = grPrompt.add('statictext'),
-                etPrompt = grPrompt.add('edittext{preferredSize:[285,80],properties:{multiline: true, scrollable: true}}'),
+                stPrompt = grPrompt.add('statictext');
+            var presets = addPresetPanel('positivePreset', grPrompt);
+            var etPrompt = grPrompt.add('edittext{preferredSize:[285,80],properties:{multiline: true, scrollable: true}}'),
                 bnTranslate = grPrompt.add('button');
+            presets.onChange(true)
             bnTranslate.text = str.translate + 'ru -> en';
             etPrompt.onChange = function () { cfg.current.prompt = this.text }
             bnTranslate.onClick = function () {
@@ -338,23 +400,28 @@ function dialogWindow(b, s) {
                     if (result) {
                         etPrompt.text = result
                         etPrompt.onChange()
+                        cfg.checkPresetIntegrity('positivePreset', grPrompt)
                     } else {
                         alert(str.errTranslate)
                     }
                 }
             }
             etPrompt.onChanging = function () {
-                if (!this.locked) bnTranslate.enabled = this.text.length
+                bnTranslate.enabled = this.text.length
+                cfg.checkPresetIntegrity('positivePreset', grPrompt)
             }
             stPrompt.text = str.prompt
             etPrompt.text = cfg.current.prompt
             bnTranslate.enabled = cfg.current.prompt.length
+            cfg.checkPresetIntegrity('positivePreset', grPrompt)
         }
         function negativePrompt(p) {
             var grNegative = p.add("group{orientation:'column',alignChildren:['fill', 'top'],spacing:0,margins:0}"),
-                stNegative = grNegative.add('statictext'),
-                etNegative = grNegative.add('edittext {preferredSize:[285,80],properties: {multiline: true, scrollable: true}}}'),
+                stNegative = grNegative.add('statictext');
+            var presets = addPresetPanel('negativePreset', grNegative);
+            var etNegative = grNegative.add('edittext {preferredSize:[285,80],properties: {multiline: true, scrollable: true}}}'),
                 bnTranslate = grNegative.add('button');
+            presets.onChange(true)
             bnTranslate.text = str.translate + 'ru -> en';
             etNegative.onChange = function () { cfg.current.negative_prompt = this.text }
             bnTranslate.onClick = function () {
@@ -363,17 +430,20 @@ function dialogWindow(b, s) {
                     if (result) {
                         etNegative.text = result
                         etNegative.onChange()
+                        cfg.checkPresetIntegrity('negativePreset', grNegative)
                     } else {
                         alert(str.errTranslate)
                     }
                 }
             }
             etNegative.onChanging = function () {
-                if (!this.locked) bnTranslate.enabled = this.text.length
+                bnTranslate.enabled = this.text.length
+                cfg.checkPresetIntegrity('negativePreset', grNegative)
             }
             stNegative.text = str.negativePrompt
             etNegative.text = cfg.current.negative_prompt;
             bnTranslate.enabled = cfg.current.negative_prompt.length
+            cfg.checkPresetIntegrity('negativePreset', grNegative)
         }
         function sampler(p) {
             var grSampler = p.add("group{orientation:'column',alignChildren:['fill', 'center'],spacing:0,margins:0}"),
@@ -575,6 +645,68 @@ function dialogWindow(b, s) {
         chRecordSettings.onClick = function () { cfg.recordToAction = !this.value }
         return w
     }
+    function addPresetPanel(context, panel) {
+        var grPreset = panel.add("group{orientation: 'row', alignChildren: ['left', 'center'], spacing: 0, margins: 0}"),
+            dlPreset = grPreset.add("dropdownlist{selection:0, preferredSize: [175, 25]}"),
+            grPresetButtons = grPreset.add("group{orientation: 'row', alignChildren: ['left', 'center'], spacing: 0, margins: 0}"),
+            bnRefresh = grPresetButtons.add("button{text:'" + "↻" + "', helpTip:'" + str.presetRefresh + "',preferredSize: [30, -1]}"),
+            bnSave = grPresetButtons.add("button{text:'" + "✔" + "', helpTip:'" + str.presetSave + "',preferredSize: [30, -1]}"),
+            bnSaveAs = grPresetButtons.add("button{text:'" + "+" + "', helpTip:'" + str.presetAdd + "',preferredSize: [30, -1]}"),
+            bnDel = grPresetButtons.add("button{text:'" + "×" + "', helpTip:'" + str.presetDelete + "',preferredSize: [30, -1]}");
+        dlPreset.onChange = function (silent) {
+            bnDel.enabled = this.selection.index;
+            cfg.current[context] = this.selection.text;
+            if (panel.children[2]) {
+                panel.children[2].text = this.selection.index ? cfg.getPreset(context, this.selection.text) : '';
+                cfg.checkPresetIntegrity(context, panel)
+                if (silent == undefined) cfg.current[context == 'positivePreset' ? 'prompt' : 'negative_prompt'] = panel.children[2].text;
+            }
+        }
+        bnSave.onClick = function () {
+            cfg.putPreset(context, dlPreset.selection.text, panel.children[2].text, "save")
+            cfg.checkPresetIntegrity(context, panel)
+        }
+        bnSaveAs.onClick = function () {
+            var cur = panel.children[2].text
+            nm = prompt(str.presetPromt, dlPreset.selection.text + str.presetCopy, str.presetNew);
+            if (nm != null && nm != "") {
+                if (cfg.getPreset(context, nm) == "" && nm != str.presetDefailt) {
+                    cfg.putPreset(context, nm, cur, "add")
+                    loadPresets()
+                    dlPreset.selection = dlPreset.find(nm)
+                } else {
+                    if (nm != str.presetDefailt) {
+                        if (confirm(localize(str.errPreset, nm), false, str.presetNew)) {
+                            cfg.putPreset(context, nm, cur, "save")
+                            dlPreset.selection = dlPreset.find(nm)
+                        }
+                    } else {
+                        alert(str.errDefalutPreset, strErr, 1)
+                    }
+                }
+            }
+            cfg.checkPresetIntegrity(context, panel)
+        }
+        bnDel.onClick = function () {
+            var num = dlPreset.selection.index;
+            cfg.putPreset(context, dlPreset.selection.text, panel.children[2].text, "delete")
+            loadPresets()
+            dlPreset.selection = num > dlPreset.items.length - 1 ? dlPreset.items.length - 1 : num
+            cfg.checkPresetIntegrity(context, panel)
+        }
+        bnRefresh.onClick = function () { dlPreset.onChange() }
+        loadPresets();
+        dlPreset.selection = dlPreset.find(cfg.current[context]) != null ? dlPreset.find(cfg.current[context]) : 0
+        dlPreset.onChange()
+        function loadPresets() {
+            var len = dlPreset.items.length
+            for (var i = 0; i < len; i++) { dlPreset.remove(dlPreset.items[0]) }
+            var items = cfg.getPresetList(context)
+            dlPreset.add('item', str.presetDefailt)
+            for (var i = 0; i < items.length; i++) { dlPreset.add('item', items[i].key) }
+        }
+        return dlPreset
+    }
     function commonHandler(evt) {
         if (evt.shiftKey) {
             if (evt.keyIdentifier == 'Right' || evt.keyIdentifier == 'Up') {
@@ -657,43 +789,47 @@ function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
         apiFile.execute();
         var result = sendMessage({ type: 'handshake', message: { sdHost: sdHost, sdPort: sdPort } }, true);
         if (!result) throw new Error(str.errConnection + apiHost + ':' + portSend + '\n' + str.module + str.errAnswer)
-            var result = sendMessage({ type: 'get', message: 'sdapi/v1/options' }, true);
-            if (result) {
-                SdCfg['sd_model_checkpoint'] = result['sd_model_checkpoint']
-                SdCfg['sd_vae'] = result['sd_vae']
-                if (result['forge_additional_modules']) SdCfg.forgeUI = true;
-            } else { throw new Error(str.errSettings + 'sdapi/v1/options' + str.errTimeout) }
-            var result = sendMessage({ type: 'get', message: 'sdapi/v1/sd-models' }, true);
-            if (result) {
-                SdCfg['sd-models'] = []
-                if (!result.length) throw new Error(str.errList + 'sdapi/v1/sd-models' + str.errExists)
-                for (var i = 0; i < result.length; i++) SdCfg['sd-models'].push(result[i].title)
-            } else { throw new Error(str.errSettings + 'sdapi/v1/sd-models' + str.errTimeout) }
-            var vaes = ['sdapi/v1/sd-vae', 'sdapi/v1/sd-modules']
-            cfg.vae = (SdCfg.forgeUI ? vaes[1] : vaes[0])
-            var result = sendMessage({ type: 'get', message: cfg.vae }, true);
-            if (result) {
-                SdCfg['sd-vaes'] = []
-                SdCfg['sd-vaes'].push('Automatic')
-                SdCfg['sd-vaes'].push('None')
-                if (SdCfg.forgeUI) {
-                    SdCfg['forge_additional_modules'] = [];
-                    for (var i = 0; i < result.length; i++) SdCfg['forge_additional_modules'].push(result[i].filename.replace(/\\/g, '\\\\'))
-                }
-                for (var i = 0; i < result.length; i++) SdCfg['sd-vaes'].push(result[i].model_name)
-            } else { throw new Error(str.errSettings + + cfg.vae + str.errTimeout) }
-            var result = sendMessage({ type: 'get', message: 'sdapi/v1/schedulers' }, true);
-            if (result) {
-                SdCfg['schedulers'] = []
-                if (!result.length) throw new Error(str.errList + 'sdapi/v1/schedulers' + str.errExists)
-                for (var i = 0; i < result.length; i++) SdCfg['schedulers'].push(result[i].label)
-            } else { throw new Error(str.errSettings + 'sdapi/v1/schedulers' + str.errTimeout) }
-            var result = sendMessage({ type: 'get', message: 'sdapi/v1/samplers' }, true);
-            if (result) {
-                SdCfg['samplers'] = []
-                if (!result.length) throw new Error(str.errList + 'sdapi/v1/samplers' + str.errExists)
-                for (var i = 0; i < result.length; i++) SdCfg['samplers'].push(result[i].name)
-            } else { throw new Error(str.errSettings + 'sdapi/v1/samplers' + str.errTimeout) }
+        var result = sendMessage({ type: 'get', message: 'sdapi/v1/options' }, true);
+        if (result) {
+            SdCfg['sd_model_checkpoint'] = result['sd_model_checkpoint']
+            SdCfg['sd_vae'] = result['sd_vae']
+            if (result['forge_additional_modules']) {
+                SdCfg.forgeUI = true;
+                SdCfg['forge_additional_modules'] = [];
+                for (var i = 0; i < result['forge_additional_modules'].length; i++) SdCfg['forge_additional_modules'].push(result['forge_additional_modules'][i].replace(/\\/g, '\\\\'))
+            }
+        } else { throw new Error(str.errSettings + 'sdapi/v1/options' + str.errTimeout) }
+        var result = sendMessage({ type: 'get', message: 'sdapi/v1/sd-models' }, true);
+        if (result) {
+            SdCfg['sd-models'] = []
+            if (!result.length) throw new Error(str.errList + 'sdapi/v1/sd-models' + str.errExists)
+            for (var i = 0; i < result.length; i++) SdCfg['sd-models'].push(result[i].title)
+        } else { throw new Error(str.errSettings + 'sdapi/v1/sd-models' + str.errTimeout) }
+        var vaes = ['sdapi/v1/sd-vae', 'sdapi/v1/sd-modules']
+        cfg.vae = (SdCfg.forgeUI ? vaes[1] : vaes[0])
+        var result = sendMessage({ type: 'get', message: cfg.vae }, true);
+        if (result) {
+            SdCfg['sd-vaes'] = []
+            if (!SdCfg.forgeUI) SdCfg['sd-vaes'].push('Automatic')
+            SdCfg['sd-vaes'].push('None')
+            if (SdCfg.forgeUI) {
+                SdCfg['sd_modules'] = [];
+                for (var i = 0; i < result.length; i++) SdCfg['sd_modules'].push(result[i].filename.replace(/\\/g, '\\\\'))
+            }
+            for (var i = 0; i < result.length; i++) SdCfg['sd-vaes'].push(result[i].model_name)
+        } else { throw new Error(str.errSettings + + cfg.vae + str.errTimeout) }
+        var result = sendMessage({ type: 'get', message: 'sdapi/v1/schedulers' }, true);
+        if (result) {
+            SdCfg['schedulers'] = []
+            if (!result.length) throw new Error(str.errList + 'sdapi/v1/schedulers' + str.errExists)
+            for (var i = 0; i < result.length; i++) SdCfg['schedulers'].push(result[i].label)
+        } else { throw new Error(str.errSettings + 'sdapi/v1/schedulers' + str.errTimeout) }
+        var result = sendMessage({ type: 'get', message: 'sdapi/v1/samplers' }, true);
+        if (result) {
+            SdCfg['samplers'] = []
+            if (!result.length) throw new Error(str.errList + 'sdapi/v1/samplers' + str.errExists)
+            for (var i = 0; i < result.length; i++) SdCfg['samplers'].push(result[i].name)
+        } else { throw new Error(str.errSettings + 'sdapi/v1/samplers' + str.errTimeout) }
         return true
     }
     this.exit = function () {
@@ -702,7 +838,7 @@ function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
     this.setOptions = function (checkpoint, vae, vae_path) {
         var message = {}
         message['sd_model_checkpoint'] = checkpoint ? checkpoint.replace(/\\/g, '\\\\') : null
-        message['sd_vae'] = vae
+        if (!SdCfg.forgeUI) message['sd_vae'] = vae
         if (SdCfg.forgeUI) message['forge_additional_modules'] = vae_path
         if (sendMessage({ type: 'update', message: message }, true, SD_RELOAD_CHECKPOINT_DELAY)) return true
         return false;
@@ -971,6 +1107,7 @@ function AM(target, order) {
 function Config() {
     this.checkpointSettings = function () {
         this.sd_vae = 'Automatic'
+        this.encoders = []
         this.scheduler = 'Automatic'
         this.sampler_name = 'DPM++ 2M'
         this.cfg_scale = 7
@@ -980,6 +1117,8 @@ function Config() {
         this.negative_prompt = '(deformed, distorted, disfigured:1.3), poorly drawn, bad anatomy, wrong anatomy, extra limb, missing limb, floating limbs, (mutated hands and fingers:1.4), disconnected limbs, mutation, mutated, ugly, disgusting, blurry, amputation'
         this.resize = 1
         this.inpaintingFill = -1
+        this.positivePreset = ''
+        this.negativePreset = 'SD'
     }
     settingsObj = this;
     this.current = new settingsObj.checkpointSettings();
@@ -1004,33 +1143,50 @@ function Config() {
     this.autoResizeLess = 512
     this.autoResizeAbove = 1408
     this.outdir = 'outputs/img2img-images'
+    this.positivePreset = {}
+    this.negativePreset = {
+        "SD": '(deformed, distorted, disfigured:1.3), poorly drawn, bad anatomy, wrong anatomy, extra limb, missing limb, floating limbs, (mutated hands and fingers:1.4), disconnected limbs, mutation, mutated, ugly, disgusting, blurry, amputation',
+        "Realistic": '(deformed iris, deformed pupils, semi-realistic, cgi, 3d, render, sketch, cartoon, drawing, anime), text, cropped, out of frame, worst quality, low quality, jpeg artifacts, ugly, duplicate, morbid, mutilated, extra fingers, mutated hands, poorly drawn hands, poorly drawn face, mutation, deformed, blurry, dehydrated, bad anatomy, bad proportions, extra limbs, cloned face, disfigured, gross proportions, malformed limbs, missing arms, missing legs, extra arms, extra legs, fused fingers, too many fingers, long neck'
+    }
     this.getScriptSettings = function (fromAction) {
-        if (fromAction) var d = playbackParameters; else try { var d = getCustomOptions(UUID) } catch (e) { };
-        if (d != undefined)
-            if (d.hasKey(s2t('dialogMode')) || d.hasKey(s2t('inpaintMode'))) eraseCustomOptions(UUID)
-            else descriptorToObject(settingsObj, d)
+        if (fromAction) { var d = playbackParameters }
+        else {
+            try {
+                var d = getFromFile();
+            } catch (e) { }
+        };
+        if (d != undefined) descriptorToObject(settingsObj, d)
         if (settingsObj.presets[settingsObj.sd_model_checkpoint]) {
-            settingsObj.current = settingsObj.presets[settingsObj.sd_model_checkpoint]
+            settingsObj.current = new settingsObj.checkpointSettings();
+            for (a in settingsObj.presets[settingsObj.sd_model_checkpoint]) {
+                settingsObj.current[a] = settingsObj.presets[settingsObj.sd_model_checkpoint][a]
+            }
         }
         function descriptorToObject(o, d) {
             var l = d.count;
             for (var i = 0; i < l; i++) {
                 var k = d.getKey(i),
                     t = d.getType(k),
-                    s = app.typeIDToStringID(k);
+                    s = t2s(k);
                 switch (t) {
                     case DescValueType.BOOLEANTYPE: o[s] = d.getBoolean(k); break;
                     case DescValueType.STRINGTYPE: o[s] = d.getString(k); break;
                     case DescValueType.DOUBLETYPE: o[s] = d.getDouble(k); break;
                     case DescValueType.OBJECTTYPE: o[s] = {}; descriptorToObject(o[s], d.getObjectValue(k)); break;
+                    case DescValueType.LISTTYPE: o[s] = []; listToArray(d.getList(k), o[s]); break;
                 }
+            }
+        }
+        function listToArray(l, a) {
+            for (var i = 0; i < l.count; i++) {
+                a.push(l.getString(i))
             }
         }
     }
     this.putScriptSettings = function (toAction) {
         settingsObj.presets[settingsObj.sd_model_checkpoint] = settingsObj.current
-        var d = objectToDescriptor(settingsObj, UUID)
-        if (toAction) playbackParameters = d else putCustomOptions(UUID, d, true);
+        var d = objectToDescriptor(settingsObj)
+        if (toAction) playbackParameters = d else saveToFile(d)
         function objectToDescriptor(o) {
             var d = new ActionDescriptor;
             var l = o.reflect.properties.length;
@@ -1038,22 +1194,107 @@ function Config() {
                 var k = o.reflect.properties[i].toString();
                 if (k == '__proto__' || k == '__count__' || k == '__class__' || k == 'reflect') continue;
                 var v = o[k];
-                k = app.stringIDToTypeID(k);
+                k = s2t(k);
                 switch (typeof (v)) {
                     case 'boolean': d.putBoolean(k, v); break;
                     case 'string': d.putString(k, v); break;
                     case 'number': d.putDouble(k, v); break;
                     case 'object':
-                        d.putObject(k, s2t('object'), objectToDescriptor(v));
+                        if (v instanceof Array) {
+                            d.putList(k, arrayToList(v, new ActionList))
+                        } else {
+                            d.putObject(k, s2t('object'), objectToDescriptor(v));
+                        }
                         break;
                 }
             }
             return d;
         }
+        function arrayToList(a, l) {
+            for (var i = 0; i < a.length; i++) { l.putString(a[i]) }
+            return l
+        }
+    }
+    this.getPresetList = function (context) {
+        var output = []
+        for (var a in settingsObj[context]) output.push({ key: a, val: settingsObj[context][a] })
+        return output.sort(sortPresets)
+        function sortPresets(a, b) {
+            if (a.key >= b.key) { return 1 } else { return -1 }
+        }
+    }
+    this.getPreset = function (context, key) {
+        return settingsObj[context][key] ? settingsObj[context][key] : ''
+    }
+    this.checkPresetIntegrity = function (context, parent) {
+        var dlPreset = parent.children[1].children[0],
+            bnRefresh = parent.children[1].children[1].children[0],
+            bnSave = parent.children[1].children[1].children[1],
+            bnAdd = parent.children[1].children[1].children[2],
+            bnRemove = parent.children[1].children[1].children[3],
+            text = parent.children[2].text;
+        if (dlPreset.selection.index > 0) {
+            var cur = text
+            var old = this.getPreset(context, dlPreset.selection.text)
+            bnRefresh.enabled = bnSave.enabled = (cur == old ? false : true)
+            bnRemove.enabled = true
+        } else {
+            bnRemove.enabled = bnSave.enabled = false;
+            bnRefresh.enabled = (text != '')
+        }
+        bnAdd.enabled = (text != '')
+    }
+    this.putPreset = function (context, key, val, mode) {
+        var output = this.getPresetList(context)
+        switch (mode) {
+            case "add":
+                output.push({ key: key, val: val })
+                break;
+            case "save":
+                for (var i = 0; i < output.length; i++) {
+                    if (output[i].key == key) { output[i].val = val; break; }
+                }
+                break;
+            case "delete":
+                for (var i = 0; i < output.length; i++) {
+                    if (output[i].key == key) { output.splice(i, 1); break; }
+                }
+                break;
+        }
+        settingsObj[context] = {}
+        for (var i = 0; i < output.length; i++) settingsObj[context][output[i].key] = output[i].val
+        this.putScriptSettings();
+    }
+    function getFromFile() {
+        var d = new ActionDescriptor(),
+            f = new File(app.preferencesFolder + "/SD Helper.desc");
+        try {
+            if (f.exists) {
+                f.open('r')
+                f.encoding = 'BINARY'
+                var s = f.read()
+                f.close();
+                d.fromStream(s);
+            }
+        } catch (e) { throw (e, '', 1) }
+        return d
+    }
+    function saveToFile(d) {
+        var f = new File(app.preferencesFolder + "/SD Helper.desc");
+        try {
+            f.open('w')
+            f.encoding = 'BINARY'
+            f.write(d.toStream())
+            f.close()
+            return true
+        } catch (e) { throw (e, '', 1) }
+        return false
     }
 }
 function Locale() {
     this.actionMode = { ru: 'Не записывать параметры генерации в экшен', en: 'Do not record generation settings to action' }
+    this.addVae = { ru: '+ добавить VAE/TextEncoder', en: '+ add VAE/TextEncoder' }
+    this.removeVae = { ru: '- удалить VAE/TextEncoder', en: '- remove VAE/TextEncoder' }
     this.apply = { ru: 'Применить настройки', en: 'Apply settingsa' }
     this.autoResize = { ru: 'Авто масштаб', en: 'Auto resize' }
     this.autoResizeCaption = { ru: 'Масштаб зависит от размера выделения', en: 'Set scale value based on selection size' }
@@ -1096,4 +1337,15 @@ function Locale() {
     this.strength = 'Denoising strength'
     this.translate = { ru: 'перевести: ', en: 'translate: ' }
     this.vae = 'SD VAE'
+    this.presetAdd = { ru: "Добавить", en: "Add new" }
+    this.presetCopy = { ru: " копия", en: " copy" }
+    this.presetDefailt = { ru: "по-умолчанию", en: "default" }
+    this.presetDelete = { ru: "Удалить", en: "Delete" }
+    this.presetNew = { ru: "Сохранение пресета", en: "Saving a preset" }
+    this.presetPromt = { ru: "Укажите имя пресета\nБудут сохранены настройки имени подкаталога и файла.", en: "Specify the name of the preset\nSubdirectory and file name settings will be saved." }
+    this.presetRefresh = { ru: "Обновить", en: "Refresh" }
+    this.presetSave = { ru: "Сохранить", en: "Save" }
+    this.errPreset = { ru: "Набор с именем \"%1\" уже существует. Перезаписать?", en: "A set with the name \"%1\" already exists. Overwrite?" }
+    this.errDefalutPreset = { ru: "Используйте другое имя при создании пресета!", en: "Use a different name when creating a preset!" }
+    this.negativeDefault = '(deformed, distorted, disfigured:1.3), poorly drawn, bad anatomy, wrong anatomy, extra limb, missing limb, floating limbs, (mutated hands and fingers:1.4), disconnected limbs, mutation, mutated, ugly, disgusting, blurry, amputation'
 }
