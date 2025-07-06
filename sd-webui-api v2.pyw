@@ -174,7 +174,7 @@ def start_local_server():
                         payload["image_cfg_scale"] = 1.5
                         payload["inpaint_full_res"] = 0
                         payload["initial_noise_multiplier"] = 1
-                        payload["resize_mode"] = 0
+                        payload["resize_mode"] = 2
                     outfile = call_generate_api(
                         "sdapi/v1/img2img", payload, SD_HOST, SD_PORT, data["output"]
                     )
