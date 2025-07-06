@@ -93,6 +93,7 @@
 ## Модуль SD Face restore
 
 Модуль [SD Face restore.jsx](SD%20Face%20restore.jsx) предназначен для запуска алгоритмов улучшения лиц GFPGAN и CodeFormer. Принцип работы и запуска скрипта аналогичен `SD Helper`
+
 ![](assets/162930.png)
 Для запуска в режиме диалогового окна можно использовать файл сценария [SD face restore.vbs](SD%20face%20restore.vbs)
 
