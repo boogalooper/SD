@@ -389,7 +389,7 @@ function dialogWindow(b, s) {
             var etPrompt = grPrompt.add('edittext{preferredSize:[285,80],properties:{multiline: true, scrollable: true}}'),
                 bnTranslate = grPrompt.add('button');
             presets.onChange(true)
-            bnTranslate.text = str.translate + 'ru -> en';
+            bnTranslate.text = str.translate + '-> en';
             etPrompt.onChange = function () { cfg.current.prompt = this.text }
             bnTranslate.onClick = function () {
                 if (etPrompt.text != '') {
@@ -419,7 +419,7 @@ function dialogWindow(b, s) {
             var etNegative = grNegative.add('edittext {preferredSize:[285,80],properties: {multiline: true, scrollable: true}}}'),
                 bnTranslate = grNegative.add('button');
             presets.onChange(true)
-            bnTranslate.text = str.translate + 'ru -> en';
+            bnTranslate.text = str.translate + '-> en';
             etNegative.onChange = function () { cfg.current.negative_prompt = this.text }
             bnTranslate.onClick = function () {
                 if (etNegative.text != '') {
