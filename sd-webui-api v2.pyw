@@ -107,7 +107,7 @@ def start_local_server():
         client_socket, client_address = srv.accept()
         print(f"Подключение установлено с {client_address}")
         try:
-            message = client_socket.recv(1024)
+            message = client_socket.recv(4096)
             if message:
                 message = json.loads(message.decode("utf-8").rstrip("\n"))
                 print(f"Получено сообщение: {message}")
