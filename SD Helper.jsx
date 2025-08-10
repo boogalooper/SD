@@ -188,11 +188,8 @@ function main(selection) {
                 }
             } else vae_path = encoders
         }
-        changeProgressText(str.progressUpdating[$.locale == 'ru' ? 'ru' : 'en'])
-        updateProgress(0.1, 1)
         if (!SD.setOptions(checkpoint, vae, vae_path, memory)) throw new Error(str.errUpdating)
     }
-    changeProgressText(str.progressGenerate[$.locale == 'ru' ? 'ru' : 'en'])
     if (cfg.autoResize && !isDitry) cfg.current.resize = autoScale(selection.bounds)
     var width = cfg.current.resize != 1 ? (mathTrunc((selection.bounds.width * cfg.current.resize) / 8) * 8) : selection.bounds.width,
         height = cfg.current.resize != 1 ? (mathTrunc((selection.bounds.height * cfg.current.resize) / 8) * 8) : selection.bounds.height
