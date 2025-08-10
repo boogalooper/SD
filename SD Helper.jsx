@@ -110,7 +110,7 @@ function init() {
                         cfg.putScriptSettings(true)
                         if (!cfg.recordToAction) cfg.putScriptSettings()
                         SD.setOptions(null, null, null, 64)
-                        SD['forge_inference_memory']=64
+                        SD['forge_inference_memory'] = 64
                         doForcedProgress(str.progressGenerate[$.locale == 'ru' ? 'ru' : 'en'], 'main(currentSelection)')
                         SD.exit()
                     }
@@ -215,7 +215,7 @@ function main(selection) {
         payload['mask'] = f1.fsName.replace(/\\/g, '\\\\')
         payload['inpainting_fill'] = cfg.current.inpaintingFill + 1
     }
-    app.refresh()
+    apl.waitForRedraw()
     var result = SD.sendPayload(payload);
     if (result) {
         activeDocument.suspendHistory('Generate image', 'generatedImageToLayer()')
@@ -1119,6 +1119,10 @@ function AM(target, order) {
         (d = new AD).putEnumerated(s2t('antiAlias'), s2t('antiAliasType'), s2t('antiAliasNone'));
         d.putClass(s2t('as'), s2t('pixel'));
         executeAction(s2t('paste'), d, DialogModes.NO);
+    }
+    this.waitForRedraw = function () {
+        (d = new ActionDescriptor()).putEnumerated(s2t('state'), s2t('state'), s2t('redrawComplete'));
+        executeAction(s2t('wait'), d, DialogModes.NO);
     }
     function getDescValue(d, p) {
         switch (d.getType(p)) {
