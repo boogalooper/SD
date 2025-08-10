@@ -75,6 +75,8 @@ function init() {
                     } else if (result != undefined) {
                         cfg.putScriptSettings()
                         cfg.putScriptSettings(true)
+                        SD.setOptions(null, null, null, 64)
+                        SD['forge_inference_memory'] = 64
                         doForcedProgress(str.progressGenerate[$.locale == 'ru' ? 'ru' : 'en'], 'main(currentSelection)')
                         SD.exit()
                     }
@@ -107,6 +109,8 @@ function init() {
                     } else if (result != undefined) {
                         cfg.putScriptSettings(true)
                         if (!cfg.recordToAction) cfg.putScriptSettings()
+                        SD.setOptions(null, null, null, 64)
+                        SD['forge_inference_memory']=64
                         doForcedProgress(str.progressGenerate[$.locale == 'ru' ? 'ru' : 'en'], 'main(currentSelection)')
                         SD.exit()
                     }
