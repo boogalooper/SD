@@ -14,7 +14,7 @@
 </javascriptresource>
 // END__HARVEST_EXCEPTION_ZSTRING
 */
-const ver = 0.32,
+const ver = 0.34,
     SD_HOST = '127.0.0.1',
     SD_PORT = 7860,
     API_HOST = '127.0.0.1',
@@ -121,7 +121,8 @@ function init() {
 function main(selection) {
     var checkpoint = (cfg.sd_model_checkpoint == SD['sd_model_checkpoint'] ? null : findOption(cfg.sd_model_checkpoint, SD['sd-models'], SD['sd_model_checkpoint'])),
         vae = (cfg.current.sd_vae == SD['sd_vae'] ? null : findOption(cfg.current.sd_vae, SD['sd-vaes'], SD['sd_vae'])),
-        encoders = checkEncoders(cfg.current.encoders, SD['forge_additional_modules'], SD['sd_modules']);
+        encoders = checkEncoders(cfg.current.encoders, SD['forge_additional_modules'], SD['sd_modules']),
+        memory = cfg.control_memory ? (SD['forge_inference_memory'] == cfg.forge_inference_memory ? null : cfg.forge_inference_memory) : (SD['forge_inference_memory'] == cfg.forge_inference_memory_default ? null : cfg.forge_inference_memory_default);
     if (checkpoint != cfg.sd_model_checkpoint && checkpoint != null) cfg.sd_model_checkpoint = checkpoint
     if (selection.previousGeneration) doc.hideSelectedLayers()
     if (doc.getProperty('quickMask')) {
@@ -171,10 +172,10 @@ function main(selection) {
     doc.setProperty('center', c);
     var p = (new Folder(Folder.temp + '/outputs/img2img-images'))
     if (!p.exists) p.create()
-    if (checkpoint || (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('.GGUF') == -1 ? vae : encoders)) {
+    if (checkpoint || (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('FLUX') == -1 ? vae : encoders) || memory) {
         var vae_path = [];
         if (SD.forgeUI) {
-            if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('.GGUF') == -1) {
+            if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('FLUX') == -1) {
                 for (var i = 0; i < SD['sd_modules'].length; i++) {
                     if (SD['sd_modules'][i].indexOf(cfg.current.sd_vae) != -1) {
                         vae_path.push(SD['sd_modules'][i])
@@ -185,7 +186,7 @@ function main(selection) {
         }
         changeProgressText(str.progressUpdating[$.locale == 'ru' ? 'ru' : 'en'])
         updateProgress(0.1, 1)
-        if (!SD.setOptions(checkpoint, vae, vae_path)) throw new Error(str.errUpdating)
+        if (!SD.setOptions(checkpoint, vae, vae_path, memory)) throw new Error(str.errUpdating)
     }
     changeProgressText(str.progressGenerate[$.locale == 'ru' ? 'ru' : 'en'])
     if (cfg.autoResize && !isDitry) cfg.current.resize = autoScale(selection.bounds)
@@ -351,7 +352,7 @@ function dialogWindow(b, s) {
             var grVae = p.add("group{orientation:'column',alignChildren:['fill', 'center'],spacing:0,margins:0}"),
                 stVae = grVae.add('statictext');
             stVae.text = str.vae;
-            if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('.GGUF') == -1) {
+            if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('FLUX') == -1) {
                 var dlVae = grVae.add('dropdownlist{preferredSize:[285,-1]}')
                 if (SD['sd-vaes'].length) for (var i = 0; i < SD['sd-vaes'].length; i++) dlVae.add('item', SD['sd-vaes'][i])
                 dlVae.onChange = function () {
@@ -564,8 +565,36 @@ function dialogWindow(b, s) {
             stLess = grLess.add('statictext{preferredSize:[30,-1],justify:"right"}'),
             grAbove = grResizeSl.add("group{orientation:'row',alignChildren:['left', 'center'],spacing:0,margins:0,preferredSize:[100,-1]}"),
             slAbove = grAbove.add('slider{minvalue:1024,maxvalue:2048,preferredSize:[90,-1]}'),
-            stAbove = grAbove.add('statictext{preferredSize:[30,-1],justify:"right"}'),
-            chRecordSettings = w.add('checkbox'),
+            stAbove = grAbove.add('statictext{preferredSize:[30,-1],justify:"right"}');
+        if (SD.forgeUI) {
+            var pnMemory = w.add("panel{orientation:'column',alignChildren:['fill', 'top'],spacing:10,margins:10}"),
+                chMemory = pnMemory.add('checkbox'),
+                grMemory = pnMemory.add("group{orientation:'column',alignChildren:['fill', 'center'],spacing:5,margins:0}"),
+                grMemoryTitle = grMemory.add("group{orientation:'row',alignChildren:['left', 'center'],spacing:10,margins:0}"),
+                stMemoryTitle = grMemoryTitle.add('statictext{preferredSize:[180,-1]}'),
+                stMemoryValue = grMemoryTitle.add('statictext{preferredSize:[65,-1],justify:"right"}'),
+                slMemory = grMemory.add('slider{minvalue:128,maxvalue:4096}');
+            pnMemory.text = str.memory
+            chMemory.text = str.setMatrixMemory
+            stMemoryTitle.text = str.setMemory
+            grMemory.enabled = chMemory.value = cfg.control_memory
+            slMemory.value = stMemoryValue.text = cfg.forge_inference_memory
+            slMemory.addEventListener('keydown', memoryHandler)
+            slMemory.onChange = function () { stMemoryValue.text = cfg.forge_inference_memory = mathTrunc(this.value / 32) * 32 }
+            slMemory.onChanging = function () { slMemory.onChange() }
+            slMemory.addEventListener('keydown', resizeHandler)
+            chMemory.onClick = function () { cfg.control_memory = grMemory.enabled = this.value }
+            function memoryHandler(evt) {
+                if (evt.shiftKey) {
+                    if (evt.keyIdentifier == 'Right' || evt.keyIdentifier == 'Up') {
+                        evt.target.value = Math.floor(evt.target.value / 256) * 256 + 255
+                    } else if (evt.keyIdentifier == 'Left' || evt.keyIdentifier == 'Down') {
+                        evt.target.value = Math.ceil(evt.target.value / 256) * 256 - 255
+                    }
+                }
+            }
+        }
+        var chRecordSettings = w.add('checkbox'),
             grBn = w.add("group{orientation:'row',alignChildren:['center', 'center'],spacing:10,margins:[0, 10, 0, 0]}"),
             ok = grBn.add('button', undefined, undefined, { name: 'ok' });
         chAutoResize.text = str.autoResizeCaption
@@ -794,6 +823,7 @@ function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
                 SdCfg.forgeUI = true;
                 SdCfg['forge_additional_modules'] = [];
                 for (var i = 0; i < result['forge_additional_modules'].length; i++) SdCfg['forge_additional_modules'].push(result['forge_additional_modules'][i].replace(/\\/g, '\\\\'))
+                SdCfg['forge_inference_memory'] = result['forge_inference_memory']
             }
         } else { throw new Error(str.errSettings + 'sdapi/v1/options' + str.errTimeout) }
         var result = sendMessage({ type: 'get', message: 'sdapi/v1/sd-models' }, true);
@@ -832,11 +862,14 @@ function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
     this.exit = function () {
         sendMessage({ type: 'exit' })
     }
-    this.setOptions = function (checkpoint, vae, vae_path) {
+    this.setOptions = function (checkpoint, vae, vae_path, memory) {
         var message = {}
         message['sd_model_checkpoint'] = checkpoint ? checkpoint.replace(/\\/g, '\\\\') : null
         if (!SdCfg.forgeUI) message['sd_vae'] = vae
-        if (SdCfg.forgeUI) message['forge_additional_modules'] = vae_path
+        if (SdCfg.forgeUI) {
+            message['forge_additional_modules'] = vae_path
+            message['forge_inference_memory'] = memory
+        }
         if (sendMessage({ type: 'update', message: message }, true, SD_RELOAD_CHECKPOINT_DELAY)) return true
         return false;
     }
@@ -1140,6 +1173,9 @@ function Config() {
     this.autoResizeLess = 512
     this.autoResizeAbove = 1408
     this.positivePreset = {}
+    this.control_memory = false
+    this.forge_inference_memory = 1024
+    this.forge_inference_memory_default = 1024
     this.negativePreset = {
         "SD": '(deformed, distorted, disfigured:1.3), poorly drawn, bad anatomy, wrong anatomy, extra limb, missing limb, floating limbs, (mutated hands and fingers:1.4), disconnected limbs, mutation, mutated, ugly, disgusting, blurry, amputation',
         "Realistic": '(deformed iris, deformed pupils, semi-realistic, cgi, 3d, render, sketch, cartoon, drawing, anime), text, cropped, out of frame, worst quality, low quality, jpeg artifacts, ugly, duplicate, morbid, mutilated, extra fingers, mutated hands, poorly drawn hands, poorly drawn face, mutation, deformed, blurry, dehydrated, bad anatomy, bad proportions, extra limbs, cloned face, disfigured, gross proportions, malformed limbs, missing arms, missing legs, extra arms, extra legs, fused fingers, too many fingers, long neck'
@@ -1290,7 +1326,7 @@ function Config() {
 function Locale() {
     this.actionMode = { ru: 'Не записывать параметры генерации в экшен', en: 'Do not record generation settings to action' }
     this.addVae = { ru: '+ добавить VAE/TextEncoder', en: '+ add VAE/TextEncoder' }
-    this.apply = { ru: 'Применить настройки', en: 'Apply settingsa' }
+    this.apply = { ru: 'Применить настройки', en: 'Apply settings' }
     this.autoResize = { ru: 'Авто масштаб', en: 'Auto resize' }
     this.autoResizeCaption = { ru: 'Масштаб зависит от размера выделения', en: 'Set scale value based on selection size' }
     this.brush = { ru: 'Настройки кисти', en: 'Brush settings' }
@@ -1344,4 +1380,7 @@ function Locale() {
     this.strength = 'Denoising strength'
     this.translate = { ru: 'перевести: ', en: 'translate: ' }
     this.vae = 'SD VAE'
+    this.memory = { ru: 'Память GPU', en: 'GPU Memory' }
+    this.setMatrixMemory = { ru: 'Установить размер памяти для вычисления матриц:', en: 'Set memory size for matrix computation:' }
+    this.setMemory = "Inference memory (Mb):"
 }

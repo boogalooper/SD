@@ -134,9 +134,9 @@ def start_local_server():
                         if "sd_vae" in data and data["sd_vae"]!=None:
                             options["sd_vae"] = data["sd_vae"]
                         if "forge_additional_modules" in data and data["forge_additional_modules"]!=None:
-                            options["forge_additional_modules"] = data[
-                                "forge_additional_modules"
-                            ]
+                            options["forge_additional_modules"] = data["forge_additional_modules"]
+                        if "forge_inference_memory" in data and data["forge_inference_memory"]!=None:
+                            options["forge_inference_memory"] = int(data["forge_inference_memory"])
                         payload = json.dumps(options).encode("utf-8")
                         req = urllib.request.Request(
                             f"http://{SD_HOST}:{SD_PORT}/sdapi/v1/options",
