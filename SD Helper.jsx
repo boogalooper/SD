@@ -14,7 +14,7 @@
 </javascriptresource>
 // END__HARVEST_EXCEPTION_ZSTRING
 */
-const ver = 0.352,
+const ver = 0.353,
     SD_HOST = '127.0.0.1',
     SD_PORT = 7860,
     API_HOST = '127.0.0.1',
@@ -198,8 +198,8 @@ function main(selection) {
     var payload = {
         'input': f.fsName.replace(/\\/g, '\\\\'),
         'output': p.fsName.replace(/\\/g, '\\\\'),
-        'prompt': cfg.current.prompt.toString(),
-        'negative_prompt': cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('FLUX') == -1 ? cfg.current.negative_prompt.toString() : '',
+        'prompt': cfg.current.prompt.toString().replace(/[^A-Za-z0-9.,()\- ]/g, ''),
+        'negative_prompt': cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('FLUX') == -1 ? cfg.current.negative_prompt.toString().replace(/[^A-Za-z0-9.,()\- ]/g, '') : '',
         'sampler_name': cfg.current.sampler_name,
         'scheduler': cfg.current.scheduler,
         'cfg_scale': cfg.current.cfg_scale,
