@@ -7,8 +7,8 @@
 </javascriptresource>
 // END__HARVEST_EXCEPTION_ZSTRING
 */
-const SD_Output = 'c:\\Users\\Dmitry\\stable-diffusion-webui\\outputs',
-    BRUSH_OPACITY = 50,
+const SD_Output = ['c:/Users/Dmitry/Fooocus_win64_2-6-0/Fooocus/outputs', 'c:/Users/Dmitry/ForgeUI/webui/outputs'],
+    BRUSH_OPACITY = 60,
     LAYER_NAME = "SD generated image";
 var doc = new AM('document'),
     lr = new AM('layer'),
@@ -23,31 +23,34 @@ function main() {
     try { runMode = (d = app.playbackParameters).getBoolean(d.getKey(0)) } catch (e) { }
     var currentChannel = findSDChannel(LAYER_NAME);
     if (doc.hasProperty('selection') || currentChannel) {
-        var pth = browseFolder(new Folder(SD_Output));
+        var pth = browseFolder(SD_Output);
         if (pth.length) {
             pth.sort(function (x, y) {
                 return x.time < y.time ? 1 : -1
             });
             if (currentChannel && !doc.hasProperty('selection')) doc.channelToSelection(currentChannel)
             var bounds = doc.descToObject(doc.getProperty('selection').value);
-            doc.place(pth[0].file)
-            var placedBounds = doc.descToObject(lr.getProperty('bounds').value);
-            var dW = (bounds.right - bounds.left) / (placedBounds.right - placedBounds.left);
-            var dH = (bounds.bottom - bounds.top) / (placedBounds.bottom - placedBounds.top)
-            lr.transform(dW * 100, dH * 100);
-            lr.rasterize();
-            if (currentChannel) {
-                doc.channelToSelection(currentChannel)
-                doc.makeSelectionMask()
-                doc.deleteChannel(currentChannel)
-            } else {
-                lr.makeMask(true);
-            }
-            lr.setName(LAYER_NAME)
-            doc.resetSwatches()
-            doc.selectBrush();
-            doc.setBrushOpacity(BRUSH_OPACITY)
-            pth[0].file.remove();
+            try {
+                doc.place(pth[0].file)
+                var placedBounds = doc.descToObject(lr.getProperty('bounds').value);
+                var dW = (bounds.right - bounds.left) / (placedBounds.right - placedBounds.left);
+                var dH = (bounds.bottom - bounds.top) / (placedBounds.bottom - placedBounds.top)
+                lr.transform(dW * 100, dH * 100);
+                lr.rasterize();
+                if (currentChannel) {
+                    doc.channelToSelection(currentChannel)
+                    doc.makeSelectionMask()
+                    doc.deleteChannel(currentChannel)
+                } else {
+                    lr.makeMask(true);
+                }
+                lr.setName(LAYER_NAME)
+                doc.resetSwatches()
+                doc.selectBrush();
+                doc.setBrushOpacity(BRUSH_OPACITY)
+                pth[0].file.remove();
+            } catch (e) { }
+
         }
     }
 }
@@ -74,14 +77,13 @@ function findAllFiles(srcFolder, fileObj, useSubfolders) {
     }
 }
 function browseFolder(fol) {
-    if (!fol) fol = (new Folder()).selectDlg()
-    if (fol) {
-        if (fol.exists) {
-            var pth = [];
-            findAllFiles(fol, pth, true)
-            return pth
-        }
+    if (!fol.length) fol = [(new Folder()).selectDlg()]
+    var pth = [];
+    for (a in fol) {
+        var cur = new Folder(fol[a]);
+        if (cur.exists) findAllFiles(cur, pth, true)
     }
+    return pth
 }
 function findSDChannel(title) {
     var idx = 1;

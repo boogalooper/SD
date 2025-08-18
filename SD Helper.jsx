@@ -14,7 +14,7 @@
 </javascriptresource>
 // END__HARVEST_EXCEPTION_ZSTRING
 */
-const ver = 0.34,
+const ver = 0.352,
     SD_HOST = '127.0.0.1',
     SD_PORT = 7860,
     API_HOST = '127.0.0.1',
@@ -22,9 +22,11 @@ const ver = 0.34,
     API_PORT_LISTEN = 6321,
     API_FILE = 'sd-webui-api v2.pyw',
     LAYER_NAME = 'SD generated image',
-    SD_GET_OPTIONS_DELAY = 3000, // максимальное время ожидания ответа Stable Diffusion при запросе текущих параметров
-    SD_RELOAD_CHECKPOINT_DELAY = 12000, // максимальное время ожидания перезагрузки checkpoint или vae
-    SD_GENERATION_DELAY = 90000; // максимальное время ожидания генерации изображения
+    SD_GET_OPTIONS_DELAY = 3000, // максимальное время ожидания ответа Stable Diffusion при запросе текущих параметров (при превышении скрипт завершит работу)
+    SD_RELOAD_CHECKPOINT_DELAY = 12000, // максимальное время ожидания перезагрузки checkpoint или vae (при превышении скрипт завершит работу)
+    SD_GENERATION_DELAY = 160000, // максимальное время ожидания генерации изображения (при превышении скрипт завершит работу)
+    FLUX_KONTEXT = 'forge2_flux_kontext',
+    FLUX_CACHE = 'sd-forge-blockcache';
 var time = (new Date).getTime(),
     SD = new SDApi(SD_HOST, API_HOST, SD_PORT, API_PORT_SEND, API_PORT_LISTEN, new File((new File($.fileName)).path + '/' + API_FILE)),
     s2t = stringIDToTypeID,
@@ -41,7 +43,7 @@ $.localize = true
 if (ScriptUI.environment.keyboardState.shiftKey) $.setenv('dialogMode', true)
 try { init() } catch (e) {
     SD.exit()
-    alert(e)
+    alert(e, undefined, true)
     $.setenv('dialogMode', true)
     isCancelled = true;
 }
@@ -197,7 +199,7 @@ function main(selection) {
         'input': f.fsName.replace(/\\/g, '\\\\'),
         'output': p.fsName.replace(/\\/g, '\\\\'),
         'prompt': cfg.current.prompt.toString(),
-        'negative_prompt': cfg.current.negative_prompt.toString(),
+        'negative_prompt': cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('FLUX') == -1 ? cfg.current.negative_prompt.toString() : '',
         'sampler_name': cfg.current.sampler_name,
         'scheduler': cfg.current.scheduler,
         'cfg_scale': cfg.current.cfg_scale,
@@ -208,6 +210,8 @@ function main(selection) {
         'denoising_strength': cfg.current.denoising_strength,
         'n_iter': 1,
     };
+    if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') != -1 && SD.extensions[FLUX_KONTEXT]) payload['kontext'] = true;
+    if (SD.extensions[FLUX_CACHE] && cfg.forge_control_cache) payload['cache'] = cfg.forge_cache;
     if (cfg.current.inpaintingFill != -1) {
         payload['mask'] = f1.fsName.replace(/\\/g, '\\\\')
         payload['inpainting_fill'] = cfg.current.inpaintingFill + 1
@@ -311,7 +315,7 @@ function dialogWindow(b, s) {
         if (result == 1) {
             var changed = false;
             for (var a in tempSettings) {
-                if (a.indexOf('show') == -1 && a.indexOf('autoResize') == -1) continue;
+                if (a.indexOf('show') == -1 && a.indexOf('autoResize') == -1 && a.indexOf('forge_control_cache')) continue;
                 if (tempSettings[a] != cfg[a]) {
                     changed = true
                     break;
@@ -332,15 +336,16 @@ function dialogWindow(b, s) {
             p.remove(p.children[0])
         }
         if (cfg.showSd_vae) vae(p)
-        if (cfg.showInpaintingFill) inpaintingFill(p)
+        if (cfg.showInpaintingFill && cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('FLUX') == -1) inpaintingFill(p)
         if (cfg.showPrompt) prompt(p)
-        if (cfg.showNegative_prompt) negativePrompt(p)
+        if (cfg.showNegative_prompt && cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('FLUX') == -1) negativePrompt(p);
         if (cfg.showSampler_name) sampler(p)
         if (cfg.showScheduler) shelduler(p)
         if (cfg.showSteps) steps(p)
         if (cfg.showCfg_scale) cfgScale(p)
         if (cfg.showResize) resizeScale(p)
-        denoisingStrength(p)
+        if (cfg.forge_control_cache && SD.extensions[FLUX_CACHE]) cache(p)
+        if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') == -1 && SD.extensions[FLUX_KONTEXT]) denoisingStrength(p)
         function inpaintingFill(p) {
             var grInpainting = p.add("group{orientation:'column',alignChildren:['fill', 'center'],spacing:0,margins:0}"),
                 stInpainting = grInpainting.add('statictext'),
@@ -348,6 +353,7 @@ function dialogWindow(b, s) {
             stInpainting.text = str.fill
             dlInpainting.onChange = function () { cfg.current.inpaintingFill = this.selection.index - 1 }
             dlInpainting.selection = cfg.current.inpaintingFill + 1
+            if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') != -1 && SD.extensions[FLUX_KONTEXT]) grInpainting.enabled = false
         }
         function vae(p) {
             var grVae = p.add("group{orientation:'column',alignChildren:['fill', 'center'],spacing:0,margins:0}"),
@@ -518,6 +524,18 @@ function dialogWindow(b, s) {
                 stResize.text = setTitle()
             }
         }
+        function cache(p) {
+            var grCache = p.add("group{orientation:'column',alignChildren:['fill', 'center'],spacing:5,margins:0}"),
+                grCacheTitle = grCache.add("group{orientation:'row',alignChildren:['left', 'center'],spacing:10,margins:0}"),
+                stCacheTitle = grCacheTitle.add('statictext{preferredSize:[220,-1]}'),
+                stCacheValue = grCacheTitle.add('statictext{preferredSize:[65,-1],justify:"right"}'),
+                slCache = grCache.add('slider{minvalue:0,maxvalue:100}');
+            stCacheTitle.text = str.cacheTitle
+            slCache.value = cfg.current.forge_cache * 100
+            stCacheValue.text = cfg.current.forge_cache
+            slCache.onChange = function () { stCacheValue.text = cfg.current.forge_cache = mathTrunc(this.value) / 100 }
+            slCache.onChanging = function () { slCache.onChange() }
+        }
         function denoisingStrength(p) {
             var grStrength = p.add("group{orientation:'column',alignChildren:['fill', 'top'],spacing:0,margins:0}"),
                 grStrengthTitle = grStrength.add("group{orientation:'row',alignChildren:['left', 'center'],spacing:10,margins:0}"),
@@ -532,7 +550,7 @@ function dialogWindow(b, s) {
             slStrength.onChanging = function () { slStrength.onChange() }
             slStrength.addEventListener('keydown', commonHandler)
             slStrength.value = cfg.current.denoising_strength * 100
-            stStrengthValue.text = cfg.current.denoising_strength
+            stStrengthValue.text = cfg.current.denoising_strength;
         }
     }
     function settingsWindow(p, cfg) {
@@ -574,17 +592,22 @@ function dialogWindow(b, s) {
                 grMemoryTitle = grMemory.add("group{orientation:'row',alignChildren:['left', 'center'],spacing:10,margins:0}"),
                 stMemoryTitle = grMemoryTitle.add('statictext{preferredSize:[180,-1]}'),
                 stMemoryValue = grMemoryTitle.add('statictext{preferredSize:[65,-1],justify:"right"}'),
-                slMemory = grMemory.add('slider{minvalue:128,maxvalue:4096}');
-            pnMemory.text = str.memory
+                slMemory = grMemory.add('slider{minvalue:128,maxvalue:4096}'),
+                chCache = pnMemory.add('checkbox');
+            pnMemory.text = str.advanced
             chMemory.text = str.setMatrixMemory
             stMemoryTitle.text = str.setMemory
             grMemory.enabled = chMemory.value = cfg.control_memory
             slMemory.value = stMemoryValue.text = cfg.forge_inference_memory
             slMemory.addEventListener('keydown', memoryHandler)
+            slMemory.addEventListener('keydown', memoryHandler)
             slMemory.onChange = function () { stMemoryValue.text = cfg.forge_inference_memory = mathTrunc(this.value / 32) * 32 }
             slMemory.onChanging = function () { slMemory.onChange() }
-            slMemory.addEventListener('keydown', resizeHandler)
             chMemory.onClick = function () { cfg.control_memory = grMemory.enabled = this.value }
+            chCache.text = str.cache
+            chCache.enabled = SD.extensions[FLUX_CACHE]
+            chCache.value = cfg.forge_control_cache
+            chCache.onClick = function () { cfg.forge_control_cache = this.value }
             function memoryHandler(evt) {
                 if (evt.shiftKey) {
                     if (evt.keyIdentifier == 'Right' || evt.keyIdentifier == 'Up') {
@@ -659,6 +682,8 @@ function dialogWindow(b, s) {
         slAbove.onChange = function () { stAbove.text = cfg.autoResizeAbove = mathTrunc(this.value / 32) * 32 }
         slAbove.onChanging = function () { slAbove.onChange() }
         slAbove.addEventListener('keydown', resizeHandler)
+        chNegative.enabled = (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('FLUX') == -1)
+        chInpaitnigFill.enabled = (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('FLUX') == -1)
         function resizeHandler(evt) {
             if (evt.shiftKey) {
                 if (evt.keyIdentifier == 'Right' || evt.keyIdentifier == 'Up') {
@@ -690,21 +715,21 @@ function dialogWindow(b, s) {
             }
         }
         bnSave.onClick = function () {
-            cfg.putPreset(context, dlPreset.selection.text, panel.children[2].text, "save")
+            cfg.putPreset(context, dlPreset.selection.text, panel.children[2].text, 'save')
             cfg.checkPresetIntegrity(context, panel)
         }
         bnSaveAs.onClick = function () {
             var cur = panel.children[2].text
             nm = prompt(str.presetPromt, dlPreset.selection.text + str.presetCopy, str.presetNew);
-            if (nm != null && nm != "") {
-                if (cfg.getPreset(context, nm) == "" && nm != str.presetDefailt) {
-                    cfg.putPreset(context, nm, cur, "add")
+            if (nm != null && nm != '') {
+                if (cfg.getPreset(context, nm) == '' && nm != str.presetDefailt) {
+                    cfg.putPreset(context, nm, cur, 'add')
                     loadPresets()
                     dlPreset.selection = dlPreset.find(nm)
                 } else {
                     if (nm != str.presetDefailt) {
                         if (confirm(localize(str.errPreset, nm), false, str.presetNew)) {
-                            cfg.putPreset(context, nm, cur, "save")
+                            cfg.putPreset(context, nm, cur, 'save')
                             dlPreset.selection = dlPreset.find(nm)
                         }
                     } else {
@@ -716,7 +741,7 @@ function dialogWindow(b, s) {
         }
         bnDel.onClick = function () {
             var num = dlPreset.selection.index;
-            cfg.putPreset(context, dlPreset.selection.text, panel.children[2].text, "delete")
+            cfg.putPreset(context, dlPreset.selection.text, panel.children[2].text, 'delete')
             loadPresets()
             dlPreset.selection = num > dlPreset.items.length - 1 ? dlPreset.items.length - 1 : num
             cfg.checkPresetIntegrity(context, panel)
@@ -808,6 +833,9 @@ function findSDChannel(title) {
 function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
     this.forgeUI = false;
     var SdCfg = this;
+    SdCfg.extensions = {};
+    SdCfg.extensions[FLUX_KONTEXT] = false;
+    SdCfg.extensions[FLUX_CACHE] = false;
     this.initialize = function () {
         if (!apiFile.exists)
             throw new Error(str.module + apiFile.fsName + str.notFound)
@@ -858,6 +886,13 @@ function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
             if (!result.length) throw new Error(str.errList + 'sdapi/v1/samplers' + str.errExists)
             for (var i = 0; i < result.length; i++) SdCfg['samplers'].push(result[i].name)
         } else { throw new Error(str.errSettings + 'sdapi/v1/samplers' + str.errTimeout) }
+        if (SdCfg.forgeUI) {
+            var result = sendMessage({ type: 'get', message: 'sdapi/v1/extensions' }, true);
+            if (result) {
+                if (!result.length) throw new Error(str.errList + 'sdapi/v1/extensions' + str.errExists)
+                for (var i = 0; i < result.length; i++) if (SdCfg.extensions[result[i].name] != undefined) SdCfg.extensions[result[i].name] = result[i].enabled
+            } else { throw new Error(str.errSettings + 'sdapi/v1/extensions' + str.errTimeout) }
+        }
         return true
     }
     this.exit = function () {
@@ -1154,6 +1189,7 @@ function Config() {
         this.inpaintingFill = -1
         this.positivePreset = ''
         this.negativePreset = 'SD'
+        this.forge_cache = 0.1
     }
     settingsObj = this;
     this.current = new settingsObj.checkpointSettings();
@@ -1181,9 +1217,10 @@ function Config() {
     this.control_memory = false
     this.forge_inference_memory = 1024
     this.forge_inference_memory_default = 1024
+    this.forge_control_cache = false
     this.negativePreset = {
-        "SD": '(deformed, distorted, disfigured:1.3), poorly drawn, bad anatomy, wrong anatomy, extra limb, missing limb, floating limbs, (mutated hands and fingers:1.4), disconnected limbs, mutation, mutated, ugly, disgusting, blurry, amputation',
-        "Realistic": '(deformed iris, deformed pupils, semi-realistic, cgi, 3d, render, sketch, cartoon, drawing, anime), text, cropped, out of frame, worst quality, low quality, jpeg artifacts, ugly, duplicate, morbid, mutilated, extra fingers, mutated hands, poorly drawn hands, poorly drawn face, mutation, deformed, blurry, dehydrated, bad anatomy, bad proportions, extra limbs, cloned face, disfigured, gross proportions, malformed limbs, missing arms, missing legs, extra arms, extra legs, fused fingers, too many fingers, long neck'
+        'SD': '(deformed, distorted, disfigured:1.3), poorly drawn, bad anatomy, wrong anatomy, extra limb, missing limb, floating limbs, (mutated hands and fingers:1.4), disconnected limbs, mutation, mutated, ugly, disgusting, blurry, amputation',
+        'Realistic': '(deformed iris, deformed pupils, semi-realistic, cgi, 3d, render, sketch, cartoon, drawing, anime), text, cropped, out of frame, worst quality, low quality, jpeg artifacts, ugly, duplicate, morbid, mutilated, extra fingers, mutated hands, poorly drawn hands, poorly drawn face, mutation, deformed, blurry, dehydrated, bad anatomy, bad proportions, extra limbs, cloned face, disfigured, gross proportions, malformed limbs, missing arms, missing legs, extra arms, extra legs, fused fingers, too many fingers, long neck'
     }
     this.getScriptSettings = function (fromAction) {
         if (fromAction) { var d = playbackParameters }
@@ -1284,15 +1321,15 @@ function Config() {
     this.putPreset = function (context, key, val, mode) {
         var output = this.getPresetList(context)
         switch (mode) {
-            case "add":
+            case 'add':
                 output.push({ key: key, val: val })
                 break;
-            case "save":
+            case 'save':
                 for (var i = 0; i < output.length; i++) {
                     if (output[i].key == key) { output[i].val = val; break; }
                 }
                 break;
-            case "delete":
+            case 'delete':
                 for (var i = 0; i < output.length; i++) {
                     if (output[i].key == key) { output.splice(i, 1); break; }
                 }
@@ -1304,7 +1341,7 @@ function Config() {
     }
     function getFromFile() {
         var d = new ActionDescriptor(),
-            f = new File(app.preferencesFolder + "/SD Helper.desc");
+            f = new File(app.preferencesFolder + '/SD Helper.desc');
         try {
             if (f.exists) {
                 f.open('r')
@@ -1317,7 +1354,7 @@ function Config() {
         return d
     }
     function saveToFile(d) {
-        var f = new File(app.preferencesFolder + "/SD Helper.desc");
+        var f = new File(app.preferencesFolder + '/SD Helper.desc');
         try {
             f.open('w')
             f.encoding = 'BINARY'
@@ -1339,11 +1376,11 @@ function Locale() {
     this.checkpoint = 'Stable Diffusion checkpoint'
     this.errAnswer = { ru: 'не отвечает!', en: 'not answering!' }
     this.errConnection = { ru: 'Невозможно установить соединение c ', en: 'Impossible to establish a connection with ' }
-    this.errDefalutPreset = { ru: "Используйте другое имя при создании пресета!", en: "Use a different name when creating a preset!" }
+    this.errDefalutPreset = { ru: 'Используйте другое имя при создании пресета!', en: 'Use a different name when creating a preset!' }
     this.errExists = { ru: ' пуст!\nУбедитесь что они добавлены в папку Stable Diffusion', en: ' is empty!\nMake sure that it exists in the Stable Diffusion folder' }
     this.errGenerating = { ru: 'Произошла ошибка в процессе генерации изображения!', en: 'An error occurred in the process of generating the image!' }
     this.errList = { ru: 'Список ', en: 'List ' }
-    this.errPreset = { ru: "Набор с именем \"%1\" уже существует. Перезаписать?", en: "A set with the name \"%1\" already exists. Overwrite?" }
+    this.errPreset = { ru: 'Набор с именем \'%1\' уже существует. Перезаписать?', en: 'A set with the name \'%1\' already exists. Overwrite?' }
     this.errSettings = { ru: 'Невозможно получить параметры ', en: 'Impossible to get the settings ' }
     this.errTimeout = { ru: '\nПревышено время ожидания ответа!', en: '\nExceeding the response time!' }
     this.errTranslate = { ru: 'Модуль перевода недоступен!', en: 'The translation module is not available!' }
@@ -1359,14 +1396,14 @@ function Locale() {
     this.notFound = { ru: '\nне найден!', en: 'not found!' }
     this.opacity = { ru: 'Непрозрачность кисти', en: 'Brush opacity' }
     this.output = { ru: 'Параметры изображения', en: 'Image settings' }
-    this.presetAdd = { ru: "Добавить", en: "Add new" }
-    this.presetCopy = { ru: " копия", en: " copy" }
-    this.presetDefailt = { ru: "по-умолчанию", en: "default" }
-    this.presetDelete = { ru: "Удалить", en: "Delete" }
-    this.presetNew = { ru: "Сохранение пресета", en: "Saving a preset" }
-    this.presetPromt = { ru: "Укажите имя пресета\nБудут сохранены настройки имени подкаталога и файла.", en: "Specify the name of the preset\nSubdirectory and file name settings will be saved." }
-    this.presetRefresh = { ru: "Обновить", en: "Refresh" }
-    this.presetSave = { ru: "Сохранить", en: "Save" }
+    this.presetAdd = { ru: 'Добавить', en: 'Add new' }
+    this.presetCopy = { ru: ' копия', en: ' copy' }
+    this.presetDefailt = { ru: 'по-умолчанию', en: 'default' }
+    this.presetDelete = { ru: 'Удалить', en: 'Delete' }
+    this.presetNew = { ru: 'Сохранение пресета', en: 'Saving a preset' }
+    this.presetPromt = { ru: 'Укажите имя пресета\nБудут сохранены настройки имени подкаталога и файла.', en: 'Specify the name of the preset\nSubdirectory and file name settings will be saved.' }
+    this.presetRefresh = { ru: 'Обновить', en: 'Refresh' }
+    this.presetSave = { ru: 'Сохранить', en: 'Save' }
     this.progressDocument = { ru: 'Подготовка документа...', en: 'Preparation of a document...' }
     this.progressGenerate = { ru: 'Генерация изображения...', en: 'Image generation...' }
     this.progressPlace = { ru: 'Вставка изображения...', en: 'Image placing...' }
@@ -1385,7 +1422,9 @@ function Locale() {
     this.strength = 'Denoising strength'
     this.translate = { ru: 'перевести: ', en: 'translate: ' }
     this.vae = 'SD VAE'
-    this.memory = { ru: 'Память GPU', en: 'GPU Memory' }
     this.setMatrixMemory = { ru: 'Установить размер памяти для вычисления матриц:', en: 'Set memory size for matrix computation:' }
-    this.setMemory = "Inference memory (Mb):"
+    this.setMemory = 'Inference memory (Mb):'
+    this.advanced = { ru: 'Расширенные нестройки', en: 'Advanced settings' }
+    this.cache = { ru: 'Использовать First Block Cache (extension)', en: 'Use Block Cache (extension)' }
+    this.cacheTitle = { ru: 'Порог кэширования:', en: 'Caching threshold:' }
 }

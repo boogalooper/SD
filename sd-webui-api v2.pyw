@@ -129,14 +129,27 @@ def start_local_server():
                         f"http://{SD_HOST}:{SD_PORT}/sdapi/v1/options"
                     ) as response:
                         options = json.load(response)
-                        if "sd_model_checkpoint" in data and data["sd_model_checkpoint"]!=None:
+                        if (
+                            "sd_model_checkpoint" in data
+                            and data["sd_model_checkpoint"] != None
+                        ):
                             options["sd_model_checkpoint"] = data["sd_model_checkpoint"]
-                        if "sd_vae" in data and data["sd_vae"]!=None:
+                        if "sd_vae" in data and data["sd_vae"] != None:
                             options["sd_vae"] = data["sd_vae"]
-                        if "forge_additional_modules" in data and data["forge_additional_modules"]!=None:
-                            options["forge_additional_modules"] = data["forge_additional_modules"]
-                        if "forge_inference_memory" in data and data["forge_inference_memory"]!=None:
-                            options["forge_inference_memory"] = int(data["forge_inference_memory"])
+                        if (
+                            "forge_additional_modules" in data
+                            and data["forge_additional_modules"] != None
+                        ):
+                            options["forge_additional_modules"] = data[
+                                "forge_additional_modules"
+                            ]
+                        if (
+                            "forge_inference_memory" in data
+                            and data["forge_inference_memory"] != None
+                        ):
+                            options["forge_inference_memory"] = int(
+                                data["forge_inference_memory"]
+                            )
                         payload = json.dumps(options).encode("utf-8")
                         req = urllib.request.Request(
                             f"http://{SD_HOST}:{SD_PORT}/sdapi/v1/options",
@@ -153,7 +166,8 @@ def start_local_server():
                 elif message["type"] == "payload":
                     print("Получен запрос на генерацию изображения")
                     data = message["message"]
-                    init_image = [encode_file_to_base64(data["input"])]
+                    init_image = encode_file_to_base64(data["input"])
+                    entrypoint = "sdapi/v1/img2img"
                     payload = {
                         "prompt": data["prompt"],
                         "negative_prompt": data["negative_prompt"],
@@ -166,7 +180,7 @@ def start_local_server():
                         "height": data["height"],
                         "denoising_strength": data["denoising_strength"],
                         "n_iter": 1,
-                        "init_images": init_image,
+                        "init_images": [init_image],
                     }
                     if "mask" in data:
                         payload["mask"] = encode_file_to_base64(data["mask"])
@@ -175,8 +189,39 @@ def start_local_server():
                         payload["inpaint_full_res"] = 0
                         payload["initial_noise_multiplier"] = 1
                         payload["resize_mode"] = 2
+                    if "kontext" in data:
+                        payload["alwayson_scripts"] = {
+                            "Forge FluxKontext": {
+                                "args": [
+                                    True,
+                                    init_image,
+                                    None,
+                                    "to output",
+                                    False,
+                                ]
+                            },
+                        }
+                        del payload["init_images"]
+                        del payload["negative_prompt"]
+                        entrypoint = "sdapi/v1/txt2img"
+                    if "cache" in data:
+                        if "alwayson_scripts" in payload:
+                            pass
+                        else:
+                            payload["alwayson_scripts"] = {}
+                        cur = payload["alwayson_scripts"]    
+                        cur["First Block Cache / TeaCache"] = {
+                            "args": [
+                                True,
+                                "First Block Cache",
+                                float(data["cache"]),
+                                1,
+                                0,
+                                False,
+                            ]
+                        }
                     outfile = call_generate_api(
-                        "sdapi/v1/img2img", payload, SD_HOST, SD_PORT, data["output"]
+                        entrypoint, payload, SD_HOST, SD_PORT, data["output"]
                     )
                     print("Генерация завершена!")
                     send_data_to_jsx({"type": "answer", "message": outfile})
