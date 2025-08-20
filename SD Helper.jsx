@@ -201,7 +201,7 @@ function main(selection) {
         'input': f.fsName.replace(/\\/g, '\\\\'),
         'output': p.fsName.replace(/\\/g, '\\\\'),
         'prompt': cfg.current.prompt.toString().replace(/[^A-Za-z0-9.,()\-<>: ]/g, ''),
-        'negative_prompt': cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('FLUX') == -1 ? cfg.current.negative_prompt.toString().replace(/[^A-Za-z0-9.,()\- ]/g, '') : '',
+        'negative_prompt': cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('FLUX') == -1 ? cfg.current.negative_prompt.toString().replace(/[^A-Za-z0-9.,()\-<>: ]/g, '') : '',
         'sampler_name': cfg.current.sampler_name,
         'scheduler': cfg.current.scheduler,
         'cfg_scale': cfg.current.cfg_scale,
