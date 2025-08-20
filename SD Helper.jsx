@@ -213,7 +213,7 @@ function main(selection) {
         'n_iter': 1,
     };
     if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') != -1 && SD.extensions[FLUX_KONTEXT]) payload['kontext'] = true;
-    if (SD.extensions[FLUX_CACHE] && cfg.forge_control_cache) payload['cache'] = cfg.forge_cache;
+    if (SD.extensions[FLUX_CACHE] && cfg.forge_control_cache &&cfg.current.forge_cache>0) payload['cache'] = cfg.forge_cache;
     if (cfg.current.inpaintingFill != -1) {
         payload['mask'] = f1.fsName.replace(/\\/g, '\\\\')
         payload['inpainting_fill'] = cfg.current.inpaintingFill + 1
