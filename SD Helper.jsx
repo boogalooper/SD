@@ -14,7 +14,7 @@
 </javascriptresource>
 // END__HARVEST_EXCEPTION_ZSTRING
 */
-const ver = 0.353,
+const ver = 0.354,
     SD_HOST = '127.0.0.1',
     SD_PORT = 7860,
     API_HOST = '127.0.0.1',
@@ -79,7 +79,7 @@ function init() {
                         cfg.putScriptSettings(true)
                         SD.setOptions(null, null, null, 64)
                         SD['forge_inference_memory'] = 64
-                        doForcedProgress(str.progressGenerate[$.locale == 'ru' ? 'ru' : 'en'], 'main(currentSelection)')
+                        main(currentSelection);
                         SD.exit()
                     }
                 }
@@ -87,7 +87,7 @@ function init() {
                 if (SD.initialize()) {
                     $.setenv('dialogMode', false)
                     cfg.putScriptSettings(true)
-                    doForcedProgress(str.progressGenerate[$.locale == 'ru' ? 'ru' : 'en'], 'main(currentSelection)')
+                    main(currentSelection);
                     SD.exit()
                 } else {
                     SD.exit()
@@ -113,12 +113,14 @@ function init() {
                         if (!cfg.recordToAction) cfg.putScriptSettings()
                         SD.setOptions(null, null, null, 64)
                         SD['forge_inference_memory'] = 64
-                        doForcedProgress(str.progressGenerate[$.locale == 'ru' ? 'ru' : 'en'], 'main(currentSelection)')
+                        main(currentSelection);
                         SD.exit()
                     }
                 }
             } else {
-                if (SD.initialize()) { doForcedProgress(str.progressGenerate[$.locale == 'ru' ? 'ru' : 'en'], 'main(currentSelection)') }
+                if (SD.initialize()) {
+                    main(currentSelection);
+                }
                 SD.exit()
             }
         }
@@ -198,7 +200,7 @@ function main(selection) {
     var payload = {
         'input': f.fsName.replace(/\\/g, '\\\\'),
         'output': p.fsName.replace(/\\/g, '\\\\'),
-        'prompt': cfg.current.prompt.toString().replace(/[^A-Za-z0-9.,()\- ]/g, ''),
+        'prompt': cfg.current.prompt.toString().replace(/[^A-Za-z0-9.,()\-<>: ]/g, ''),
         'negative_prompt': cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('FLUX') == -1 ? cfg.current.negative_prompt.toString().replace(/[^A-Za-z0-9.,()\- ]/g, '') : '',
         'sampler_name': cfg.current.sampler_name,
         'scheduler': cfg.current.scheduler,
@@ -910,7 +912,7 @@ function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
         return false;
     }
     this.sendPayload = function (payload) {
-        var result = sendMessage({ type: 'payload', message: payload }, true, SD_GENERATION_DELAY)
+        var result = sendMessage({ type: 'payload', message: payload }, true, SD_GENERATION_DELAY, 'Progress', str.progressGenerate)
         if (result) return result['message']
         return null;
     }
@@ -925,24 +927,46 @@ function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
         socket.close()
         return answer
     }
-    function sendMessage(o, getAnswer, delay) {
+    function sendMessage(o, getAnswer, delay, title, message) {
         var tcp = new Socket,
             delay = delay ? delay : SD_GET_OPTIONS_DELAY;
         tcp.open(apiHost + ':' + portSend, 'UTF-8')
         tcp.writeln(objectToJSON(o))
         tcp.close()
         if (getAnswer) {
+            if (title) {
+                var max = 30,
+                    w = new Window('palette', title),
+                    bar = w.add('progressbar', undefined, 0, max),
+                    stProgress = w.add('statictext', undefined, message);
+                stProgress.preferredSize = [350, 20]
+                stProgress.alignment = 'left'
+                bar.preferredSize = [350, 20]
+                bar.value = 0;
+                w.show();
+            }
             var t1 = (new Date).getTime(),
-                t2 = 0;
+                t2 = 0,
+                t3 = t1;
             var tcp = new Socket;
             if (tcp.listen(portListen, 'UTF-8')) {
                 for (; ;) {
-                    t2 = (new Date).getTime()
-                    if (t2 - t1 > delay) return null;
+                    t2 = (new Date).getTime();
+                    if (t2 - t1 > delay) {
+                        if (title) w.close();
+                        return null;
+                    }
+                    if (title && t2 - t3 > 250) {
+                        t3 = t2
+                        if (bar.value >= max) bar.value = 0;
+                        bar.value++;
+                        w.update();
+                    }
                     var answer = tcp.poll();
                     if (answer != null) {
                         var a = eval('(' + answer.readln() + ')');
                         answer.close();
+                        if (title) w.close()
                         return a;
                     }
                 }
@@ -1407,7 +1431,7 @@ function Locale() {
     this.progressDocument = { ru: 'Подготовка документа...', en: 'Preparation of a document...' }
     this.progressGenerate = { ru: 'Генерация изображения...', en: 'Image generation...' }
     this.progressPlace = { ru: 'Вставка изображения...', en: 'Image placing...' }
-    this.progressUpdating = { ru: 'Обновление параметров генерации...', en: 'Update generation parameters...' }
+    this.progressUpdating = { ru: 'Обновление параметров модели...', en: 'Update checkpoint options...' }
     this.prompt = 'Prompt'
     this.rasterize = { ru: 'Растеризовать сгенерированное изображение', en: 'Rasterize generated image' }
     this.removeVae = { ru: '- удалить VAE/TextEncoder', en: '- remove VAE/TextEncoder' }
