@@ -957,10 +957,11 @@ function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
                         if (title) w.close();
                         return null;
                     }
-                    if (title && t2 - t3 > 250) {
+                    if (title && t2 - t3 > 100) {
                         t3 = t2
+                        stProgress.text = message + ' ' + ((t2 - t1) / 1000) + ' s.'
                         if (bar.value >= max) bar.value = 0;
-                        bar.value = bar.value + 250;
+                        bar.value = bar.value + 100;
                         w.update();
                     }
                     var answer = tcp.poll();

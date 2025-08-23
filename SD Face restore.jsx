@@ -408,6 +408,7 @@ function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
                     if (title && t2 - t3 > 250) {
                         t3 = t2
                         if (bar.value >= max) bar.value = 0;
+                        stProgress.text = message + ' ' + ((t2 - t1) / 1000) + ' s.'
                         bar.value = bar.value + 250;
                         w.update();
                     }
