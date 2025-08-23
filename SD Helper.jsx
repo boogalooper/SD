@@ -14,7 +14,7 @@
 </javascriptresource>
 // END__HARVEST_EXCEPTION_ZSTRING
 */
-const ver = 0.354,
+const ver = 0.355,
     SD_HOST = '127.0.0.1',
     SD_PORT = 7860,
     API_HOST = '127.0.0.1',
@@ -26,12 +26,14 @@ const ver = 0.354,
     SD_RELOAD_CHECKPOINT_DELAY = 12000, // максимальное время ожидания перезагрузки checkpoint или vae (при превышении скрипт завершит работу)
     SD_GENERATION_DELAY = 180000, // максимальное время ожидания генерации изображения (при превышении скрипт завершит работу)
     FLUX_KONTEXT = 'forge2_flux_kontext',
-    FLUX_CACHE = 'sd-forge-blockcache';
+    FLUX_CACHE = 'sd-forge-blockcache',
+    UUID = '338cc304-fb6f-4b1f-8ad4-13bbd65f117c';
 var time = (new Date).getTime(),
     SD = new SDApi(SD_HOST, API_HOST, SD_PORT, API_PORT_SEND, API_PORT_LISTEN, new File((new File($.fileName)).path + '/' + API_FILE)),
     s2t = stringIDToTypeID,
     t2s = typeIDToStringID,
     cfg = new Config(),
+    dl = new Delay(),
     str = new Locale(),
     apl = new AM('application'),
     doc = new AM('document'),
@@ -213,7 +215,7 @@ function main(selection) {
         'n_iter': 1,
     };
     if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') != -1 && SD.extensions[FLUX_KONTEXT]) payload['kontext'] = true;
-    if (SD.extensions[FLUX_CACHE] && cfg.forge_control_cache &&cfg.current.forge_cache>0) payload['cache'] = cfg.forge_cache;
+    if (SD.extensions[FLUX_CACHE] && cfg.forge_control_cache && cfg.current.forge_cache > 0) payload['cache'] = cfg.forge_cache;
     if (cfg.current.inpaintingFill != -1) {
         payload['mask'] = f1.fsName.replace(/\\/g, '\\\\')
         payload['inpainting_fill'] = cfg.current.inpaintingFill + 1
@@ -912,7 +914,7 @@ function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
         return false;
     }
     this.sendPayload = function (payload) {
-        var result = sendMessage({ type: 'payload', message: payload }, true, SD_GENERATION_DELAY, 'Progress', str.progressGenerate)
+        var result = sendMessage({ type: 'payload', message: payload }, true, SD_GENERATION_DELAY, cfg.sd_model_checkpoint, str.progressGenerate, dl.getDelay(cfg.sd_model_checkpoint))
         if (result) return result['message']
         return null;
     }
@@ -927,7 +929,7 @@ function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
         socket.close()
         return answer
     }
-    function sendMessage(o, getAnswer, delay, title, message) {
+    function sendMessage(o, getAnswer, delay, title, message, max) {
         var tcp = new Socket,
             delay = delay ? delay : SD_GET_OPTIONS_DELAY;
         tcp.open(apiHost + ':' + portSend, 'UTF-8')
@@ -935,13 +937,12 @@ function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
         tcp.close()
         if (getAnswer) {
             if (title) {
-                var max = 30,
-                    w = new Window('palette', title),
+                var w = new Window('palette', title),
                     bar = w.add('progressbar', undefined, 0, max),
                     stProgress = w.add('statictext', undefined, message);
-                stProgress.preferredSize = [350, 20]
+                stProgress.preferredSize = [350, 20];
                 stProgress.alignment = 'left'
-                bar.preferredSize = [350, 20]
+                bar.preferredSize = [350, 20];
                 bar.value = 0;
                 w.show();
             }
@@ -959,14 +960,17 @@ function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
                     if (title && t2 - t3 > 250) {
                         t3 = t2
                         if (bar.value >= max) bar.value = 0;
-                        bar.value++;
+                        bar.value = bar.value + 250;
                         w.update();
                     }
                     var answer = tcp.poll();
                     if (answer != null) {
                         var a = eval('(' + answer.readln() + ')');
                         answer.close();
-                        if (title) w.close()
+                        if (title) {
+                            dl.saveDelay(cfg.sd_model_checkpoint, t2 - t1)
+                            w.close()
+                        }
                         return a;
                     }
                 }
@@ -1215,7 +1219,7 @@ function Config() {
         this.negativePreset = 'SD'
         this.forge_cache = 0.1
     }
-    settingsObj = this;
+    var settingsObj = this;
     this.current = new settingsObj.checkpointSettings();
     this.sd_model_checkpoint = ''
     this.presets = {}
@@ -1248,11 +1252,7 @@ function Config() {
     }
     this.getScriptSettings = function (fromAction) {
         if (fromAction) { var d = playbackParameters }
-        else {
-            try {
-                var d = getFromFile();
-            } catch (e) { }
-        };
+        else { try { var d = getFromFile(); } catch (e) { } };
         if (d != undefined) descriptorToObject(settingsObj, d)
         if (settingsObj.presets[settingsObj.sd_model_checkpoint]) {
             settingsObj.current = new settingsObj.checkpointSettings();
@@ -1276,9 +1276,7 @@ function Config() {
             }
         }
         function listToArray(l, a) {
-            for (var i = 0; i < l.count; i++) {
-                a.push(l.getString(i))
-            }
+            for (var i = 0; i < l.count; i++) { a.push(l.getString(i)) };
         }
     }
     this.putScriptSettings = function (toAction) {
@@ -1286,8 +1284,8 @@ function Config() {
         var d = objectToDescriptor(settingsObj)
         if (toAction) playbackParameters = d else saveToFile(d)
         function objectToDescriptor(o) {
-            var d = new ActionDescriptor;
-            var l = o.reflect.properties.length;
+            var d = new ActionDescriptor,
+                l = o.reflect.properties.length;
             for (var i = 0; i < l; i++) {
                 var k = o.reflect.properties[i].toString();
                 if (k == '__proto__' || k == '__count__' || k == '__class__' || k == 'reflect') continue;
@@ -1310,7 +1308,7 @@ function Config() {
         }
         function arrayToList(a, l) {
             for (var i = 0; i < a.length; i++) { l.putString(a[i]) }
-            return l
+            return l;
         }
     }
     this.getPresetList = function (context) {
@@ -1387,6 +1385,58 @@ function Config() {
             return true
         } catch (e) { throw (e, '', 1) }
         return false
+    }
+}
+function Delay() {
+    var settingsObj = this;
+    this.getDelay = function (checkpoint) {
+        try { var d = getCustomOptions(UUID); } catch (e) { }
+        if (d != undefined) descriptorToObject(settingsObj, d);
+        if (settingsObj[checkpoint]) {
+            var sum = 0;
+            for (a in settingsObj[checkpoint]) sum += settingsObj[checkpoint][a]
+            return Math.round(sum / settingsObj[checkpoint].length)
+        } else {
+            return 7500
+        }
+        function descriptorToObject(o, d) {
+            var l = d.count;
+            for (var i = 0; i < l; i++) {
+                var k = d.getKey(i),
+                    t = d.getType(k),
+                    s = t2s(k);
+                switch (t) {
+                    case DescValueType.LISTTYPE: o[s] = []; listToArray(d.getList(k), o[s]); break;
+                }
+            }
+            function listToArray(l, a) {
+                for (var i = 0; i < l.count; i++) { a.push(l.getInteger(i)) }
+            }
+        }
+    }
+    this.saveDelay = function (checkpoint, delay) {
+        if (settingsObj[checkpoint] == undefined) settingsObj[checkpoint] = [];
+        if (settingsObj[checkpoint].length >= 3) settingsObj[checkpoint].splice(0, settingsObj[checkpoint].length - 2)
+        settingsObj[checkpoint].push(delay);
+        putCustomOptions(UUID, objectToDescriptor(settingsObj));
+        function objectToDescriptor(o) {
+            var d = new ActionDescriptor(),
+                l = o.reflect.properties.length;
+            for (var i = 0; i < l; i++) {
+                var k = o.reflect.properties[i].toString();
+                if (k == '__proto__' || k == '__count__' || k == '__class__' || k == 'reflect') continue;
+                var v = o[k];
+                k = s2t(k);
+                switch (typeof (v)) {
+                    case 'object': if (v instanceof Array) d.putList(k, arrayToList(v, new ActionList())); break;
+                }
+            }
+            return d;
+        }
+    }
+    function arrayToList(a, l) {
+        for (var i = 0; i < a.length; i++) { l.putInteger(a[i]) }
+        return l
     }
 }
 function Locale() {

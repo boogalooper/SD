@@ -21,20 +21,22 @@ const SD_HOST = '127.0.0.1',
     API_FILE = 'sd-webui-api v2.pyw',
     LAYER_NAME = 'SD face restore',
     UUID = 'e29b10c8-a069-4e9c-bc6f-426c5ae0f90e',
+    GUID = '7e989ac3-c5ec-4ab8-84eb-eaf051877fdf',
     SD_GET_OPTIONS_DELAY = 2000, // максимальное время ожидания ответа Stable Diffusion при запросе текущих параметров
     SD_RELOAD_CHECKPOINT_DELAY = 10000, // максимальное время ожидания перезагрузки checkpoint или vae
-    SD_GENERATION_DELAY = 60000; // максимальное время ожидания генерации изображения
+    SD_GENERATION_DELAY = 80000; // максимальное время ожидания генерации изображения
 var time = (new Date).getTime(),
     SD = new SDApi(SD_HOST, API_HOST, SD_PORT, API_PORT_SEND, API_PORT_LISTEN, new File((new File($.fileName)).path + '/' + API_FILE)),
     s2t = stringIDToTypeID,
     t2s = typeIDToStringID,
     cfg = new Config(),
     str = new Locale(),
+    dl = new Delay(),
     apl = new AM('application'),
     doc = new AM('document'),
     lr = new AM('layer'),
     ch = new AM('channel'),
-    ver = 0.122;
+    ver = 0.123;
 isCancelled = false;
 $.localize = true
 if (ScriptUI.environment.keyboardState.shiftKey) $.setenv('showRestoreDialog', true)
@@ -70,7 +72,7 @@ function init() {
                         return;
                     } else if (result != undefined) {
                         $.setenv('showRestoreDialog', false)
-                        doForcedProgress(str.progressGenerate[$.locale == 'ru' ? 'ru' : 'en'], 'main(currentSelection)')
+                        main(currentSelection)
                         cfg.putScriptSettings()
                         cfg.putScriptSettings(true)
                         SD.exit()
@@ -79,7 +81,7 @@ function init() {
             } else {
                 if (SD.initialize()) {
                     $.setenv('showRestoreDialog', false)
-                    doForcedProgress(str.progressGenerate[$.locale == 'ru' ? 'ru' : 'en'], 'main(currentSelection)')
+                    main(currentSelection)
                     cfg.putScriptSettings(true)
                     SD.exit()
                 } else {
@@ -99,13 +101,15 @@ function init() {
                         isCancelled = true;
                         return;
                     } else if (result != undefined) {
-                        doForcedProgress(str.progressGenerate[$.locale == 'ru' ? 'ru' : 'en'], 'main(currentSelection)')
+                        main(currentSelection)
                         cfg.putScriptSettings(true)
                         SD.exit()
                     }
                 }
             } else {
-                if (SD.initialize()) { doForcedProgress(str.progressGenerate[$.locale == 'ru' ? 'ru' : 'en'], 'main(currentSelection)') }
+                if (SD.initialize()) {
+                    main(currentSelection)
+                }
                 SD.exit()
             }
         }
@@ -363,7 +367,7 @@ function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
         sendMessage({ type: 'exit' })
     }
     this.sendPayload = function (payload) {
-        var result = sendMessage({ type: 'faceRestore', message: payload }, true, SD_GENERATION_DELAY)
+        var result = sendMessage({ type: 'faceRestore', message: payload }, true, SD_GENERATION_DELAY, 'Progress', str.progressGenerate, dl.getDelay())
         if (result) return result['message']
         return null;
     }
@@ -373,24 +377,48 @@ function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
         socket.close()
         return answer
     }
-    function sendMessage(o, getAnswer, delay) {
+    function sendMessage(o, getAnswer, delay, title, message, max) {
         var tcp = new Socket,
             delay = delay ? delay : SD_GET_OPTIONS_DELAY;
         tcp.open(apiHost + ':' + portSend, 'UTF-8')
         tcp.writeln(objectToJSON(o))
         tcp.close()
         if (getAnswer) {
+            if (title) {
+                var w = new Window('palette', title),
+                    bar = w.add('progressbar', undefined, 0, max),
+                    stProgress = w.add('statictext', undefined, message);
+                stProgress.preferredSize = [350, 20];
+                stProgress.alignment = 'left'
+                bar.preferredSize = [350, 20];
+                bar.value = 0;
+                w.show();
+            }
             var t1 = (new Date).getTime(),
-                t2 = 0;
+                t2 = 0,
+                t3 = t1;
             var tcp = new Socket;
             if (tcp.listen(portListen, 'UTF-8')) {
                 for (; ;) {
-                    t2 = (new Date).getTime()
-                    if (t2 - t1 > delay) return null;
+                    t2 = (new Date).getTime();
+                    if (t2 - t1 > delay) {
+                        if (title) w.close();
+                        return null;
+                    }
+                    if (title && t2 - t3 > 250) {
+                        t3 = t2
+                        if (bar.value >= max) bar.value = 0;
+                        bar.value = bar.value + 250;
+                        w.update();
+                    }
                     var answer = tcp.poll();
                     if (answer != null) {
                         var a = eval('(' + answer.readln() + ')');
                         answer.close();
+                        if (title) {
+                            dl.saveDelay(t2 - t1)
+                            w.close()
+                        }
                         return a;
                     }
                 }
@@ -631,7 +659,7 @@ function Config() {
     this.brushOpacity = 60
     this.vae = 'sdapi/v1/sd-vae'
     this.outdir = 'outputs/extras-images'
-    settingsObj = this;
+    var settingsObj = this;
     this.getScriptSettings = function (fromAction) {
         if (fromAction) var d = playbackParameters; else try { var d = getCustomOptions(UUID) } catch (e) { };
         if (d != undefined) descriptorToObject(settingsObj, d)
@@ -668,6 +696,58 @@ function Config() {
             }
             return d;
         }
+    }
+}
+function Delay() {
+    var settingsObj = this;
+    this.getDelay = function () {
+        try { var d = getCustomOptions(GUID); } catch (e) { }
+        if (d != undefined) descriptorToObject(settingsObj, d);
+        if (settingsObj['delay']) {
+            var sum = 0;
+            for (a in settingsObj['delay']) sum += settingsObj['delay'][a]
+            return Math.round(sum / settingsObj['delay'].length)
+        } else {
+            return 7500
+        }
+        function descriptorToObject(o, d) {
+            var l = d.count;
+            for (var i = 0; i < l; i++) {
+                var k = d.getKey(i),
+                    t = d.getType(k),
+                    s = t2s(k);
+                switch (t) {
+                    case DescValueType.LISTTYPE: o[s] = []; listToArray(d.getList(k), o[s]); break;
+                }
+            }
+            function listToArray(l, a) {
+                for (var i = 0; i < l.count; i++) { a.push(l.getInteger(i)) }
+            }
+        }
+    }
+    this.saveDelay = function (delay) {
+        if (settingsObj['delay'] == undefined) settingsObj['delay'] = [];
+        if (settingsObj['delay'].length >= 3) settingsObj['delay'].splice(0, settingsObj['delay'].length - 2)
+        settingsObj['delay'].push(delay);
+        putCustomOptions(GUID, objectToDescriptor(settingsObj));
+        function objectToDescriptor(o) {
+            var d = new ActionDescriptor(),
+                l = o.reflect.properties.length;
+            for (var i = 0; i < l; i++) {
+                var k = o.reflect.properties[i].toString();
+                if (k == '__proto__' || k == '__count__' || k == '__class__' || k == 'reflect') continue;
+                var v = o[k];
+                k = s2t(k);
+                switch (typeof (v)) {
+                    case 'object': if (v instanceof Array) d.putList(k, arrayToList(v, new ActionList())); break;
+                }
+            }
+            return d;
+        }
+    }
+    function arrayToList(a, l) {
+        for (var i = 0; i < a.length; i++) { l.putInteger(a[i]) }
+        return l
     }
 }
 function Locale() {
