@@ -706,7 +706,8 @@ function Delay() {
         if (settingsObj['delay']) {
             var sum = 0;
             for (a in settingsObj['delay']) sum += settingsObj['delay'][a]
-            return Math.round(sum / settingsObj['delay'].length)
+            sum = Math.round(sum / settingsObj['delay'].length);
+            return sum < 1000 ? 1000 : sum
         } else {
             return 7500
         }

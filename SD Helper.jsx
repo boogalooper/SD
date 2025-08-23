@@ -1395,7 +1395,8 @@ function Delay() {
         if (settingsObj[checkpoint]) {
             var sum = 0;
             for (a in settingsObj[checkpoint]) sum += settingsObj[checkpoint][a]
-            return Math.round(sum / settingsObj[checkpoint].length)
+            sum = Math.round(sum / settingsObj[checkpoint].length);
+            return sum < 1000 ? 1000 : sum
         } else {
             return 7500
         }
