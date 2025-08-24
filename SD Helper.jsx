@@ -222,7 +222,6 @@ function main(selection) {
         payload['inpainting_fill'] = cfg.current.inpaintingFill + 1
     }
     apl.waitForRedraw()
-    $.writeln(payload.toSource());
     var result = SD.sendPayload(payload);
     if (result) {
         activeDocument.suspendHistory('Generate image', 'generatedImageToLayer()')
@@ -296,7 +295,6 @@ function dialogWindow(b, s) {
         Ok = grOk.add('button', undefined, undefined, { name: 'ok' });
     w.text = 'SD Helper v.' + ver + ' - responce time ' + s + 's';
     stWH.text = str.selection + b.width + 'x' + b.height;
-
     bnSettings.text = '⚙';
     stCheckpoint.text = str.checkpoint;
     Ok.text = str.generate;
@@ -311,7 +309,6 @@ function dialogWindow(b, s) {
             }
         }
         else cfg.current = new cfg.checkpointSettings()
-
         showControls(grSettings)
         w.layout.layout(true)
     }
@@ -354,7 +351,6 @@ function dialogWindow(b, s) {
         if (cfg.showResize) resizeScale(p)
         if (cfg.forge_control_cache && SD.extensions[FLUX_CACHE]) cache(p)
         if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') == -1 && SD.extensions[FLUX_KONTEXT]) denoisingStrength(p)
-
         function inpaintingFill(p) {
             var grInpainting = p.add("group{orientation:'column',alignChildren:['fill', 'center'],spacing:0,margins:0}"),
                 stInpainting = grInpainting.add('statictext'),
@@ -497,9 +493,7 @@ function dialogWindow(b, s) {
                 stCfg = grCfgTitle.add('statictext{preferredSize:[220,-1]}'),
                 stCfgValue = grCfgTitle.add('statictext{preferredSize:[65,-1],justify:"right"}'),
                 slCfg = grCfg.add('slider{minvalue:2,maxvalue:30}');
-
             stCfg.text = cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('FLUX') == -1 && cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') == -1 ? str.cfgScale : str.distilledCfgScale;
-
             slCfg.onChange = function () { stCfgValue.text = cfg.current.cfg_scale = mathTrunc(this.value) / 2 }
             slCfg.onChanging = function () { slCfg.onChange() }
             slCfg.addEventListener('keydown', commonHandler)
@@ -919,7 +913,7 @@ function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
         return false;
     }
     this.sendPayload = function (payload) {
-        var result = sendMessage({ type: 'payload', message: payload }, true, SD_GENERATION_DELAY, cfg.sd_model_checkpoint, str.progressGenerate, dl.getDelay(cfg.sd_model_checkpoint))
+        var result = sendMessage({ type: 'payload', message: payload }, true, SD_GENERATION_DELAY, cfg.sd_model_checkpoint.replace(/\.[^\.]+$/, ''), str.progressGenerate, dl.getDelay(cfg.sd_model_checkpoint))
         if (result) return result['message']
         return null;
     }
