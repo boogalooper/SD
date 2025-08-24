@@ -345,12 +345,6 @@ function checkSelection(result) {
     }
     return
 }
-function findSDChannel(title) {
-    var idx = 1;
-    do {
-        try { if (ch.getProperty('channelName', false, idx++, true) == title) return idx - 1 } catch (e) { return 0 }
-    } while (true)
-}
 function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
     var SdCfg = this;
     this.initialize = function (fastMode) {
@@ -767,10 +761,7 @@ function Locale() {
     this.notFound = { ru: '\nне найден!', en: 'not found!' }
     this.opacity = { ru: 'Непрозрачность кисти', en: 'Brush opacity' }
     this.output = { ru: 'Параметры изображения', en: 'Image settings' }
-    this.progressDocument = { ru: 'Подготовка документа...', en: 'Preparation of a document...' }
     this.progressGenerate = { ru: 'Генерация изображения...', en: 'Image generation...' }
-    this.progressPlace = { ru: 'Вставка изображения...', en: 'Image placing...' }
-    this.progressUpdating = { ru: 'Обновление параметров генерации...', en: 'Update generation parameters...' }
     this.rasterize = { ru: 'Растеризовать сгенерированное изображение', en: 'Rasterize generated image' }
     this.remove = { ru: 'Удалить файл изображения после вставки', en: 'Remove image file after placing' }
     this.selctBrush = { ru: 'Активировать кисть после генерации', en: 'Select brush after processing' }

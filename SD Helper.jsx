@@ -827,12 +827,6 @@ function checkSelection(result) {
     }
     return
 }
-function findSDChannel(title) {
-    var idx = 1;
-    do {
-        try { if (ch.getProperty('channelName', false, idx++, true) == title) return idx - 1 } catch (e) { return 0 }
-    } while (true)
-}
 function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
     this.forgeUI = false;
     var SdCfg = this;
@@ -1442,14 +1436,16 @@ function Delay() {
 }
 function Locale() {
     this.actionMode = { ru: 'Не записывать параметры генерации в экшен', en: 'Do not record generation settings to action' }
-    this.addVae = { ru: '+ добавить VAE/TextEncoder', en: '+ add VAE/TextEncoder' }
+    this.advanced = { ru: 'Расширенные нестройки', en: 'Advanced settings' }
     this.apply = { ru: 'Применить настройки', en: 'Apply settings' }
     this.autoResize = { ru: 'Авто масштаб', en: 'Auto resize' }
     this.autoResizeCaption = { ru: 'Масштаб зависит от размера выделения', en: 'Set scale value based on selection size' }
     this.brush = { ru: 'Настройки кисти', en: 'Brush settings' }
+    this.cache = { ru: 'Использовать First Block Cache (extension)', en: 'Use Block Cache (extension)' }
+    this.cacheTitle = { ru: 'Порог кэширования:', en: 'Caching threshold:' }
     this.cfgScale = 'CFG Scale'
-    this.distilledCfgScale = 'Distilled CFG Scale'
     this.checkpoint = 'Stable Diffusion checkpoint'
+    this.distilledCfgScale = 'Distilled CFG Scale'
     this.errAnswer = { ru: 'не отвечает!', en: 'not answering!' }
     this.errConnection = { ru: 'Невозможно установить соединение c ', en: 'Impossible to establish a connection with ' }
     this.errDefalutPreset = { ru: 'Используйте другое имя при создании пресета!', en: 'Use a different name when creating a preset!' }
@@ -1467,7 +1463,6 @@ function Locale() {
     this.max = { ru: 'максимум, px', en: 'maximum, px' }
     this.min = { ru: 'минимум, px', en: 'minimum, px' }
     this.module = { ru: 'Модуль sd-webui-api ', en: 'Module sd-webui-api ' }
-    this.negativeDefault = '(deformed, distorted, disfigured:1.3), poorly drawn, bad anatomy, wrong anatomy, extra limb, missing limb, floating limbs, (mutated hands and fingers:1.4), disconnected limbs, mutation, mutated, ugly, disgusting, blurry, amputation'
     this.negativePrompt = 'Negative prompt'
     this.notFound = { ru: '\nне найден!', en: 'not found!' }
     this.opacity = { ru: 'Непрозрачность кисти', en: 'Brush opacity' }
@@ -1480,27 +1475,20 @@ function Locale() {
     this.presetPromt = { ru: 'Укажите имя пресета\nБудут сохранены настройки имени подкаталога и файла.', en: 'Specify the name of the preset\nSubdirectory and file name settings will be saved.' }
     this.presetRefresh = { ru: 'Обновить', en: 'Refresh' }
     this.presetSave = { ru: 'Сохранить', en: 'Save' }
-    this.progressDocument = { ru: 'Подготовка документа...', en: 'Preparation of a document...' }
     this.progressGenerate = { ru: 'Генерация изображения...', en: 'Image generation...' }
-    this.progressPlace = { ru: 'Вставка изображения...', en: 'Image placing...' }
-    this.progressUpdating = { ru: 'Обновление параметров модели...', en: 'Update checkpoint options...' }
     this.prompt = 'Prompt'
     this.rasterize = { ru: 'Растеризовать сгенерированное изображение', en: 'Rasterize generated image' }
-    this.removeVae = { ru: '- удалить VAE/TextEncoder', en: '- remove VAE/TextEncoder' }
     this.resize = 'Resize by scale'
     this.sampling = 'Sampling method'
     this.schedule = 'Schedule type'
     this.selctBrush = { ru: 'Активировать кисть после генерации', en: 'Select brush after processing' }
     this.selection = { ru: 'Выделение: ', en: 'Selection: ' }
+    this.setMatrixMemory = { ru: 'Установить размер памяти для вычисления матриц:', en: 'Set memory size for matrix computation:' }
+    this.setMemory = 'Inference memory (Mb):'
     this.settings = { ru: 'Настройки скрипта', en: 'Script settings' }
     this.showItems = { ru: 'Показывать опции', en: 'Show items' }
     this.steps = 'Sampling steps'
     this.strength = 'Denoising strength'
     this.translate = { ru: 'перевести: ', en: 'translate: ' }
     this.vae = 'SD VAE'
-    this.setMatrixMemory = { ru: 'Установить размер памяти для вычисления матриц:', en: 'Set memory size for matrix computation:' }
-    this.setMemory = 'Inference memory (Mb):'
-    this.advanced = { ru: 'Расширенные нестройки', en: 'Advanced settings' }
-    this.cache = { ru: 'Использовать First Block Cache (extension)', en: 'Use Block Cache (extension)' }
-    this.cacheTitle = { ru: 'Порог кэширования:', en: 'Caching threshold:' }
 }
