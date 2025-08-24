@@ -14,7 +14,7 @@
 </javascriptresource>
 // END__HARVEST_EXCEPTION_ZSTRING
 */
-const ver = 0.355,
+const ver = 0.357,
     SD_HOST = '127.0.0.1',
     SD_PORT = 7860,
     API_HOST = '127.0.0.1',
@@ -24,7 +24,7 @@ const ver = 0.355,
     LAYER_NAME = 'SD generated image',
     SD_GET_OPTIONS_DELAY = 3000, // максимальное время ожидания ответа Stable Diffusion при запросе текущих параметров (при превышении скрипт завершит работу)
     SD_RELOAD_CHECKPOINT_DELAY = 12000, // максимальное время ожидания перезагрузки checkpoint или vae (при превышении скрипт завершит работу)
-    SD_GENERATION_DELAY = 180000, // максимальное время ожидания генерации изображения (при превышении скрипт завершит работу)
+    SD_GENERATION_DELAY = 150000, // максимальное время ожидания генерации изображения (при превышении скрипт завершит работу)
     FLUX_KONTEXT = 'forge2_flux_kontext',
     FLUX_CACHE = 'sd-forge-blockcache',
     UUID = '338cc304-fb6f-4b1f-8ad4-13bbd65f117c';
@@ -182,10 +182,10 @@ function main(selection) {
     doc.setProperty('center', c);
     var p = (new Folder(Folder.temp + '/outputs/img2img-images'))
     if (!p.exists) p.create()
-    if (checkpoint || (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('FLUX') == -1 ? vae : encoders) || memory) {
+    if (checkpoint || (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('FLUX') == -1 && cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') == -1 ? vae : encoders) || memory) {
         var vae_path = [];
         if (SD.forgeUI) {
-            if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('FLUX') == -1) {
+            if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('FLUX') == -1 && cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') == -1) {
                 for (var i = 0; i < SD['sd_modules'].length; i++) {
                     if (SD['sd_modules'][i].indexOf(cfg.current.sd_vae) != -1) {
                         vae_path.push(SD['sd_modules'][i])
@@ -203,7 +203,7 @@ function main(selection) {
         'input': f.fsName.replace(/\\/g, '\\\\'),
         'output': p.fsName.replace(/\\/g, '\\\\'),
         'prompt': cfg.current.prompt.toString().replace(/[^A-Za-z0-9.,()\-<>: ]/g, ''),
-        'negative_prompt': cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('FLUX') == -1 ? cfg.current.negative_prompt.toString().replace(/[^A-Za-z0-9.,()\-<>: ]/g, '') : '',
+        'negative_prompt': cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('FLUX') == -1 && cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') == -1 ? cfg.current.negative_prompt.toString().replace(/[^A-Za-z0-9.,()\-<>: ]/g, '') : '',
         'sampler_name': cfg.current.sampler_name,
         'scheduler': cfg.current.scheduler,
         'cfg_scale': cfg.current.cfg_scale,
@@ -214,6 +214,7 @@ function main(selection) {
         'denoising_strength': cfg.current.denoising_strength,
         'n_iter': 1,
     };
+    if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('FLUX') != -1 || cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') != -1 ) payload['flux'] = true;
     if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') != -1 && SD.extensions[FLUX_KONTEXT]) payload['kontext'] = true;
     if (SD.extensions[FLUX_CACHE] && cfg.forge_control_cache && cfg.current.forge_cache > 0) payload['cache'] = cfg.forge_cache;
     if (cfg.current.inpaintingFill != -1) {
@@ -221,6 +222,7 @@ function main(selection) {
         payload['inpainting_fill'] = cfg.current.inpaintingFill + 1
     }
     apl.waitForRedraw()
+    $.writeln(payload.toSource());
     var result = SD.sendPayload(payload);
     if (result) {
         activeDocument.suspendHistory('Generate image', 'generatedImageToLayer()')
@@ -294,6 +296,7 @@ function dialogWindow(b, s) {
         Ok = grOk.add('button', undefined, undefined, { name: 'ok' });
     w.text = 'SD Helper v.' + ver + ' - responce time ' + s + 's';
     stWH.text = str.selection + b.width + 'x' + b.height;
+
     bnSettings.text = '⚙';
     stCheckpoint.text = str.checkpoint;
     Ok.text = str.generate;
@@ -308,6 +311,7 @@ function dialogWindow(b, s) {
             }
         }
         else cfg.current = new cfg.checkpointSettings()
+
         showControls(grSettings)
         w.layout.layout(true)
     }
@@ -340,9 +344,9 @@ function dialogWindow(b, s) {
             p.remove(p.children[0])
         }
         if (cfg.showSd_vae) vae(p)
-        if (cfg.showInpaintingFill && cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('FLUX') == -1) inpaintingFill(p)
+        if (cfg.showInpaintingFill && cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('FLUX') == -1 && cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') == -1) inpaintingFill(p)
         if (cfg.showPrompt) prompt(p)
-        if (cfg.showNegative_prompt && cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('FLUX') == -1) negativePrompt(p);
+        if (cfg.showNegative_prompt && cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('FLUX') == -1 && cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') == -1) negativePrompt(p);
         if (cfg.showSampler_name) sampler(p)
         if (cfg.showScheduler) shelduler(p)
         if (cfg.showSteps) steps(p)
@@ -350,6 +354,7 @@ function dialogWindow(b, s) {
         if (cfg.showResize) resizeScale(p)
         if (cfg.forge_control_cache && SD.extensions[FLUX_CACHE]) cache(p)
         if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') == -1 && SD.extensions[FLUX_KONTEXT]) denoisingStrength(p)
+
         function inpaintingFill(p) {
             var grInpainting = p.add("group{orientation:'column',alignChildren:['fill', 'center'],spacing:0,margins:0}"),
                 stInpainting = grInpainting.add('statictext'),
@@ -363,7 +368,7 @@ function dialogWindow(b, s) {
             var grVae = p.add("group{orientation:'column',alignChildren:['fill', 'center'],spacing:0,margins:0}"),
                 stVae = grVae.add('statictext');
             stVae.text = str.vae;
-            if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('FLUX') == -1) {
+            if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('FLUX') == -1 && cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') == -1) {
                 var dlVae = grVae.add('dropdownlist{preferredSize:[285,-1]}')
                 if (SD['sd-vaes'].length) for (var i = 0; i < SD['sd-vaes'].length; i++) dlVae.add('item', SD['sd-vaes'][i])
                 dlVae.onChange = function () {
@@ -492,7 +497,9 @@ function dialogWindow(b, s) {
                 stCfg = grCfgTitle.add('statictext{preferredSize:[220,-1]}'),
                 stCfgValue = grCfgTitle.add('statictext{preferredSize:[65,-1],justify:"right"}'),
                 slCfg = grCfg.add('slider{minvalue:2,maxvalue:30}');
-            stCfg.text = str.cfgScale
+
+            stCfg.text = cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('FLUX') == -1 && cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') == -1 ? str.cfgScale : str.distilledCfgScale;
+
             slCfg.onChange = function () { stCfgValue.text = cfg.current.cfg_scale = mathTrunc(this.value) / 2 }
             slCfg.onChanging = function () { slCfg.onChange() }
             slCfg.addEventListener('keydown', commonHandler)
@@ -686,8 +693,6 @@ function dialogWindow(b, s) {
         slAbove.onChange = function () { stAbove.text = cfg.autoResizeAbove = mathTrunc(this.value / 32) * 32 }
         slAbove.onChanging = function () { slAbove.onChange() }
         slAbove.addEventListener('keydown', resizeHandler)
-        chNegative.enabled = (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('FLUX') == -1)
-        chInpaitnigFill.enabled = (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('FLUX') == -1)
         function resizeHandler(evt) {
             if (evt.shiftKey) {
                 if (evt.keyIdentifier == 'Right' || evt.keyIdentifier == 'Up') {
@@ -1449,6 +1454,7 @@ function Locale() {
     this.autoResizeCaption = { ru: 'Масштаб зависит от размера выделения', en: 'Set scale value based on selection size' }
     this.brush = { ru: 'Настройки кисти', en: 'Brush settings' }
     this.cfgScale = 'CFG Scale'
+    this.distilledCfgScale = 'Distilled CFG Scale'
     this.checkpoint = 'Stable Diffusion checkpoint'
     this.errAnswer = { ru: 'не отвечает!', en: 'not answering!' }
     this.errConnection = { ru: 'Невозможно установить соединение c ', en: 'Impossible to establish a connection with ' }

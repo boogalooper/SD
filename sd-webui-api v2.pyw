@@ -182,6 +182,9 @@ def start_local_server():
                         "n_iter": 1,
                         "init_images": [init_image],
                     }
+                    if "flux" in data:
+                        payload["distilled_cfg_scale"] =  data["cfg_scale"]
+                        payload["cfg_scale"] =  1
                     if "mask" in data:
                         payload["mask"] = encode_file_to_base64(data["mask"])
                         payload["inpainting_fill"] = data["inpainting_fill"]
