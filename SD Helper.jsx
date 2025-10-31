@@ -14,7 +14,7 @@
 </javascriptresource>
 // END__HARVEST_EXCEPTION_ZSTRING
 */
-const ver = 0.357,
+const ver = 0.36,
     SD_HOST = '127.0.0.1',
     SD_PORT = 7860,
     API_HOST = '127.0.0.1',
@@ -214,8 +214,14 @@ function main(selection) {
         'denoising_strength': cfg.current.denoising_strength,
         'n_iter': 1,
     };
-    if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('FLUX') != -1 || cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') != -1 ) payload['flux'] = true;
-    if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') != -1 && SD.extensions[FLUX_KONTEXT]) payload['kontext'] = true;
+    if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('FLUX') != -1 || cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') != -1) payload['flux'] = true;
+    if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') != -1 && SD.extensions[FLUX_KONTEXT]) {
+        payload['kontext'] = true
+        if (cfg.current.reference != '') {
+            var r = new File(cfg.current.reference)
+            if (r.exists) payload['reference'] = r.fsName.replace(/\\/g, '\\\\')
+        }
+    };
     if (SD.extensions[FLUX_CACHE] && cfg.forge_control_cache && cfg.current.forge_cache > 0) payload['cache'] = cfg.forge_cache;
     if (cfg.current.inpaintingFill != -1) {
         payload['mask'] = f1.fsName.replace(/\\/g, '\\\\')
@@ -341,7 +347,7 @@ function dialogWindow(b, s) {
             p.remove(p.children[0])
         }
         if (cfg.showSd_vae) vae(p)
-        if (cfg.showInpaintingFill && cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('FLUX') == -1 && cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') == -1) inpaintingFill(p)
+        if (cfg.showInpaintingFill && cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') == -1) inpaintingFill(p)
         if (cfg.showPrompt) prompt(p)
         if (cfg.showNegative_prompt && cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('FLUX') == -1 && cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') == -1) negativePrompt(p);
         if (cfg.showSampler_name) sampler(p)
@@ -350,7 +356,8 @@ function dialogWindow(b, s) {
         if (cfg.showCfg_scale) cfgScale(p)
         if (cfg.showResize) resizeScale(p)
         if (cfg.forge_control_cache && SD.extensions[FLUX_CACHE]) cache(p)
-        if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') == -1 && SD.extensions[FLUX_KONTEXT]) denoisingStrength(p)
+        if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') == -1) denoisingStrength(p)
+        if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') != -1 && SD.extensions[FLUX_KONTEXT]) imageReference(p)
         function inpaintingFill(p) {
             var grInpainting = p.add("group{orientation:'column',alignChildren:['fill', 'center'],spacing:0,margins:0}"),
                 stInpainting = grInpainting.add('statictext'),
@@ -557,6 +564,79 @@ function dialogWindow(b, s) {
             slStrength.value = cfg.current.denoising_strength * 100
             stStrengthValue.text = cfg.current.denoising_strength;
         }
+        function imageReference(p) {
+            var grRef = p.add("group{orientation:'column',alignChildren:['fill', 'center'],spacing:0,margins:0}"),
+                stRef = grRef.add('statictext'),
+                dlRef = grRef.add('dropdownlist');
+            stRef.text = str.imageRef
+            initReferencesList()
+            dlRef.onChange = function () {
+                if (this.selection.index == this.items.length - 1) {
+                    var f = (new File(' ')).openDlg('Select reference image', '*.jpg,*.jpeg,*.png,*.webp')
+                    if (f != null) {
+                        cfg.current.reference = decodeURI(f)
+                        var tmp = [],
+                            len = cfg.current.imageReferences.length <= 9 ? cfg.current.imageReferences.length : 9,
+                            a = cfg.current.reference.toLocaleUpperCase()
+                        tmp.push(cfg.current.reference)
+                        for (var i = 0; i < len; i++) {
+                            if (a != cfg.current.imageReferences[i].toLocaleUpperCase()) {
+                                tmp.push(cfg.current.imageReferences[i])
+                            }
+                        }
+                        cfg.current.imageReferences = tmp
+                        initReferencesList();
+                    } else dlRef.selection = 0
+                } else {
+                    if (this.selection.index) cfg.current.reference = cfg.current.imageReferences[this.selection.index - 1] else cfg.current.reference = ''
+                }
+            }
+            function initReferencesList() {
+                var tmp = [];
+                dlRef.removeAll()
+                dlRef.add('item', 'none')
+                for (var i = 0; i < cfg.current.imageReferences.length; i++) {
+                    var f = new File(cfg.current.imageReferences[i]);
+                    if (f.exists) {
+                        tmp.push(decodeURI(cfg.current.imageReferences[i]))
+                        dlRef.add('item', shortenPath(f.fsName))
+                    }
+                }
+                cfg.current.imageReferences = tmp
+                dlRef.add('item', str.browse)
+                var cur = findReference(cfg.current.imageReferences, cfg.current.reference);
+                dlRef.selection = cur ? cur : 0;
+            }
+            function shortenPath(s) {
+                var win;
+                if (s.indexOf('\\') != -1) { s = s.split('\\'); win = true } else { s = s.split('/'); win = false }
+                if (s.length > 1) {
+                    var len = s[s.length - 1].length
+                    var output = []
+                    var curLen = 0
+                    output.push(s[0])
+                    curLen = s[0].length
+                    for (var i = 1; i < s.length - 1; i++) {
+                        if (curLen + s[i].length + len < 34) {
+                            output.push(s[i]); curLen += s[i].length
+                        } else {
+                            output.push("...")
+                            break;
+                        }
+                    }
+                    output.push(s[s.length - 1])
+                    if (win) { s = output.join('\\') } else s = output.join('/')
+                }
+                return s
+            }
+            function findReference(a, s) {
+                s = s.toLocaleUpperCase();
+                for (var i = 0; i < a.length; i++) {
+                    if (a[i].toLocaleUpperCase() == s) return i + 1
+                }
+                return null
+            }
+        }
     }
     function settingsWindow(p, cfg) {
         var w = new Window("dialog{orientation:'column',alignChildren:['fill', 'top'],spacing:10,margins:16}"),
@@ -705,8 +785,8 @@ function dialogWindow(b, s) {
             dlPreset = grPreset.add("dropdownlist{selection:0, preferredSize: [175, 25]}"),
             grPresetButtons = grPreset.add("group{orientation: 'row', alignChildren: ['left', 'center'], spacing: 0, margins: 0}"),
             bnRefresh = grPresetButtons.add("button{text:'" + "↻" + "', helpTip:'" + str.presetRefresh + "',preferredSize: [30, -1]}"),
-            bnSave = grPresetButtons.add("button{text:'" + "✔" + "', helpTip:'" + str.presetSave + "',preferredSize: [30, -1]}"),
             bnSaveAs = grPresetButtons.add("button{text:'" + "+" + "', helpTip:'" + str.presetAdd + "',preferredSize: [30, -1]}"),
+            bnSave = grPresetButtons.add("button{text:'" + "✔" + "', helpTip:'" + str.presetSave + "',preferredSize: [30, -1]}"),
             bnDel = grPresetButtons.add("button{text:'" + "×" + "', helpTip:'" + str.presetDelete + "',preferredSize: [30, -1]}");
         dlPreset.onChange = function (silent) {
             bnDel.enabled = this.selection.index;
@@ -864,7 +944,7 @@ function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
         if (result) {
             SdCfg['sd-vaes'] = []
             if (!SdCfg.forgeUI) SdCfg['sd-vaes'].push('Automatic')
-            SdCfg['sd-vaes'].push('None')
+            SdCfg['sd-vaes'].push('none')
             if (SdCfg.forgeUI) {
                 SdCfg['sd_modules'] = [];
                 for (var i = 0; i < result.length; i++) SdCfg['sd_modules'].push(result[i].filename.replace(/\\/g, '\\\\'))
@@ -1212,6 +1292,8 @@ function Config() {
         this.positivePreset = ''
         this.negativePreset = 'SD'
         this.forge_cache = 0.1
+        this.imageReferences = []
+        this.reference = ''
     }
     var settingsObj = this;
     this.current = new settingsObj.checkpointSettings();
@@ -1491,4 +1573,6 @@ function Locale() {
     this.strength = 'Denoising strength'
     this.translate = { ru: 'перевести: ', en: 'translate: ' }
     this.vae = 'SD VAE'
+    this.imageRef = { ru: 'Reference image', en: 'Reference image' }
+    this.browse = { ru: 'Обзор... ', en: 'Browse...' }
 }

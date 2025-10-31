@@ -40,10 +40,11 @@ def timestamp():
     return datetime.fromtimestamp(time.time()).strftime("%Y%m%d-%H%M%S")
 
 
-def encode_file_to_base64(path):
+def encode_file_to_base64(path, remove):
     with open(path, "rb") as file:
         encoded_data = base64.b64encode(file.read()).decode("utf-8")
-    os.remove(path)
+    if remove:
+        os.remove(path)
     return encoded_data
 
 
@@ -166,7 +167,7 @@ def start_local_server():
                 elif message["type"] == "payload":
                     print("Получен запрос на генерацию изображения")
                     data = message["message"]
-                    init_image = encode_file_to_base64(data["input"])
+                    init_image = encode_file_to_base64(data["input"], True)
                     entrypoint = "sdapi/v1/img2img"
                     payload = {
                         "prompt": data["prompt"],
@@ -183,22 +184,25 @@ def start_local_server():
                         "init_images": [init_image],
                     }
                     if "flux" in data:
-                        payload["distilled_cfg_scale"] =  data["cfg_scale"]
-                        payload["cfg_scale"] =  1
+                        payload["distilled_cfg_scale"] = data["cfg_scale"]
+                        payload["cfg_scale"] = 1
                     if "mask" in data:
-                        payload["mask"] = encode_file_to_base64(data["mask"])
+                        payload["mask"] = encode_file_to_base64(data["mask"], True)
                         payload["inpainting_fill"] = data["inpainting_fill"]
                         payload["image_cfg_scale"] = 1.5
                         payload["inpaint_full_res"] = 0
                         payload["initial_noise_multiplier"] = 1
                         payload["resize_mode"] = 2
                     if "kontext" in data:
+                        reference_image = None
+                        if "reference" in data:
+                            reference_image = encode_file_to_base64(data["reference"], False)
                         payload["alwayson_scripts"] = {
                             "Forge FluxKontext": {
                                 "args": [
                                     True,
                                     init_image,
-                                    None,
+                                    reference_image,
                                     "to output",
                                     False,
                                 ]
@@ -212,7 +216,7 @@ def start_local_server():
                             pass
                         else:
                             payload["alwayson_scripts"] = {}
-                        cur = payload["alwayson_scripts"]    
+                        cur = payload["alwayson_scripts"]
                         cur["First Block Cache / TeaCache"] = {
                             "args": [
                                 True,
@@ -231,7 +235,7 @@ def start_local_server():
                 elif message["type"] == "faceRestore":
                     print("Получен запрос на воссстановление лица")
                     data = message["message"]
-                    init_image = encode_file_to_base64(data["input"])
+                    init_image = encode_file_to_base64(data["input"], True)
                     payload = {"image": init_image}
                     if data["gfpgan"] == "true":
                         payload["gfpgan_visibility"] = data["gfpgan_visibility"]
