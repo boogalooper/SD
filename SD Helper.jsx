@@ -111,6 +111,7 @@ function init() {
                         isCancelled = true;
                         return;
                     } else if (result != undefined) {
+                        $.setenv('dialogMode', false)
                         cfg.putScriptSettings(true)
                         if (!cfg.recordToAction) cfg.putScriptSettings()
                         SD.setOptions(null, null, null, 64)
@@ -222,7 +223,7 @@ function main(selection) {
             if (r.exists) payload['reference'] = r.fsName.replace(/\\/g, '\\\\')
         }
     };
-    if (SD.extensions[FLUX_CACHE] && cfg.forge_control_cache && cfg.current.forge_cache > 0) payload['cache'] = cfg.forge_cache;
+    if (SD.extensions[FLUX_CACHE] && cfg.forge_control_cache && cfg.current.forge_cache > 0) payload['cache'] = cfg.current.forge_cache;
     if (cfg.current.inpaintingFill != -1) {
         payload['mask'] = f1.fsName.replace(/\\/g, '\\\\')
         payload['inpainting_fill'] = cfg.current.inpaintingFill + 1
