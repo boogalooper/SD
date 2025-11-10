@@ -1402,8 +1402,8 @@ function Config() {
     this.checkPresetIntegrity = function (context, parent) {
         var dlPreset = parent.children[1].children[0],
             bnRefresh = parent.children[1].children[1].children[0],
-            bnSave = parent.children[1].children[1].children[1],
-            bnAdd = parent.children[1].children[1].children[2],
+            bnSave = parent.children[1].children[1].children[2],
+            bnAdd = parent.children[1].children[1].children[1],
             bnRemove = parent.children[1].children[1].children[3],
             text = parent.children[2].text;
         if (dlPreset.selection.index > 0) {
