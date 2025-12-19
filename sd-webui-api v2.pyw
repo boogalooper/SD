@@ -7,10 +7,25 @@ import base64
 from datetime import datetime
 import subprocess
 import os
+import threading
+import tempfile
 
 API_HOST = "127.0.0.1"
 API_PORT_SEND = 6321
 API_PORT_LISTEN = 6320
+LOCK_PATH = os.path.join(tempfile.gettempdir(), "sd_helper.lock")
+TIMEOUT = 5 * 60   # 5 минут
+last_request_time = time.time()
+
+def timeout_watcher():
+    global last_request_time
+    while True:
+        time.sleep(5)
+        if time.time() - last_request_time > TIMEOUT:
+            print("[INFO] Сервер простаивал 5 минут → завершаюсь")
+            if os.path.exists(LOCK_PATH):
+                os.remove(LOCK_PATH)
+            os._exit(0)  
 
 
 def get_data_from_SD(api_name, SD_HOST, SD_PORT):
@@ -97,32 +112,43 @@ def install_module(module_name):
 
 
 def start_local_server():
+    global last_request_time
+
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     srv.bind((API_HOST, API_PORT_LISTEN))
     srv.listen(1)
     SD_HOST = None
     SD_PORT = None
+    open(LOCK_PATH, "w").close()
     print("Сервер запущен и ожидает подключения...")
+
+    threading.Thread(target=timeout_watcher, daemon=True).start()
 
     while True:
         client_socket, client_address = srv.accept()
+
+        last_request_time = time.time()
+
         print(f"Подключение установлено с {client_address}")
         try:
             message = client_socket.recv(4096)
             if message:
                 message = json.loads(message.decode("utf-8").rstrip("\n"))
                 print(f"Получено сообщение: {message}")
+
                 if message["type"] == "get":
                     print(f"Получаем данные: {message['message']}")
                     result = get_data_from_SD(message["message"], SD_HOST, SD_PORT)
                     if result != None:
                         print(f"Отправляем данные: {message['message']}")
                         send_data_to_jsx(result)
+
                 elif message["type"] == "handshake":
                     data = message["message"]
                     SD_HOST = data["sdHost"]
                     SD_PORT = int(data["sdPort"])
                     send_data_to_jsx({"type": "answer", "message": "success"})
+
                 elif message["type"] == "update":
                     data = message["message"]
                     print(f"Запрос на обновление: {data}")
@@ -164,6 +190,7 @@ def start_local_server():
                                 {"type": "answer", "message": str(response_data)}
                             )
                         print("Обновление настроек успешно завершено!")
+
                 elif message["type"] == "payload":
                     print("Получен запрос на генерацию изображения")
                     data = message["message"]
@@ -196,7 +223,9 @@ def start_local_server():
                     if "kontext" in data:
                         reference_image = None
                         if "reference" in data:
-                            reference_image = encode_file_to_base64(data["reference"], False)
+                            reference_image = encode_file_to_base64(
+                                data["reference"], False
+                            )
                         payload["alwayson_scripts"] = {
                             "Forge FluxKontext": {
                                 "args": [
@@ -212,12 +241,9 @@ def start_local_server():
                         del payload["negative_prompt"]
                         entrypoint = "sdapi/v1/txt2img"
                     if "cache" in data:
-                        if "alwayson_scripts" in payload:
-                            pass
-                        else:
+                        if "alwayson_scripts" not in payload:
                             payload["alwayson_scripts"] = {}
-                        cur = payload["alwayson_scripts"]
-                        cur["First Block Cache / TeaCache"] = {
+                        payload["alwayson_scripts"]["First Block Cache / TeaCache"] = {
                             "args": [
                                 True,
                                 "First Block Cache",
@@ -232,6 +258,7 @@ def start_local_server():
                     )
                     print("Генерация завершена!")
                     send_data_to_jsx({"type": "answer", "message": outfile})
+
                 elif message["type"] == "faceRestore":
                     print("Получен запрос на воссстановление лица")
                     data = message["message"]
@@ -251,30 +278,24 @@ def start_local_server():
                     )
                     print("Генерация завершена!")
                     send_data_to_jsx({"type": "answer", "message": outfile})
+
                 elif message["type"] == "translate":
                     print("Получен запрос на перевод текста")
                     if check_module("deep_translator"):
                         from deep_translator import GoogleTranslator
-
                         try:
                             translated_text = GoogleTranslator(
                                 source="auto", target="english"
                             ).translate(message["message"])
-                            print("\nПереведённый текст на английском языке:")
-                            print(translated_text)
                         except:
                             translated_text = ""
-                    send_data_to_jsx(
-                        {"type": "answer", "message": str(translated_text)}
-                    )
-                elif message["type"] == "exit":
-                    sys.exit()
+                    send_data_to_jsx({"type": "answer", "message": str(translated_text)})
+
         except Exception as e:
             print(f"Произошла ошибка: {e}")
             send_data_to_jsx({"type": "answer", "message": None})
-            sys.exit()
+
         finally:
             client_socket.close()
-
 
 start_local_server()

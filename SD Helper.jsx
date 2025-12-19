@@ -14,7 +14,7 @@
 </javascriptresource>
 // END__HARVEST_EXCEPTION_ZSTRING
 */
-const ver = 0.36,
+const ver = 0.37,
     SD_HOST = '127.0.0.1',
     SD_PORT = 7860,
     API_HOST = '127.0.0.1',
@@ -23,7 +23,7 @@ const ver = 0.36,
     API_FILE = 'sd-webui-api v2.pyw',
     LAYER_NAME = 'SD generated image',
     SD_GET_OPTIONS_DELAY = 3000, // максимальное время ожидания ответа Stable Diffusion при запросе текущих параметров (при превышении скрипт завершит работу)
-    SD_RELOAD_CHECKPOINT_DELAY = 12000, // максимальное время ожидания перезагрузки checkpoint или vae (при превышении скрипт завершит работу)
+    SD_RELOAD_CHECKPOINT_DELAY = 12000, // максимальное время ожидания загрузки checkpoint или vae (при превышении скрипт завершит работу)
     SD_GENERATION_DELAY = 150000, // максимальное время ожидания генерации изображения (при превышении скрипт завершит работу)
     FLUX_KONTEXT = 'forge2_flux_kontext',
     FLUX_CACHE = 'sd-forge-blockcache',
@@ -42,17 +42,16 @@ var time = (new Date).getTime(),
     isDitry = false,
     isCancelled = false;
 $.localize = true
-if (ScriptUI.environment.keyboardState.shiftKey) $.setenv('dialogMode', true)
+if (ScriptUI.environment.keyboardState.shiftKey) $.setenv('dialogMode', true);
 try { init() } catch (e) {
-    SD.exit()
     alert(e, undefined, true)
     $.setenv('dialogMode', true)
     isCancelled = true;
 }
-isCancelled ? 'cancel' : undefined
+isCancelled ? 'cancel' : undefined;
 function init() {
     var currentSelection = { result: false, bounds: null, previousGeneration: null, junk: null };
-    if (apl.getProperty('numberOfDocuments')) activeDocument.suspendHistory('Check selection', 'checkSelection(currentSelection)');
+    if (apl.getProperty('numberOfDocuments') && doc.getProperty('mode').value == 'RGBColor') activeDocument.suspendHistory('Check selection', 'checkSelection(currentSelection)');
     if (currentSelection.result) {
         var b = currentSelection.bounds,
             w = Math.floor((b.right - b.left) / 8) * 8,
@@ -73,7 +72,6 @@ function init() {
                     if (result == 2) {
                         cfg.putScriptSettings()
                         $.setenv('dialogMode', true)
-                        SD.exit()
                         isCancelled = true;
                         return;
                     } else if (result != undefined) {
@@ -82,7 +80,6 @@ function init() {
                         SD.setOptions(null, null, null, 64)
                         SD['forge_inference_memory'] = 64
                         main(currentSelection);
-                        SD.exit()
                     }
                 }
             } else {
@@ -90,41 +87,49 @@ function init() {
                     $.setenv('dialogMode', false)
                     cfg.putScriptSettings(true)
                     main(currentSelection);
-                    SD.exit()
                 } else {
-                    SD.exit()
                     isCancelled = true
                 }
             }
         }
         else {
-            cfg.getScriptSettings(true)
             if (!cfg.recordToAction) {
                 cfg.getScriptSettings()
                 cfg.recordToAction = false
+            } else {
+                cfg.getScriptSettings(true);
+                var tempSettings = new Config();
+                tempSettings.getScriptSettings();
+                cfg.presets = tempSettings.presets
+                cfg.positivePreset = tempSettings.positivePreset
+                cfg.negativePreset = tempSettings.negativePreset
             }
             if (app.playbackDisplayDialogs == DialogModes.ALL) {
                 if (SD.initialize()) {
                     var w = dialogWindow(currentSelection.bounds, (((new Date).getTime() - time) / 1000)); var result = w.show()
                     if (result == 2) {
-                        SD.exit()
                         isCancelled = true;
                         return;
                     } else if (result != undefined) {
                         $.setenv('dialogMode', false)
                         cfg.putScriptSettings(true)
-                        if (!cfg.recordToAction) cfg.putScriptSettings()
+                        if (!cfg.recordToAction) {
+                            cfg.putScriptSettings()
+                        } else {
+                            tempSettings.presets = cfg.presets
+                            tempSettings.positivePreset = cfg.positivePreset
+                            tempSettings.negativePreset = cfg.negativePreset
+                            tempSettings.putScriptSettings()
+                        }
                         SD.setOptions(null, null, null, 64)
                         SD['forge_inference_memory'] = 64
                         main(currentSelection);
-                        SD.exit()
                     }
                 }
             } else {
                 if (SD.initialize()) {
                     main(currentSelection);
                 }
-                SD.exit()
             }
         }
     }
@@ -134,8 +139,11 @@ function main(selection) {
         vae = (cfg.current.sd_vae == SD['sd_vae'] ? null : findOption(cfg.current.sd_vae, SD['sd-vaes'], SD['sd_vae'])),
         encoders = checkEncoders(cfg.current.encoders, SD['forge_additional_modules'], SD['sd_modules']),
         memory = cfg.control_memory ? (SD['forge_inference_memory'] == cfg.forge_inference_memory ? null : cfg.forge_inference_memory) : (SD['forge_inference_memory'] == cfg.forge_inference_memory_default ? null : cfg.forge_inference_memory_default);
-    if (checkpoint != cfg.sd_model_checkpoint && checkpoint != null) cfg.sd_model_checkpoint = checkpoint
-    if (selection.previousGeneration) doc.hideSelectedLayers()
+    if (checkpoint != cfg.sd_model_checkpoint && checkpoint != null) cfg.sd_model_checkpoint = checkpoint;
+    if (cfg.autoResize && !isDitry) cfg.current.resize = autoScale(selection.bounds)
+    var width = cfg.current.resize != 1 ? (mathTrunc((selection.bounds.width * cfg.current.resize) / 8) * 8) : selection.bounds.width,
+        height = cfg.current.resize != 1 ? (mathTrunc((selection.bounds.height * cfg.current.resize) / 8) * 8) : selection.bounds.height;
+    if (selection.previousGeneration) doc.hideSelectedLayers();
     if (doc.getProperty('quickMask')) {
         doc.quickMask('clearEvent');
         doc.makeLayer(LAYER_NAME)
@@ -154,31 +162,42 @@ function main(selection) {
     }
     selection.junk = lr.getProperty('layerID')
     doc.makeSelection(selection.bounds);
+    if (cfg.flatten) {
+        doc.hideSelectedLayers()
+        doc.makeLayer(LAYER_NAME)
+        doc.mergeVisible()
+        doc.selectLayersByIDs([selection.junk])
+    }
     var hst = activeDocument.activeHistoryState,
         c = doc.getProperty('center').value;
     doc.crop(true);
-    if (cfg.flatten) { doc.flatten() } else {
-        var len = doc.getProperty('numberOfLayers'),
-            start = lr.getProperty('itemIndex'),
-            lrsList = new ActionReference();
-        offset = doc.getProperty('hasBackgroundLayer') ? 0 : 1;
-        for (var i = start + offset; i <= len; i++) lrsList.putIdentifier(s2t('layer'), lr.getProperty('layerID', false, i, true));
-        if (start + offset <= len) {
-            doc.selectLayersByIDList(lrsList);
-            doc.hideSelectedLayers();
-        }
-    }
-    var f = new File(Folder.temp + '/SDH.jpg');
-    var f1 = new File(Folder.temp + '/SDH_MASK.jpg');
-    doc.saveACopy(f);
     if (cfg.current.inpaintingFill != -1) {
         lr.selectChannel('mask');
         lr.selectAllPixels();
         doc.copyPixels()
-        lr.selectChannel('RGB')
-        doc.pastePixels()
-        doc.saveACopy(f1);
     }
+    var len = doc.getProperty('numberOfLayers'),
+        from = lr.getProperty('itemIndex') + (doc.getProperty('hasBackgroundLayer') ? 0 : 1);
+    lrsList = [];
+    for (var i = from; i <= len; i++) {
+        if (lr.getProperty('layerSection', false, i, true).value == 'layerSectionContent') {
+            lrsList.push(lr.getProperty('layerID', false, i, true))
+        }
+    };
+    if (from <= len) {
+        doc.selectLayersByIDs(lrsList);
+        doc.hideSelectedLayers();
+    }
+    doc.flatten()
+    if (cfg.current.inpaintingFill != -1) doc.pastePixels();
+    if (cfg.current.resize < 1) doc.imageSize(width, height)
+    if (cfg.current.inpaintingFill != -1) {
+        var f1 = new File(Folder.temp + '/SDH_MASK.jpg');
+        doc.saveACopy(f1);
+        lr.deleteLayer();
+    }
+    var f = new File(Folder.temp + '/SDH.jpg');
+    doc.saveACopy(f);
     activeDocument.activeHistoryState = hst;
     doc.setProperty('center', c);
     var p = (new Folder(Folder.temp + '/outputs/img2img-images'))
@@ -197,9 +216,6 @@ function main(selection) {
         }
         if (!SD.setOptions(checkpoint, vae, vae_path, memory)) throw new Error(str.errUpdating)
     }
-    if (cfg.autoResize && !isDitry) cfg.current.resize = autoScale(selection.bounds)
-    var width = cfg.current.resize != 1 ? (mathTrunc((selection.bounds.width * cfg.current.resize) / 8) * 8) : selection.bounds.width,
-        height = cfg.current.resize != 1 ? (mathTrunc((selection.bounds.height * cfg.current.resize) / 8) * 8) : selection.bounds.height
     var payload = {
         'input': f.fsName.replace(/\\/g, '\\\\'),
         'output': p.fsName.replace(/\\/g, '\\\\'),
@@ -301,7 +317,7 @@ function dialogWindow(b, s) {
     var grOk = w.add("group{orientation:'row',alignChildren:['center','center'],spacing:10,margins:[0, 10, 0, 0]}"),
         Ok = grOk.add('button', undefined, undefined, { name: 'ok' });
     w.text = 'SD Helper v.' + ver + ' - responce time ' + s + 's';
-    stWH.text = str.selection + b.width + 'x' + b.height;
+    stWH.text = str.selection + b.width + 'x' + b.height + ' (' + mathTrunc((b.width * b.height) / 10000) / 100 + ' MP)';
     bnSettings.text = '⚙';
     stCheckpoint.text = str.checkpoint;
     Ok.text = str.generate;
@@ -523,8 +539,11 @@ function dialogWindow(b, s) {
             slResize.onChanging = function () { slResize.onChange() }
             slResize.addEventListener('keydown', commonHandler)
             function setTitle() {
-                var s = str.resize
-                return cfg.current.resize != 1 ? s + ' ' + (mathTrunc((b.width * cfg.current.resize) / 8) * 8) + 'x' + (mathTrunc((b.height * cfg.current.resize) / 8) * 8) : s
+                var s = str.resize,
+                    w = mathTrunc((b.width * cfg.current.resize) / 8) * 8,
+                    h = mathTrunc((b.height * cfg.current.resize) / 8) * 8,
+                    mp = mathTrunc(w * h / 10000) / 100;
+                return cfg.current.resize != 1 ? s + ' ' + w + 'x' + h + ' (' + mp + ' MP)' : s
             }
             if (cfg.autoResize) {
                 cfg.current.resize = autoScale(b)
@@ -663,6 +682,9 @@ function dialogWindow(b, s) {
             slOpacity = grOpacity.add('slider{minvalue:0,maxvalue:100}'),
             pnResize = w.add("panel{orientation:'column',alignChildren:['fill', 'top'],spacing:10,margins:10}"),
             chAutoResize = pnResize.add('checkbox'),
+            grResizeMode = pnResize.add("group{orientation:'row',alignChildren:['left', 'center'],spacing:10,margins:0}"),
+            rbPixelMode = grResizeMode.add('radiobutton'),
+            rbAreaMode = grResizeMode.add('radiobutton'),
             grChResize = pnResize.add("group{orientation:'column',alignChildren:['fill', 'center'],spacing:10,margins:0}"),
             grResizeSl = grChResize.add("group{orientation:'row',alignChildren:['left', 'center'],spacing:10,margins:0}"),
             grLess = grResizeSl.add("group{orientation:'row',alignChildren:['left', 'center'],spacing:0,margins:0,preferredSize:[100,-1]}"),
@@ -707,6 +729,8 @@ function dialogWindow(b, s) {
         var chRecordSettings = w.add('checkbox'),
             grBn = w.add("group{orientation:'row',alignChildren:['center', 'center'],spacing:10,margins:[0, 10, 0, 0]}"),
             ok = grBn.add('button', undefined, undefined, { name: 'ok' });
+        rbPixelMode.text = str.wxh;
+        rbAreaMode.text = str.area;
         chAutoResize.text = str.autoResizeCaption
         chCfg.text = str.cfgScale;
         chFlatten.text = str.flatten
@@ -730,6 +754,7 @@ function dialogWindow(b, s) {
         slLess.helpTip = str.min
         stOpacityTitle.text = str.opacity
         w.text = str.settings
+        cfg.autoResizeArea ? rbAreaMode.value = true : rbPixelMode.value = true
         chAutoResize.value = grResizeSl.enabled = cfg.autoResize
         chCfg.value = cfg.showCfg_scale
         chFlatten.value = cfg.flatten
@@ -744,8 +769,10 @@ function dialogWindow(b, s) {
         chSheldule.value = cfg.showScheduler
         chSteps.value = cfg.showSteps
         chVae.value = cfg.showSd_vae
-        slAbove.value = stAbove.text = cfg.autoResizeAbove;
-        slLess.value = stLess.text = cfg.autoResizeLess;
+        slAbove.value = cfg.autoResizeArea ? cfg.autoResizeAboveArea * 1024 : cfg.autoResizeAbove;
+        slLess.value = cfg.autoResizeArea ? cfg.autoResizeLessArea * 1024 : cfg.autoResizeLess;
+        stAbove.text = cfg.autoResizeArea ? cfg.autoResizeAboveArea : cfg.autoResizeAbove;
+        stLess.text = cfg.autoResizeArea ? cfg.autoResizeLessArea : cfg.autoResizeLess;
         slOpacity.value = stOpacityValue.text = cfg.brushOpacity
         chFlatten.onClick = function () { cfg.flatten = this.value }
         chRasterize.onClick = function () { cfg.rasterizeImage = this.value }
@@ -762,10 +789,26 @@ function dialogWindow(b, s) {
         slOpacity.onChange = function () { stOpacityValue.text = cfg.brushOpacity = mathTrunc(this.value) }
         slOpacity.onChanging = function () { slOpacity.onChange() }
         slOpacity.addEventListener('keydown', commonHandler)
-        slLess.onChange = function () { stLess.text = cfg.autoResizeLess = mathTrunc(this.value / 32) * 32 }
+        rbPixelMode.onClick = function () {
+            cfg.autoResizeArea = false;
+            slAbove.value = stAbove.text = cfg.autoResizeAbove;
+            slLess.value = stLess.text = cfg.autoResizeLess;
+        }
+        rbAreaMode.onClick = function () {
+            cfg.autoResizeArea = true
+            slAbove.value = stAbove.text = cfg.autoResizeAboveArea;
+            slLess.value = stLess.text = cfg.autoResizeLessArea;
+        }
+        slLess.onChange = function () {
+            stLess.text = cfg.autoResizeArea ? (cfg.autoResizeLessArea = mathTrunc(this.value / 1024 * 100) / 100) :
+                (cfg.autoResizeLess = mathTrunc(this.value / 32) * 32)
+        }
+        slAbove.onChange = function () {
+            stAbove.text = cfg.autoResizeArea ? (cfg.autoResizeAboveArea = mathTrunc(this.value / 1024 * 100) / 100) :
+                (cfg.autoResizeAbove = mathTrunc(this.value / 32) * 32)
+        }
         slLess.onChanging = function () { slLess.onChange() }
         slLess.addEventListener('keydown', resizeHandler)
-        slAbove.onChange = function () { stAbove.text = cfg.autoResizeAbove = mathTrunc(this.value / 32) * 32 }
         slAbove.onChanging = function () { slAbove.onChange() }
         slAbove.addEventListener('keydown', resizeHandler)
         function resizeHandler(evt) {
@@ -777,7 +820,7 @@ function dialogWindow(b, s) {
                 }
             }
         }
-        chAutoResize.onClick = function () { cfg.autoResize = grResizeSl.enabled = this.value; cfg.resize = 1; }
+        chAutoResize.onClick = function () { cfg.autoResize = grResizeSl.enabled = grResizeMode.enabled = this.value; cfg.resize = 1; }
         chRecordSettings.onClick = function () { cfg.recordToAction = !this.value }
         return w
     }
@@ -859,11 +902,19 @@ function mathTrunc(val) {
 function autoScale(b) {
     var less = b.width < b.height ? b.width : b.height,
         above = b.width > b.height ? b.width : b.height,
-        result = 0;
-    if (less < cfg.autoResizeLess) result = Math.ceil(cfg.autoResizeLess / less * 1000) / 1000
-    if (above > cfg.autoResizeAbove) result = Math.floor(cfg.autoResizeAbove / above * 1000) / 1000
-    if (less >= cfg.autoResizeLess && above <= cfg.autoResizeAbove) result = 1
-    return (result > 4 ? 4 : result)
+        areaMp = (b.width * b.height) / 1000000,
+        scale = 0;
+    if (cfg.autoResizeArea) {
+        if (areaMp < cfg.autoResizeLessArea) { scale = cfg.autoResizeLessArea / areaMp }
+        else if (areaMp > cfg.autoResizeAboveArea) { scale = cfg.autoResizeAboveArea / areaMp }
+        else { scale = 1; }
+        scale = Math.round(Math.sqrt(scale) * 1000) / 1000
+    } else {
+        if (less < cfg.autoResizeLess) scale = Math.ceil(cfg.autoResizeLess / less * 1000) / 1000
+        if (above > cfg.autoResizeAbove) scale = Math.floor(cfg.autoResizeAbove / above * 1000) / 1000
+        if (less >= cfg.autoResizeLess && above <= cfg.autoResizeAbove) scale = 1
+    }
+    return (scale > 4 ? 4 : scale)
 }
 function cloneObject(o1, o2) {
     var tmp = o1.reflect.properties;
@@ -915,13 +966,17 @@ function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
     SdCfg.extensions[FLUX_KONTEXT] = false;
     SdCfg.extensions[FLUX_CACHE] = false;
     this.initialize = function () {
-        if (!apiFile.exists)
-            throw new Error(str.module + apiFile.fsName + str.notFound)
-        if (!checkConnecton(sdHost + ':' + sdPort))
-            throw new Error(str.errConnection + sdHost + ':' + sdPort + '\nStable Diffusion ' + str.errAnswer)
-        apiFile.execute();
-        var result = sendMessage({ type: 'handshake', message: { sdHost: sdHost, sdPort: sdPort } }, true);
-        if (!result) throw new Error(str.errConnection + apiHost + ':' + portSend + '\n' + str.module + str.errAnswer)
+        if (!checkConnecton(sdHost, sdPort)) throw new Error(str.errConnection + sdHost + ':' + sdPort + '\nStable Diffusion ' + str.errAnswer);
+        if (!(new File(Folder.temp + "/sd_helper.lock").exists)) {
+            if (!apiFile.exists) throw new Error(str.module + apiFile.fsName + str.notFound)
+            apiFile.execute();
+            var result = sendMessage({ type: 'handshake', message: { sdHost: sdHost, sdPort: sdPort } }, true);
+            if (!result) throw new Error(str.errConnection + apiHost + ':' + portSend + '\n' + str.module + str.errAnswer)
+        } else if (!checkConnecton(apiHost, portSend)) {
+            apiFile.execute();
+            var result = sendMessage({ type: 'handshake', message: { sdHost: sdHost, sdPort: sdPort } }, true);
+            if (!result) throw new Error(str.errConnection + apiHost + ':' + portSend + '\n' + str.module + str.errAnswer)
+        }
         var result = sendMessage({ type: 'get', message: 'sdapi/v1/options' }, true);
         if (result) {
             SdCfg['sd_model_checkpoint'] = result['sd_model_checkpoint']
@@ -973,9 +1028,6 @@ function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
         }
         return true
     }
-    this.exit = function () {
-        sendMessage({ type: 'exit' })
-    }
     this.setOptions = function (checkpoint, vae, vae_path, memory) {
         var message = {}
         message['sd_model_checkpoint'] = checkpoint ? checkpoint.replace(/\\/g, '\\\\') : null
@@ -997,9 +1049,9 @@ function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
         if (result) return result['message']
         return null;
     }
-    function checkConnecton(host) {
-        var socket = new Socket,
-            answer = socket.open(host);
+    function checkConnecton(host, port) {
+        var socket = new Socket;
+        answer = socket.open(host + ':' + port);
         socket.close()
         return answer
     }
@@ -1138,7 +1190,7 @@ function AM(target, order) {
         executeAction(s2t(addTo ? 'addTo' : 'set'), d, DialogModes.NO);
     }
     this.deleteLayer = function (id) {
-        (r = new AR).putIdentifier(s2t('layer'), id);
+        id ? (r = new AR).putIdentifier(s2t('layer'), id) : (r = new AR).putEnumerated(s2t('layer'), s2t('ordinal'), s2t('targetEnum'));
         (d = new AD).putReference(s2t('null'), r);
         executeAction(s2t('delete'), d, DialogModes.NO);
     }
@@ -1191,9 +1243,11 @@ function AM(target, order) {
         (d = new AD).putBoolean(s2t('delete'), deletePixels);
         executeAction(s2t('crop'), d, DialogModes.NO);
     }
-    this.selectLayersByIDList = function (IDList) {
-        (d = new AD).putReference(s2t('null'), IDList)
-        executeAction(s2t('select'), d, DialogModes.NO)
+    this.selectLayersByIDs = function (ids) {
+        r = new AR;
+        for (a in ids) r.putIdentifier(s2t('layer'), ids[a]);
+        (d = new AD).putReference(s2t('null'), r);
+        executeAction(s2t('select'), d, DialogModes.NO);
     }
     this.hideSelectedLayers = function () {
         (r = new AR).putEnumerated(s2t('layer'), s2t('ordinal'), s2t('targetEnum'));
@@ -1232,6 +1286,15 @@ function AM(target, order) {
         d.putUnitDouble(s2t('width'), s2t('percentUnit'), dw);
         d.putUnitDouble(s2t('height'), s2t('percentUnit'), dh);
         executeAction(s2t('transform'), d, DialogModes.NO);
+    }
+    this.mergeVisible = function () {
+        try { executeAction(s2t("mergeVisible"), undefined, DialogModes.NO); } catch (e) { };
+    }
+    this.imageSize = function (width, height) {
+        (d = new AD).putUnitDouble(s2t("width"), s2t("pixelsUnit"), width);
+        d.putUnitDouble(s2t("height"), s2t("pixelsUnit"), height);
+        d.putEnumerated(s2t("interpolation"), s2t("interpolationType"), s2t("automaticInterpolation"));
+        executeAction(s2t("imageSize"), d, DialogModes.NO);
     }
     this.makeLayer = function (title) {
         (r = new AR).putClass(s2t('layer'));
@@ -1316,8 +1379,11 @@ function Config() {
     this.brushOpacity = 50
     this.recordToAction = true
     this.autoResize = false
+    this.autoResizeArea = false
     this.autoResizeLess = 512
     this.autoResizeAbove = 1408
+    this.autoResizeLessArea = 0.5
+    this.autoResizeAboveArea = 1
     this.positivePreset = {}
     this.control_memory = false
     this.forge_inference_memory = 1024
@@ -1522,7 +1588,7 @@ function Locale() {
     this.advanced = { ru: 'Расширенные нестройки', en: 'Advanced settings' }
     this.apply = { ru: 'Применить настройки', en: 'Apply settings' }
     this.autoResize = { ru: 'Авто масштаб', en: 'Auto resize' }
-    this.autoResizeCaption = { ru: 'Масштаб зависит от размера выделения', en: 'Set scale value based on selection size' }
+    this.autoResizeCaption = { ru: 'Масштаб зависит от размера выделения', en: 'Set scale value based on selection size:' }
     this.brush = { ru: 'Настройки кисти', en: 'Brush settings' }
     this.cache = { ru: 'Использовать First Block Cache (extension)', en: 'Use Block Cache (extension)' }
     this.cacheTitle = { ru: 'Порог кэширования:', en: 'Caching threshold:' }
@@ -1543,8 +1609,8 @@ function Locale() {
     this.fill = 'Inpainting fill mode'
     this.flatten = { ru: 'Склеивать слои перед генерацией', en: 'Flatten layers before generation' }
     this.generate = { ru: 'Генерация', en: 'Generate' }
-    this.max = { ru: 'максимум, px', en: 'maximum, px' }
-    this.min = { ru: 'минимум, px', en: 'minimum, px' }
+    this.max = { ru: 'максимум', en: 'maximum' }
+    this.min = { ru: 'минимум', en: 'minimum' }
     this.module = { ru: 'Модуль sd-webui-api ', en: 'Module sd-webui-api ' }
     this.negativePrompt = 'Negative prompt'
     this.notFound = { ru: '\nне найден!', en: 'not found!' }
@@ -1561,7 +1627,7 @@ function Locale() {
     this.progressGenerate = { ru: 'Генерация изображения...', en: 'Image generation...' }
     this.prompt = 'Prompt'
     this.rasterize = { ru: 'Растеризовать сгенерированное изображение', en: 'Rasterize generated image' }
-    this.resize = 'Resize by scale'
+    this.resize = 'Resize scale'
     this.sampling = 'Sampling method'
     this.schedule = 'Schedule type'
     this.selctBrush = { ru: 'Активировать кисть после генерации', en: 'Select brush after processing' }
@@ -1576,4 +1642,6 @@ function Locale() {
     this.vae = 'SD VAE'
     this.imageRef = { ru: 'Reference image', en: 'Reference image' }
     this.browse = { ru: 'Обзор... ', en: 'Browse...' }
+    this.wxh = { ru: 'ширина и высота (px)', en: 'width and height (px)' }
+    this.area = { ru: 'площадь (MP)', en: 'area (MP)' }
 }

@@ -22,8 +22,7 @@ const SD_HOST = '127.0.0.1',
     LAYER_NAME = 'SD face restore',
     UUID = 'e29b10c8-a069-4e9c-bc6f-426c5ae0f90e',
     GUID = '7e989ac3-c5ec-4ab8-84eb-eaf051877fdf',
-    SD_GET_OPTIONS_DELAY = 2000, // максимальное время ожидания ответа Stable Diffusion при запросе текущих параметров
-    SD_RELOAD_CHECKPOINT_DELAY = 10000, // максимальное время ожидания перезагрузки checkpoint или vae
+    SD_GET_OPTIONS_DELAY = 3000, // максимальное время ожидания ответа Stable Diffusion при запросе текущих параметров
     SD_GENERATION_DELAY = 80000; // максимальное время ожидания генерации изображения
 var time = (new Date).getTime(),
     SD = new SDApi(SD_HOST, API_HOST, SD_PORT, API_PORT_SEND, API_PORT_LISTEN, new File((new File($.fileName)).path + '/' + API_FILE)),
@@ -36,20 +35,19 @@ var time = (new Date).getTime(),
     doc = new AM('document'),
     lr = new AM('layer'),
     ch = new AM('channel'),
-    ver = 0.123;
+    ver = 0.15;
 isCancelled = false;
 $.localize = true
-if (ScriptUI.environment.keyboardState.shiftKey) $.setenv('showRestoreDialog', true)
+if (ScriptUI.environment.keyboardState.shiftKey) $.setenv('showRestoreDialog', true);
 try { init() } catch (e) {
-    SD.exit()
     alert(e)
     $.setenv('showRestoreDialog', true)
     isCancelled = true;
 }
-isCancelled ? 'cancel' : undefined
+isCancelled ? 'cancel' : undefined;
 function init() {
     var currentSelection = { result: false, bounds: null, previousGeneration: null, junk: null };
-    if (apl.getProperty('numberOfDocuments')) activeDocument.suspendHistory('Check selection', 'checkSelection(currentSelection)');
+    if (apl.getProperty('numberOfDocuments') && doc.getProperty('mode').value == 'RGBColor') activeDocument.suspendHistory('Check selection', 'checkSelection(currentSelection)');
     if (currentSelection.result) {
         var b = currentSelection.bounds,
             w = Math.floor((b.right - b.left) / 8) * 8,
@@ -67,7 +65,6 @@ function init() {
                 if (SD.initialize()) {
                     var w = dialogWindow(currentSelection.bounds, (((new Date).getTime() - time) / 1000)); var result = w.show()
                     if (result == 2) {
-                        SD.exit()
                         isCancelled = true;
                         return;
                     } else if (result != undefined) {
@@ -75,7 +72,6 @@ function init() {
                         main(currentSelection)
                         cfg.putScriptSettings()
                         cfg.putScriptSettings(true)
-                        SD.exit()
                     }
                 }
             } else {
@@ -83,10 +79,8 @@ function init() {
                     $.setenv('showRestoreDialog', false)
                     main(currentSelection)
                     cfg.putScriptSettings(true)
-                    SD.exit()
                 } else {
                     if (cleanup && targetID) doc.deleteLayer(targetID)
-                    SD.exit()
                     isCancelled = true
                 }
             }
@@ -97,20 +91,17 @@ function init() {
                 if (SD.initialize()) {
                     var w = dialogWindow(currentSelection.bounds, (((new Date).getTime() - time) / 1000)); var result = w.show()
                     if (result == 2) {
-                        SD.exit()
                         isCancelled = true;
                         return;
                     } else if (result != undefined) {
                         main(currentSelection)
                         cfg.putScriptSettings(true)
-                        SD.exit()
                     }
                 }
             } else {
                 if (SD.initialize()) {
                     main(currentSelection)
                 }
-                SD.exit()
             }
         }
     }
@@ -135,20 +126,28 @@ function main(selection) {
     }
     selection.junk = lr.getProperty('layerID')
     doc.makeSelection(selection.bounds);
+    if (cfg.flatten) {
+        doc.hideSelectedLayers()
+        doc.makeLayer(LAYER_NAME)
+        doc.mergeVisible()
+        doc.selectLayersByIDs([selection.junk])
+    }
     var hst = activeDocument.activeHistoryState,
         c = doc.getProperty('center').value;
     doc.crop(true);
-    if (cfg.flatten) { doc.flatten() } else {
-        var len = doc.getProperty('numberOfLayers'),
-            start = lr.getProperty('itemIndex'),
-            lrsList = new ActionReference();
-        offset = doc.getProperty('hasBackgroundLayer') ? 0 : 1;
-        for (var i = start + offset; i <= len; i++) lrsList.putIdentifier(s2t('layer'), lr.getProperty('layerID', false, i, true));
-        if (start + offset <= len) {
-            doc.selectLayersByIDList(lrsList);
-            doc.hideSelectedLayers();
+    var len = doc.getProperty('numberOfLayers'),
+        from = lr.getProperty('itemIndex') + (doc.getProperty('hasBackgroundLayer') ? 0 : 1);
+    lrsList = [];
+    for (var i = from; i <= len; i++) {
+        if (lr.getProperty('layerSection', false, i, true).value == 'layerSectionContent') {
+            lrsList.push(lr.getProperty('layerID', false, i, true))
         }
+    };
+    if (from <= len) {
+        doc.selectLayersByIDs(lrsList);
+        doc.hideSelectedLayers();
     }
+    doc.flatten()
     var f = new File(Folder.temp + '/SDH.jpg');
     doc.saveACopy(f);
     activeDocument.activeHistoryState = hst;
@@ -212,7 +211,7 @@ function dialogWindow(b, s) {
         grOk = w.add("group{orientation:'row',alignChildren:['center', 'center'],spacing:10,margins:[0, 10, 0, 0]}"),
         Ok = grOk.add('button', undefined, undefined, { name: 'ok' });
     w.text = 'SD Face restore v.' + ver + ' - responce time ' + s + 's';
-    stWH.text = str.selection + b.width + 'x' + b.height;
+    stWH.text = str.selection + b.width + 'x' + b.height + ' (' + mathTrunc((b.width * b.height) / 10000) / 100 + ' MP)';
     bnSettings.text = '⚙';
     chGFPGAN.text = "GFPGAN"
     stGFPGAN.text = "Visibility"
@@ -348,26 +347,27 @@ function checkSelection(result) {
 function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
     var SdCfg = this;
     this.initialize = function (fastMode) {
-        if (!apiFile.exists)
-            throw new Error(str.module + apiFile.fsName + str.notFound)
-        if (!checkConnecton(sdHost + ':' + sdPort))
-            throw new Error(str.errConnection + sdHost + ':' + sdPort + '\nStable Diffusion ' + str.errAnswer)
-        apiFile.execute();
-        var result = sendMessage({ type: 'handshake', message: { sdHost: sdHost, sdPort: sdPort, portSend: portSend, portListen: portListen } }, true);
-        if (!result) throw new Error(str.errConnection + apiHost + ':' + portSend + '\n' + str.module + str.errAnswer)
+        if (!checkConnecton(sdHost, sdPort)) throw new Error(str.errConnection + sdHost + ':' + sdPort + '\nStable Diffusion ' + str.errAnswer)
+        if (!(new File(Folder.temp + "/sd_helper.lock").exists)) {
+            if (!apiFile.exists) throw new Error(str.module + apiFile.fsName + str.notFound)
+            apiFile.execute();
+            var result = sendMessage({ type: 'handshake', message: { sdHost: sdHost, sdPort: sdPort } }, true);
+            if (!result) throw new Error(str.errConnection + apiHost + ':' + portSend + '\n' + str.module + str.errAnswer)
+        } else if (!checkConnecton(apiHost, portSend)) {
+            apiFile.execute();
+            var result = sendMessage({ type: 'handshake', message: { sdHost: sdHost, sdPort: sdPort } }, true);
+            if (!result) throw new Error(str.errConnection + apiHost + ':' + portSend + '\n' + str.module + str.errAnswer)
+        }
         return true
-    }
-    this.exit = function () {
-        sendMessage({ type: 'exit' })
     }
     this.sendPayload = function (payload) {
         var result = sendMessage({ type: 'faceRestore', message: payload }, true, SD_GENERATION_DELAY, 'Progress', str.progressGenerate, dl.getDelay())
         if (result) return result['message']
         return null;
     }
-    function checkConnecton(host) {
+    function checkConnecton(host, port) {
         var socket = new Socket,
-            answer = socket.open(host);
+            answer = socket.open(host + ':' + port);
         socket.close()
         return answer
     }
@@ -506,7 +506,7 @@ function AM(target, order) {
         executeAction(s2t(addTo ? 'addTo' : 'set'), d, DialogModes.NO);
     }
     this.deleteLayer = function (id) {
-        (r = new AR).putIdentifier(s2t('layer'), id);
+        id ? (r = new AR).putIdentifier(s2t('layer'), id) : (r = new AR).putEnumerated(s2t('layer'), s2t('ordinal'), s2t('targetEnum'));
         (d = new AD).putReference(s2t('null'), r);
         executeAction(s2t('delete'), d, DialogModes.NO);
     }
@@ -559,9 +559,11 @@ function AM(target, order) {
         (d = new AD).putBoolean(s2t('delete'), deletePixels);
         executeAction(s2t('crop'), d, DialogModes.NO);
     }
-    this.selectLayersByIDList = function (IDList) {
-        (d = new AD).putReference(s2t('null'), IDList)
-        executeAction(s2t('select'), d, DialogModes.NO)
+    this.selectLayersByIDs = function (ids) {
+        r = new AR;
+        for (a in ids) r.putIdentifier(s2t('layer'), ids[a]);
+        (d = new AD).putReference(s2t('null'), r);
+        executeAction(s2t('select'), d, DialogModes.NO);
     }
     this.hideSelectedLayers = function () {
         (r = new AR).putEnumerated(s2t('layer'), s2t('ordinal'), s2t('targetEnum'));
@@ -592,6 +594,9 @@ function AM(target, order) {
         d.putReference(s2t('at'), r);
         d.putEnumerated(s2t('using'), s2t('userMask'), s2t('revealSelection'));
         executeAction(s2t('make'), d, DialogModes.NO);
+    }
+    this.mergeVisible = function () {
+        try { executeAction(s2t("mergeVisible"), undefined, DialogModes.NO) } catch (e) { };
     }
     this.transform = function (dw, dh) {
         (d = new AD).putEnumerated(s2t('freeTransformCenterState'), s2t('quadCenterState'), s2t('QCSAverage'));
