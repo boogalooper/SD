@@ -14,7 +14,7 @@
 </javascriptresource>
 // END__HARVEST_EXCEPTION_ZSTRING
 */
-const ver = 0.37,
+const ver = 0.38,
     SD_HOST = '127.0.0.1',
     SD_PORT = 7860,
     API_HOST = '127.0.0.1',
@@ -202,10 +202,10 @@ function main(selection) {
     doc.setProperty('center', c);
     var p = (new Folder(Folder.temp + '/outputs/img2img-images'))
     if (!p.exists) p.create()
-    if (checkpoint || (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('FLUX') == -1 && cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') == -1 ? vae : encoders) || memory) {
+    if (checkpoint || (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('FLUX') == -1 && cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('QWEN') == -1 && cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') == -1 ? vae : encoders) || memory) {
         var vae_path = [];
         if (SD.forgeUI) {
-            if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('FLUX') == -1 && cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') == -1) {
+            if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('FLUX') == -1 && cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('QWEN') == -1 && cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') == -1) {
                 for (var i = 0; i < SD['sd_modules'].length; i++) {
                     if (SD['sd_modules'][i].indexOf(cfg.current.sd_vae) != -1) {
                         vae_path.push(SD['sd_modules'][i])
@@ -309,10 +309,6 @@ function dialogWindow(b, s) {
         stWH = grGlobal.add("statictext{preferredSize:[265,-1]}"),
         bnSettings = grGlobal.add("button{preferredSize:[25, 25]}"),
         grSettings = w.add("group{orientation:'column',alignChildren:['fill', 'left'],spacing:5,margins:0}");
-    if (SD['sd-models'].length) for (var i = 0; i < SD['sd-models'].length; i++) dlCheckpoint.add('item', SD['sd-models'][i])
-    var current = dlCheckpoint.find(cfg.sd_model_checkpoint) ? dlCheckpoint.find(cfg.sd_model_checkpoint) : dlCheckpoint.find(SD['sd_model_checkpoint']);
-    dlCheckpoint.selection = current ? current.index : 0
-    cfg.sd_model_checkpoint = dlCheckpoint.selection.text
     showControls(grSettings, true);
     var grOk = w.add("group{orientation:'row',alignChildren:['center','center'],spacing:10,margins:[0, 10, 0, 0]}"),
         Ok = grOk.add('button', undefined, undefined, { name: 'ok' });
@@ -322,19 +318,50 @@ function dialogWindow(b, s) {
     stCheckpoint.text = str.checkpoint;
     Ok.text = str.generate;
     bnSettings.helpTip = str.settings
-    dlCheckpoint.onChange = function () {
-        cfg.presets[cfg.sd_model_checkpoint] = cfg.current
-        cfg.sd_model_checkpoint = this.selection.text
+    if (SD['sd-models'].length) for (var i = 0; i < SD['sd-models'].length; i++) dlCheckpoint.add('item', SD['sd-models'][i])
+    var current = dlCheckpoint.find(cfg.sd_model_checkpoint) ? dlCheckpoint.find(cfg.sd_model_checkpoint) : dlCheckpoint.find(SD['sd_model_checkpoint']);
+    dlCheckpoint.selection = current ? current.index : 0
+    cfg.sd_model_checkpoint = dlCheckpoint.selection.text
+    dlCheckpoint.onChange = function (bypass) {
+        if (!bypass) {
+            cfg.presets[cfg.sd_model_checkpoint] = cfg.current
+            cfg.sd_model_checkpoint = this.selection.text
+        }
+        var found = false;
         if (cfg.presets[cfg.sd_model_checkpoint]) {
             cfg.current = new cfg.checkpointSettings()
-            for (a in cfg.presets[cfg.sd_model_checkpoint]) {
+            for (var a in cfg.presets[cfg.sd_model_checkpoint]) {
                 cfg.current[a] = cfg.presets[cfg.sd_model_checkpoint][a]
             }
+            found = true;
+        } else {
+            for (var s in cfg.presets) {
+                if (s.indexOf(cfg.sd_model_checkpoint) == 0) {
+                    for (var a in cfg.presets[s]) {
+                        cfg.current[a] = cfg.presets[s][a]
+                    }
+                    found = true;
+                    break;
+                }
+            }
         }
-        else cfg.current = new cfg.checkpointSettings()
+        if (!found) {
+            cfg.current = new cfg.checkpointSettings();
+            if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('FLUX') != -1 || cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') != -1) {
+                cfg.current.scheduler = 'Simple'
+                cfg.current.sampler_name = 'Euler'
+                cfg.current.cfg_scale = 3.5
+            } else if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('QWEN') != -1) {
+                cfg.current.scheduler = 'Simple'
+                cfg.current.sampler_name = 'Euler'
+                cfg.current.cfg_scale = 1
+                cfg.current.denoising_strength = 1
+            }
+        }
         showControls(grSettings)
         w.layout.layout(true)
     }
+    dlCheckpoint.onChange(true)
     bnSettings.onClick = function () {
         var tempSettings = {}
         cloneObject(cfg, tempSettings)
@@ -388,7 +415,7 @@ function dialogWindow(b, s) {
             var grVae = p.add("group{orientation:'column',alignChildren:['fill', 'center'],spacing:0,margins:0}"),
                 stVae = grVae.add('statictext');
             stVae.text = str.vae;
-            if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('FLUX') == -1 && cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') == -1) {
+            if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('FLUX') == -1 && cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') == -1 && cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('QWEN') == -1) {
                 var dlVae = grVae.add('dropdownlist{preferredSize:[285,-1]}')
                 if (SD['sd-vaes'].length) for (var i = 0; i < SD['sd-vaes'].length; i++) dlVae.add('item', SD['sd-vaes'][i])
                 dlVae.onChange = function () {
@@ -529,9 +556,9 @@ function dialogWindow(b, s) {
                 grResizeTitle = grResize.add("group{orientation:'row',alignChildren:['left', 'center'],spacing:10,margins:0}"),
                 stResize = grResizeTitle.add('statictext{preferredSize:[220,-1]}'),
                 stResizeValue = grResizeTitle.add('statictext{preferredSize:[65,-1],justify:"right"}'),
-                slResize = grResize.add('slider{minvalue:1,maxvalue:40}');
+                slResize = grResize.add('slider{minvalue:1,maxvalue:400}');
             slResize.onChange = function () {
-                stResizeValue.text = cfg.current.resize = mathTrunc(this.value) / 10
+                stResizeValue.text = cfg.current.resize = mathTrunc(this.value) / 100
                 stResizeValue.text = cfg.current.resize
                 stResize.text = setTitle()
                 isDitry = true
@@ -547,12 +574,12 @@ function dialogWindow(b, s) {
             }
             if (cfg.autoResize) {
                 cfg.current.resize = autoScale(b)
-                slResize.value = cfg.current.resize * 10
+                slResize.value = cfg.current.resize * 100
                 stResizeValue.text = cfg.current.resize
                 stResize.text = setTitle()
             } else {
-                slResize.value = cfg.current.resize * 10
-                stResizeValue.text = cfg.current.resize = mathTrunc(slResize.value) / 10
+                slResize.value = cfg.current.resize * 100
+                stResizeValue.text = cfg.current.resize = mathTrunc(slResize.value) / 100
                 stResize.text = setTitle()
             }
         }
@@ -918,7 +945,7 @@ function autoScale(b) {
 }
 function cloneObject(o1, o2) {
     var tmp = o1.reflect.properties;
-    for (a in tmp) {
+    for (var a in tmp) {
         var k = tmp[a].name.toString();
         if (k == '__proto__' || k == '__count__' || k == '__class__' || k == 'reflect') continue;
         o2[k] = o1[k]
@@ -992,20 +1019,24 @@ function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
         if (result) {
             SdCfg['sd-models'] = []
             if (!result.length) throw new Error(str.errList + 'sdapi/v1/sd-models' + str.errExists)
-            for (var i = 0; i < result.length; i++) SdCfg['sd-models'].push(result[i].title)
+            for (var i = 0; i < result.length; i++) SdCfg['sd-models'].push(result[i].title.replace(/\s\[.+\]$/, ''))
+            SdCfg['sd-models'].sort()
         } else { throw new Error(str.errSettings + 'sdapi/v1/sd-models' + str.errTimeout) }
         var vaes = ['sdapi/v1/sd-vae', 'sdapi/v1/sd-modules']
         cfg.vae = (SdCfg.forgeUI ? vaes[1] : vaes[0])
         var result = sendMessage({ type: 'get', message: cfg.vae }, true);
         if (result) {
-            SdCfg['sd-vaes'] = []
-            if (!SdCfg.forgeUI) SdCfg['sd-vaes'].push('Automatic')
-            SdCfg['sd-vaes'].push('none')
+            var defaultVaes = [];
+            if (!SdCfg.forgeUI) defaultVaes.push('Automatic')
+            defaultVaes.push('none')
             if (SdCfg.forgeUI) {
                 SdCfg['sd_modules'] = [];
                 for (var i = 0; i < result.length; i++) SdCfg['sd_modules'].push(result[i].filename.replace(/\\/g, '\\\\'))
             }
-            for (var i = 0; i < result.length; i++) SdCfg['sd-vaes'].push(result[i].model_name)
+            var vaes = [];
+            for (var i = 0; i < result.length; i++) vaes.push(result[i].model_name)
+            vaes.sort();
+            SdCfg['sd-vaes'] = [].concat(defaultVaes, vaes)
         } else { throw new Error(str.errSettings + + cfg.vae + str.errTimeout) }
         var result = sendMessage({ type: 'get', message: 'sdapi/v1/schedulers' }, true);
         if (result) {
@@ -1245,7 +1276,7 @@ function AM(target, order) {
     }
     this.selectLayersByIDs = function (ids) {
         r = new AR;
-        for (a in ids) r.putIdentifier(s2t('layer'), ids[a]);
+        for (var a in ids) r.putIdentifier(s2t('layer'), ids[a]);
         (d = new AD).putReference(s2t('null'), r);
         executeAction(s2t('select'), d, DialogModes.NO);
     }
@@ -1399,7 +1430,7 @@ function Config() {
         if (d != undefined) descriptorToObject(settingsObj, d)
         if (settingsObj.presets[settingsObj.sd_model_checkpoint]) {
             settingsObj.current = new settingsObj.checkpointSettings();
-            for (a in settingsObj.presets[settingsObj.sd_model_checkpoint]) {
+            for (var a in settingsObj.presets[settingsObj.sd_model_checkpoint]) {
                 settingsObj.current[a] = settingsObj.presets[settingsObj.sd_model_checkpoint][a]
             }
         }
