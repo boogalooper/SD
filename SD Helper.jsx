@@ -336,7 +336,7 @@ function dialogWindow(b, s) {
             found = true;
         } else {
             for (var s in cfg.presets) {
-                if (s.indexOf(cfg.sd_model_checkpoint) == 0) {
+                if (s.indexOf(cfg.sd_model_checkpoint) != -1) {
                     for (var a in cfg.presets[s]) {
                         cfg.current[a] = cfg.presets[s][a]
                     }
@@ -407,7 +407,9 @@ function dialogWindow(b, s) {
                 stInpainting = grInpainting.add('statictext'),
                 dlInpainting = grInpainting.add('dropdownlist', undefined, undefined, { items: ['none', 'fill', 'original', 'latent noise', 'latent nothing'] });
             stInpainting.text = str.fill
-            dlInpainting.onChange = function () { cfg.current.inpaintingFill = this.selection.index - 1 }
+            dlInpainting.onChange = function () { 
+                cfg.current.inpaintingFill = this.selection.index - 1 
+            }
             dlInpainting.selection = cfg.current.inpaintingFill + 1
             if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') != -1 && SD.extensions[FLUX_KONTEXT]) grInpainting.enabled = false
         }
