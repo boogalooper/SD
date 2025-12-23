@@ -14,7 +14,7 @@
 </javascriptresource>
 // END__HARVEST_EXCEPTION_ZSTRING
 */
-const ver = 0.38,
+const ver = 0.382,
     SD_HOST = '127.0.0.1',
     SD_PORT = 7860,
     API_HOST = '127.0.0.1',
@@ -202,10 +202,10 @@ function main(selection) {
     doc.setProperty('center', c);
     var p = (new Folder(Folder.temp + '/outputs/img2img-images'))
     if (!p.exists) p.create()
-    if (checkpoint || (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('FLUX') == -1 && cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('QWEN') == -1 && cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') == -1 ? vae : encoders) || memory) {
+    if (checkpoint || (!cfg.sd_model_checkpoint.match(/(qwen|flux|kontext|z.image)/i) ? vae : encoders) || memory) {
         var vae_path = [];
         if (SD.forgeUI) {
-            if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('FLUX') == -1 && cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('QWEN') == -1 && cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') == -1) {
+            if (!cfg.sd_model_checkpoint.match(/(qwen|flux|kontext|z.image)/i)) {
                 for (var i = 0; i < SD['sd_modules'].length; i++) {
                     if (SD['sd_modules'][i].indexOf(cfg.current.sd_vae) != -1) {
                         vae_path.push(SD['sd_modules'][i])
@@ -220,7 +220,7 @@ function main(selection) {
         'input': f.fsName.replace(/\\/g, '\\\\'),
         'output': p.fsName.replace(/\\/g, '\\\\'),
         'prompt': cfg.current.prompt.toString().replace(/[^A-Za-z0-9.,()\-<>: ]/g, ''),
-        'negative_prompt': cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('FLUX') == -1 && cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') == -1 ? cfg.current.negative_prompt.toString().replace(/[^A-Za-z0-9.,()\-<>: ]/g, '') : '',
+        'negative_prompt': cfg.sd_model_checkpoint.match(/(flux|kontext)/i) ? '' : cfg.current.negative_prompt.toString().replace(/[^A-Za-z0-9.,()\-<>: ]/g, ''),
         'sampler_name': cfg.current.sampler_name,
         'scheduler': cfg.current.scheduler,
         'cfg_scale': cfg.current.cfg_scale,
@@ -228,10 +228,10 @@ function main(selection) {
         'steps': cfg.current.steps,
         'width': width,
         'height': height,
-        'denoising_strength': cfg.current.denoising_strength,
+        'denoising_strength': cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('QWEN') == -1 ? cfg.current.denoising_strength : 1,
         'n_iter': 1,
     };
-    if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('FLUX') != -1 || cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') != -1) payload['flux'] = true;
+    if (cfg.sd_model_checkpoint.match(/(flux|kontext)/i)) payload['flux'] = true;
     if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') != -1 && SD.extensions[FLUX_KONTEXT]) {
         payload['kontext'] = true
         if (cfg.current.reference != '') {
@@ -239,7 +239,7 @@ function main(selection) {
             if (r.exists) payload['reference'] = r.fsName.replace(/\\/g, '\\\\')
         }
     };
-    if (SD.extensions[FLUX_CACHE] && cfg.forge_control_cache && cfg.current.forge_cache > 0) payload['cache'] = cfg.current.forge_cache;
+    if (SD.extensions[FLUX_CACHE] && cfg.forge_control_cache && cfg.current.forge_cache > 0 && !cfg.sd_model_checkpoint.match(/(qwen|z.image)/i)) payload['cache'] = cfg.current.forge_cache;
     if (cfg.current.inpaintingFill != -1) {
         payload['mask'] = f1.fsName.replace(/\\/g, '\\\\')
         payload['inpainting_fill'] = cfg.current.inpaintingFill + 1
@@ -347,16 +347,22 @@ function dialogWindow(b, s) {
         }
         if (!found) {
             cfg.current = new cfg.checkpointSettings();
-            if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('FLUX') != -1 || cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') != -1) {
+            if (cfg.sd_model_checkpoint.match(/(flux|kontext)/i)) {
                 cfg.current.scheduler = 'Simple'
                 cfg.current.sampler_name = 'Euler'
                 cfg.current.cfg_scale = 3.5
-            } else if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('QWEN') != -1) {
+                cfg.current.forge_cache = 0.1
+            } else if (cfg.sd_model_checkpoint.match(/(qwen)/i)) {
                 cfg.current.scheduler = 'Simple'
                 cfg.current.sampler_name = 'Euler'
                 cfg.current.cfg_scale = 1
-                cfg.current.denoising_strength = 1
-                cfg.current.forge_cache=0
+                cfg.current.forge_cache = 0
+            } else if (cfg.sd_model_checkpoint.match(/z.image/i)) {
+                cfg.current.scheduler = 'Simple'
+                cfg.current.sampler_name = 'Euler'
+                cfg.current.cfg_scale = 1
+                cfg.current.denoising_strength = 0.22
+                cfg.current.forge_cache = 0
             }
         }
         showControls(grSettings)
@@ -392,24 +398,24 @@ function dialogWindow(b, s) {
             p.remove(p.children[0])
         }
         if (cfg.showSd_vae) vae(p)
-        if (cfg.showInpaintingFill && cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') == -1) inpaintingFill(p)
+        if (cfg.showInpaintingFill && (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') == -1 || !SD.extensions[FLUX_KONTEXT])) inpaintingFill(p)
         if (cfg.showPrompt) prompt(p)
-        if (cfg.showNegative_prompt && cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('FLUX') == -1 && cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') == -1) negativePrompt(p);
+        if (cfg.showNegative_prompt && !cfg.sd_model_checkpoint.match(/(flux|kontext)/i)) negativePrompt(p);
         if (cfg.showSampler_name) sampler(p)
         if (cfg.showScheduler) shelduler(p)
         if (cfg.showSteps) steps(p)
         if (cfg.showCfg_scale) cfgScale(p)
         if (cfg.showResize) resizeScale(p)
-        if (cfg.forge_control_cache && SD.extensions[FLUX_CACHE]) cache(p)
-        if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') == -1) denoisingStrength(p)
+        if (cfg.forge_control_cache && SD.extensions[FLUX_CACHE] && !cfg.sd_model_checkpoint.match(/(qwen|z.image)/i)) cache(p)
+        if (cfg.showNegative_prompt && !cfg.sd_model_checkpoint.match(/(kontext|qwen)/i)) denoisingStrength(p)
         if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') != -1 && SD.extensions[FLUX_KONTEXT]) imageReference(p)
         function inpaintingFill(p) {
             var grInpainting = p.add("group{orientation:'column',alignChildren:['fill', 'center'],spacing:0,margins:0}"),
                 stInpainting = grInpainting.add('statictext'),
                 dlInpainting = grInpainting.add('dropdownlist', undefined, undefined, { items: ['none', 'fill', 'original', 'latent noise', 'latent nothing'] });
             stInpainting.text = str.fill
-            dlInpainting.onChange = function () { 
-                cfg.current.inpaintingFill = this.selection.index - 1 
+            dlInpainting.onChange = function () {
+                cfg.current.inpaintingFill = this.selection.index - 1
             }
             dlInpainting.selection = cfg.current.inpaintingFill + 1
             if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') != -1 && SD.extensions[FLUX_KONTEXT]) grInpainting.enabled = false
@@ -418,7 +424,7 @@ function dialogWindow(b, s) {
             var grVae = p.add("group{orientation:'column',alignChildren:['fill', 'center'],spacing:0,margins:0}"),
                 stVae = grVae.add('statictext');
             stVae.text = str.vae;
-            if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('FLUX') == -1 && cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') == -1 && cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('QWEN') == -1) {
+            if (!cfg.sd_model_checkpoint.match(/(qwen|flux|kontext|z.image)/i)) {
                 var dlVae = grVae.add('dropdownlist{preferredSize:[285,-1]}')
                 if (SD['sd-vaes'].length) for (var i = 0; i < SD['sd-vaes'].length; i++) dlVae.add('item', SD['sd-vaes'][i])
                 dlVae.onChange = function () {
@@ -547,7 +553,7 @@ function dialogWindow(b, s) {
                 stCfg = grCfgTitle.add('statictext{preferredSize:[220,-1]}'),
                 stCfgValue = grCfgTitle.add('statictext{preferredSize:[65,-1],justify:"right"}'),
                 slCfg = grCfg.add('slider{minvalue:2,maxvalue:30}');
-            stCfg.text = cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('FLUX') == -1 && cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') == -1 ? str.cfgScale : str.distilledCfgScale;
+            stCfg.text = !cfg.sd_model_checkpoint.match(/(flux|kontext)/i) ? str.cfgScale : str.distilledCfgScale;
             slCfg.onChange = function () { stCfgValue.text = cfg.current.cfg_scale = mathTrunc(this.value) / 2 }
             slCfg.onChanging = function () { slCfg.onChange() }
             slCfg.addEventListener('keydown', commonHandler)
@@ -1389,7 +1395,7 @@ function Config() {
         this.inpaintingFill = -1
         this.positivePreset = ''
         this.negativePreset = 'SD'
-        this.forge_cache = 0.1
+        this.forge_cache = 0
         this.imageReferences = []
         this.reference = ''
     }
