@@ -356,6 +356,7 @@ function dialogWindow(b, s) {
                 cfg.current.sampler_name = 'Euler'
                 cfg.current.cfg_scale = 1
                 cfg.current.denoising_strength = 1
+                cfg.current.forge_cache=0
             }
         }
         showControls(grSettings)
