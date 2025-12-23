@@ -14,7 +14,7 @@
 </javascriptresource>
 // END__HARVEST_EXCEPTION_ZSTRING
 */
-const ver = 0.382,
+const ver = 0.385,
     SD_HOST = '127.0.0.1',
     SD_PORT = 7860,
     API_HOST = '127.0.0.1',
@@ -100,7 +100,6 @@ function init() {
                 cfg.getScriptSettings(true);
                 var tempSettings = new Config();
                 tempSettings.getScriptSettings();
-                cfg.presets = tempSettings.presets
                 cfg.positivePreset = tempSettings.positivePreset
                 cfg.negativePreset = tempSettings.negativePreset
             }
@@ -116,7 +115,6 @@ function init() {
                         if (!cfg.recordToAction) {
                             cfg.putScriptSettings()
                         } else {
-                            tempSettings.presets = cfg.presets
                             tempSettings.positivePreset = cfg.positivePreset
                             tempSettings.negativePreset = cfg.negativePreset
                             tempSettings.putScriptSettings()
@@ -135,6 +133,7 @@ function init() {
     }
 }
 function main(selection) {
+    cfg.sd_model_checkpoint = cfg.sd_model_checkpoint.replace(/\s\[.+\]$/, '');
     var checkpoint = (cfg.sd_model_checkpoint == SD['sd_model_checkpoint'] ? null : findOption(cfg.sd_model_checkpoint, SD['sd-models'], SD['sd_model_checkpoint'])),
         vae = (cfg.current.sd_vae == SD['sd_vae'] ? null : findOption(cfg.current.sd_vae, SD['sd-vaes'], SD['sd_vae'])),
         encoders = checkEncoders(cfg.current.encoders, SD['forge_additional_modules'], SD['sd_modules']),
@@ -171,6 +170,13 @@ function main(selection) {
     var hst = activeDocument.activeHistoryState,
         c = doc.getProperty('center').value;
     doc.crop(true);
+    if (cfg.current.qwenFix) {
+        doc.imageSize(width >= height ? 1024 : 0, height > width ? 1024 : 0, true);
+        var docRes = doc.getProperty('resolution');
+        deltaW = 1024 - doc.getProperty('width') * docRes / 72
+        deltaH = 1024 - doc.getProperty('height') * docRes / 72
+        doc.canvasSize(deltaW, deltaH);
+    }
     if (cfg.current.inpaintingFill != -1) {
         lr.selectChannel('mask');
         lr.selectAllPixels();
@@ -216,6 +222,10 @@ function main(selection) {
         }
         if (!SD.setOptions(checkpoint, vae, vae_path, memory)) throw new Error(str.errUpdating)
     }
+    if (cfg.current.qwenFix) {
+        var offset = $.getenv('offset');
+        if (offset == null) offset = cfg.current.steps;
+    }
     var payload = {
         'input': f.fsName.replace(/\\/g, '\\\\'),
         'output': p.fsName.replace(/\\/g, '\\\\'),
@@ -225,12 +235,15 @@ function main(selection) {
         'scheduler': cfg.current.scheduler,
         'cfg_scale': cfg.current.cfg_scale,
         'seed': -1,
-        'steps': cfg.current.steps,
-        'width': width,
-        'height': height,
+        'steps': cfg.current.qwenFix ? (cfg.current.steps == offset ? cfg.current.steps + 1 : cfg.current.steps) : cfg.current.steps,
+        'width': cfg.current.qwenFix ? 1024 : width,
+        'height': cfg.current.qwenFix ? 1024 : height,
         'denoising_strength': cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('QWEN') == -1 ? cfg.current.denoising_strength : 1,
         'n_iter': 1,
     };
+    if (cfg.current.qwenFix) {
+        $.setenv('offset', cfg.current.steps == offset ? cfg.current.steps + 1 : cfg.current.steps)
+    }
     if (cfg.sd_model_checkpoint.match(/(flux|kontext)/i)) payload['flux'] = true;
     if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') != -1 && SD.extensions[FLUX_KONTEXT]) {
         payload['kontext'] = true
@@ -250,6 +263,13 @@ function main(selection) {
         activeDocument.suspendHistory('Generate image', 'generatedImageToLayer()')
     } else throw new Error(str.errGenerating)
     function generatedImageToLayer() {
+        if (cfg.current.qwenFix) {
+            doc.openFile(new File(result));
+            doc.canvasSize(-deltaW, -deltaH);
+            doc.imageSize(width, height, true);
+            doc.close(true)
+            b = 0;
+        }
         doc.place(new File(result))
         var placedBounds = doc.descToObject(lr.getProperty('bounds').value);
         var dW = (selection.bounds.right - selection.bounds.left) / (placedBounds.right - placedBounds.left);
@@ -290,7 +310,7 @@ function checkEncoders(encoders, loaded, modules) {
         var found = 0;
         for (var i = 0; i < filteredEncoders.length; i++) {
             for (var x = 0; x < loaded.length; x++) {
-                if (filteredEncoders[i] == loaded[i]) {
+                if (filteredEncoders[i] == loaded[x]) {
                     found++
                     break;
                 }
@@ -301,6 +321,7 @@ function checkEncoders(encoders, loaded, modules) {
     return filteredEncoders
 }
 function dialogWindow(b, s) {
+    cfg.sd_model_checkpoint = cfg.sd_model_checkpoint.replace(/\s\[.+\]$/, '');
     var w = new Window("dialog{orientation:'column',alignChildren:['fill', 'top'],spacing:0,margins:15}"),
         grGlobal = w.add("group{orientation:'row',alignChildren:['left', 'center'],spacing:0,margins:0}"),
         grCheckoint = w.add("group{orientation:'column',alignChildren:['fill', 'center'],spacing:0,margins:[0,10,0,5]}"),
@@ -319,7 +340,9 @@ function dialogWindow(b, s) {
     Ok.text = str.generate;
     bnSettings.helpTip = str.settings
     if (SD['sd-models'].length) for (var i = 0; i < SD['sd-models'].length; i++) dlCheckpoint.add('item', SD['sd-models'][i])
-    var current = dlCheckpoint.find(cfg.sd_model_checkpoint) ? dlCheckpoint.find(cfg.sd_model_checkpoint) : dlCheckpoint.find(SD['sd_model_checkpoint']);
+    var bypass = cfg.sd_model_checkpoint == '' ? true : false;
+    var current = dlCheckpoint.find(cfg.sd_model_checkpoint.replace(/\s\[.+\]$/, ''));
+    if (!current) dlCheckpoint.find(SD['sd_model_checkpoint']);
     dlCheckpoint.selection = current ? current.index : 0
     cfg.sd_model_checkpoint = dlCheckpoint.selection.text
     dlCheckpoint.onChange = function (bypass) {
@@ -357,10 +380,11 @@ function dialogWindow(b, s) {
                 cfg.current.sampler_name = 'Euler'
                 cfg.current.cfg_scale = 1
                 cfg.current.forge_cache = 0
+                if (cfg.sd_model_checkpoint.match(/(edit)/i)) cfg.current.qwenFix = true
             } else if (cfg.sd_model_checkpoint.match(/z.image/i)) {
                 cfg.current.scheduler = 'Simple'
                 cfg.current.sampler_name = 'Euler'
-                cfg.current.cfg_scale = 1
+                cfg.current.cfg_scale = 3
                 cfg.current.denoising_strength = 0.22
                 cfg.current.forge_cache = 0
             }
@@ -368,7 +392,7 @@ function dialogWindow(b, s) {
         showControls(grSettings)
         w.layout.layout(true)
     }
-    dlCheckpoint.onChange(true)
+    if (bypass) { dlCheckpoint.onChange(true) }
     bnSettings.onClick = function () {
         var tempSettings = {}
         cloneObject(cfg, tempSettings)
@@ -398,7 +422,7 @@ function dialogWindow(b, s) {
             p.remove(p.children[0])
         }
         if (cfg.showSd_vae) vae(p)
-        if (cfg.showInpaintingFill && (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') == -1 || !SD.extensions[FLUX_KONTEXT])) inpaintingFill(p)
+        if (cfg.showInpaintingFill && (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') == -1 || !SD.extensions[FLUX_KONTEXT]) && !cfg.sd_model_checkpoint.match(/qwen.+edit/i)) inpaintingFill(p)
         if (cfg.showPrompt) prompt(p)
         if (cfg.showNegative_prompt && !cfg.sd_model_checkpoint.match(/(flux|kontext)/i)) negativePrompt(p);
         if (cfg.showSampler_name) sampler(p)
@@ -409,6 +433,7 @@ function dialogWindow(b, s) {
         if (cfg.forge_control_cache && SD.extensions[FLUX_CACHE] && !cfg.sd_model_checkpoint.match(/(qwen|z.image)/i)) cache(p)
         if (cfg.showNegative_prompt && !cfg.sd_model_checkpoint.match(/(kontext|qwen)/i)) denoisingStrength(p)
         if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') != -1 && SD.extensions[FLUX_KONTEXT]) imageReference(p)
+        if (SD.forgeUI && cfg.sd_model_checkpoint.match(/qwen.+edit/i)) qwenFix(p)
         function inpaintingFill(p) {
             var grInpainting = p.add("group{orientation:'column',alignChildren:['fill', 'center'],spacing:0,margins:0}"),
                 stInpainting = grInpainting.add('statictext'),
@@ -542,7 +567,10 @@ function dialogWindow(b, s) {
                 stStepsValue = grStepsTitle.add('statictext{preferredSize:[65,-1],justify:"right"}'),
                 slSteps = grSteps.add('slider{minvalue:1,maxvalue:100}');
             stSteps.text = str.steps
-            slSteps.onChange = function () { stStepsValue.text = cfg.current.steps = mathTrunc(this.value) }
+            slSteps.onChange = function () {
+                stStepsValue.text = cfg.current.steps = mathTrunc(this.value)
+                if (cfg.current.qwenFix) $.setenv('offset', cfg.current.steps)
+            }
             slSteps.onChanging = function () { slSteps.onChange() }
             slSteps.addEventListener('keydown', commonHandler)
             slSteps.value = stStepsValue.text = cfg.current.steps
@@ -591,6 +619,7 @@ function dialogWindow(b, s) {
                 stResizeValue.text = cfg.current.resize = mathTrunc(slResize.value) / 100
                 stResize.text = setTitle()
             }
+            p.slResize = slResize
         }
         function cache(p) {
             var grCache = p.add("group{orientation:'column',alignChildren:['fill', 'center'],spacing:5,margins:0}"),
@@ -692,6 +721,21 @@ function dialogWindow(b, s) {
                 }
                 return null
             }
+        }
+        function qwenFix(p) {
+            var grQwenFix = p.add("group{orientation:'column',alignChildren:['fill', 'center'],spacing:0,margins:0}"),
+                chQwenFix = grQwenFix.add('checkbox{preferredSize:[285,-1]}');
+            chQwenFix.text = str.qwenFix;
+            chQwenFix.value = cfg.current.qwenFix
+            chQwenFix.onClick = function () {
+                if (p.slResize) {
+                    p.slResize.value = this.value ? 1 * 100 : (cfg.autoResize ? autoScale(b) : cfg.current.resize) * 100
+                    p.slResize.onChange();
+                    p.slResize.enabled = !this.value
+                }
+                cfg.current.qwenFix = this.value
+            }
+            chQwenFix.onClick()
         }
     }
     function settingsWindow(p, cfg) {
@@ -1330,11 +1374,27 @@ function AM(target, order) {
     this.mergeVisible = function () {
         try { executeAction(s2t("mergeVisible"), undefined, DialogModes.NO); } catch (e) { };
     }
-    this.imageSize = function (width, height) {
-        (d = new AD).putUnitDouble(s2t("width"), s2t("pixelsUnit"), width);
-        d.putUnitDouble(s2t("height"), s2t("pixelsUnit"), height);
+    this.imageSize = function (width, height, constrainProportions) {
+        (d = new AD);
+        if (width != 0) d.putUnitDouble(s2t("width"), s2t("pixelsUnit"), width);
+        if (height != 0) d.putUnitDouble(s2t("height"), s2t("pixelsUnit"), height);
+        if (constrainProportions) d.putBoolean(s2t("constrainProportions"), true);
         d.putEnumerated(s2t("interpolation"), s2t("interpolationType"), s2t("automaticInterpolation"));
         executeAction(s2t("imageSize"), d, DialogModes.NO);
+    }
+    this.canvasSize = function (width, height) {
+        (d = new AD).putBoolean(s2t("relative"), true);
+        d.putUnitDouble(s2t("width"), s2t("pixelsUnit"), width);
+        d.putUnitDouble(s2t("height"), s2t("pixelsUnit"), height);
+        d.putEnumerated(s2t("horizontal"), s2t("horizontalLocation"), s2t("left"));
+        d.putEnumerated(s2t("vertical"), s2t("verticalLocation"), s2t("top"));
+        d.putEnumerated(s2t("canvasExtensionColorType"), s2t("canvasExtensionColorType"), s2t("gray"));
+        executeAction(s2t("canvasSize"), d, DialogModes.NO);
+    }
+    this.close = function (save) {
+        save = save != true ? s2t("no") : s2t("yes");
+        (d = new AD).putEnumerated(s2t("saving"), s2t("yesNo"), save);
+        executeAction(s2t("close"), d, DialogModes.NO);
     }
     this.makeLayer = function (title) {
         (r = new AR).putClass(s2t('layer'));
@@ -1361,6 +1421,11 @@ function AM(target, order) {
     this.waitForRedraw = function () {
         (d = new ActionDescriptor()).putEnumerated(s2t('state'), s2t('state'), s2t('redrawComplete'));
         executeAction(s2t('wait'), d, DialogModes.NO);
+    }
+    this.openFile = function (pth) {
+        (d = new AD).putPath(s2t('target'), pth);
+        d.putBoolean(s2t('forceNotify'), false);
+        executeAction(s2t('open'), d, DialogModes.NO);
     }
     function getDescValue(d, p) {
         switch (d.getType(p)) {
@@ -1390,7 +1455,7 @@ function Config() {
         this.steps = 20
         this.denoising_strength = 0.22
         this.prompt = ''
-        this.negative_prompt = '(deformed, distorted, disfigured:1.3), poorly drawn, bad anatomy, wrong anatomy, extra limb, missing limb, floating limbs, (mutated hands and fingers:1.4), disconnected limbs, mutation, mutated, ugly, disgusting, blurry, amputation'
+        this.negative_prompt = ''
         this.resize = 1
         this.inpaintingFill = -1
         this.positivePreset = ''
@@ -1398,6 +1463,7 @@ function Config() {
         this.forge_cache = 0
         this.imageReferences = []
         this.reference = ''
+        this.qwenFix = false
     }
     var settingsObj = this;
     this.current = new settingsObj.checkpointSettings();
@@ -1684,4 +1750,5 @@ function Locale() {
     this.browse = { ru: 'Обзор... ', en: 'Browse...' }
     this.wxh = { ru: 'ширина и высота (px)', en: 'width and height (px)' }
     this.area = { ru: 'площадь (MP)', en: 'area (MP)' }
+    this.qwenFix = 'Qwen edit fix (1024x1024 + steps shfit)'
 }
