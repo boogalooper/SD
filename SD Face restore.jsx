@@ -41,7 +41,7 @@ isCancelled = false;
 $.localize = true
 sts.getSettings();
 if (ScriptUI.environment.keyboardState.shiftKey) $.setenv('showRestoreDialog', true);
-if (ScriptUI.environment.keyboardState.altKey) sts.showStatistics();
+if (ScriptUI.environment.keyboardState.shiftKey && ScriptUI.environment.keyboardState.altKey) sts.showStatistics();
 try {
     init()
     sts.finish(true);

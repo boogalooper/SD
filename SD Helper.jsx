@@ -45,7 +45,7 @@ var time = (new Date).getTime(),
 $.localize = true
 sts.getSettings();
 if (ScriptUI.environment.keyboardState.shiftKey) $.setenv('dialogMode', true);
-if (ScriptUI.environment.keyboardState.altKey) sts.showStatistics();
+if (ScriptUI.environment.keyboardState.shiftKey && ScriptUI.environment.keyboardState.altKey) sts.showStatistics();
 try {
     init();
     sts.finish(true);
