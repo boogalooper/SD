@@ -14,7 +14,7 @@
 </javascriptresource>
 // END__HARVEST_EXCEPTION_ZSTRING
 */
-const ver = 0.385,
+const ver = 0.387,
     SD_HOST = '127.0.0.1',
     SD_PORT = 7860,
     API_HOST = '127.0.0.1',
@@ -33,6 +33,7 @@ var time = (new Date).getTime(),
     s2t = stringIDToTypeID,
     t2s = typeIDToStringID,
     cfg = new Config(),
+    sts = new Statistics(),
     dl = new Delay(),
     str = new Locale(),
     apl = new AM('application'),
@@ -42,12 +43,19 @@ var time = (new Date).getTime(),
     isDitry = false,
     isCancelled = false;
 $.localize = true
+sts.getSettings();
 if (ScriptUI.environment.keyboardState.shiftKey) $.setenv('dialogMode', true);
-try { init() } catch (e) {
+if (ScriptUI.environment.keyboardState.altKey) sts.showStatistics();
+try {
+    init();
+    sts.finish(true);
+} catch (e) {
+    sts.finish(false)
     alert(e, undefined, true)
     $.setenv('dialogMode', true)
     isCancelled = true;
 }
+sts.putSettings();
 isCancelled ? 'cancel' : undefined;
 function init() {
     var currentSelection = { result: false, bounds: null, previousGeneration: null, junk: null };
@@ -63,20 +71,20 @@ function init() {
         b.width = b.right - b.left
         b.height = b.bottom - b.top
         if (!app.playbackParameters.count || app.playbackParameters.count == 1) {
-            cfg.getScriptSettings();
+            cfg.getSettings();
             if (app.playbackParameters.count == 1) $.setenv('dialogMode', true)
             if (($.getenv('dialogMode') == 'true' || $.getenv('dialogMode') == null)) {
                 if (SD.initialize()) {
                     var w = dialogWindow(currentSelection.bounds, (((new Date).getTime() - time) / 1000)); var result = w.show()
                     $.setenv('dialogMode', false)
                     if (result == 2) {
-                        cfg.putScriptSettings()
+                        cfg.putSettings()
                         $.setenv('dialogMode', true)
                         isCancelled = true;
                         return;
                     } else if (result != undefined) {
-                        cfg.putScriptSettings()
-                        cfg.putScriptSettings(true)
+                        cfg.putSettings()
+                        cfg.putSettings(true)
                         SD.setOptions(null, null, null, 64)
                         SD['forge_inference_memory'] = 64
                         main(currentSelection);
@@ -85,7 +93,7 @@ function init() {
             } else {
                 if (SD.initialize()) {
                     $.setenv('dialogMode', false)
-                    cfg.putScriptSettings(true)
+                    cfg.putSettings(true)
                     main(currentSelection);
                 } else {
                     isCancelled = true
@@ -94,12 +102,12 @@ function init() {
         }
         else {
             if (!cfg.recordToAction) {
-                cfg.getScriptSettings()
+                cfg.getSettings()
                 cfg.recordToAction = false
             } else {
-                cfg.getScriptSettings(true);
+                cfg.getSettings(true);
                 var tempSettings = new Config();
-                tempSettings.getScriptSettings();
+                tempSettings.getSettings();
                 cfg.positivePreset = tempSettings.positivePreset
                 cfg.negativePreset = tempSettings.negativePreset
             }
@@ -111,13 +119,13 @@ function init() {
                         return;
                     } else if (result != undefined) {
                         $.setenv('dialogMode', false)
-                        cfg.putScriptSettings(true)
+                        cfg.putSettings(true)
                         if (!cfg.recordToAction) {
-                            cfg.putScriptSettings()
+                            cfg.putSettings()
                         } else {
                             tempSettings.positivePreset = cfg.positivePreset
                             tempSettings.negativePreset = cfg.negativePreset
-                            tempSettings.putScriptSettings()
+                            tempSettings.putSettings()
                         }
                         SD.setOptions(null, null, null, 64)
                         SD['forge_inference_memory'] = 64
@@ -258,17 +266,20 @@ function main(selection) {
         payload['inpainting_fill'] = cfg.current.inpaintingFill + 1
     }
     apl.waitForRedraw()
+    sts.init([cfg.sd_model_checkpoint]);
     var result = SD.sendPayload(payload);
     if (result) {
         activeDocument.suspendHistory('Generate image', 'generatedImageToLayer()')
     } else throw new Error(str.errGenerating)
     function generatedImageToLayer() {
         if (cfg.current.qwenFix) {
+            var len = apl.getProperty('numberOfDocuments')
             doc.openFile(new File(result));
-            doc.canvasSize(-deltaW, -deltaH);
-            doc.imageSize(width, height, true);
-            doc.close(true)
-            b = 0;
+            if (apl.getProperty('numberOfDocuments') > len) {
+                doc.canvasSize(-deltaW, -deltaH);
+                doc.imageSize(width, height, true);
+                doc.close(true)
+            }
         }
         doc.place(new File(result))
         var placedBounds = doc.descToObject(lr.getProperty('bounds').value);
@@ -1499,7 +1510,7 @@ function Config() {
         'SD': '(deformed, distorted, disfigured:1.3), poorly drawn, bad anatomy, wrong anatomy, extra limb, missing limb, floating limbs, (mutated hands and fingers:1.4), disconnected limbs, mutation, mutated, ugly, disgusting, blurry, amputation',
         'Realistic': '(deformed iris, deformed pupils, semi-realistic, cgi, 3d, render, sketch, cartoon, drawing, anime), text, cropped, out of frame, worst quality, low quality, jpeg artifacts, ugly, duplicate, morbid, mutilated, extra fingers, mutated hands, poorly drawn hands, poorly drawn face, mutation, deformed, blurry, dehydrated, bad anatomy, bad proportions, extra limbs, cloned face, disfigured, gross proportions, malformed limbs, missing arms, missing legs, extra arms, extra legs, fused fingers, too many fingers, long neck'
     }
-    this.getScriptSettings = function (fromAction) {
+    this.getSettings = function (fromAction) {
         if (fromAction) { var d = playbackParameters }
         else { try { var d = getFromFile(); } catch (e) { } };
         if (d != undefined) descriptorToObject(settingsObj, d)
@@ -1528,7 +1539,7 @@ function Config() {
             for (var i = 0; i < l.count; i++) { a.push(l.getString(i)) };
         }
     }
-    this.putScriptSettings = function (toAction) {
+    this.putSettings = function (toAction) {
         settingsObj.presets[settingsObj.sd_model_checkpoint] = settingsObj.current
         var d = objectToDescriptor(settingsObj)
         if (toAction) playbackParameters = d else saveToFile(d)
@@ -1608,7 +1619,7 @@ function Config() {
         }
         settingsObj[context] = {}
         for (var i = 0; i < output.length; i++) settingsObj[context][output[i].key] = output[i].val
-        this.putScriptSettings();
+        this.putSettings();
     }
     function getFromFile() {
         var d = new ActionDescriptor(),
@@ -1687,6 +1698,116 @@ function Delay() {
     function arrayToList(a, l) {
         for (var i = 0; i < a.length; i++) { l.putInteger(a[i]) }
         return l
+    }
+}
+function Statistics() {
+    var settingsObj = this;
+    this.generations = {};
+    this.faceRestore = {};
+    var current = [];
+    this.init = function (s) {
+        current = s
+    }
+    this.finish = function (result) {
+        for (var a in current) {
+            if (!settingsObj.generations[current[a]]) settingsObj.generations[current[a]] = { success: 0, error: 0 };
+            result ? settingsObj.generations[current[a]].success++ : settingsObj.generations[current[a]].error++
+        }
+    }
+    this.showStatistics = function () {
+        var result = [], s = 0, e = 0, tmp = '';
+        for (a in settingsObj.generations) {
+            s += settingsObj.generations[a].success
+            e += settingsObj.generations[a].error
+            result.push(settingsObj.generations[a].toSource() + ' ' + a.replace(/\..+$/, ''))
+        }
+        if (result.length) tmp = 'Generation: success: ' + s + ' errors: ' + e + '\n' + result.join('\n') + '\n\n';
+        var result = [], s = 0, e = 0;
+        for (a in settingsObj.faceRestore) {
+            s += settingsObj.faceRestore[a].success
+            e += settingsObj.faceRestore[a].error
+            result.push(settingsObj.faceRestore[a].toSource() + ' ' + a.replace(/\..+$/, ''))
+        }
+        if (result.length) tmp += 'Face resore: success: ' + s + ' errors: ' + e + '\n' + result.join('\n');
+        if (tmp != '') alert(tmp, 'Generation statistics')
+    }
+    this.getSettings = function () {
+        try { var d = getFromFile(); } catch (e) { }
+        if (d != undefined) descriptorToObject(settingsObj, d)
+        function descriptorToObject(o, d) {
+            var l = d.count;
+            for (var i = 0; i < l; i++) {
+                var k = d.getKey(i),
+                    t = d.getType(k),
+                    s = t2s(k);
+                switch (t) {
+                    case DescValueType.BOOLEANTYPE: o[s] = d.getBoolean(k); break;
+                    case DescValueType.STRINGTYPE: o[s] = d.getString(k); break;
+                    case DescValueType.DOUBLETYPE: o[s] = d.getDouble(k); break;
+                    case DescValueType.OBJECTTYPE: o[s] = {}; descriptorToObject(o[s], d.getObjectValue(k)); break;
+                    case DescValueType.LISTTYPE: o[s] = []; listToArray(d.getList(k), o[s]); break;
+                }
+            }
+        }
+        function listToArray(l, a) {
+            for (var i = 0; i < l.count; i++) { a.push(l.getString(i)) };
+        }
+    }
+    this.putSettings = function () {
+        var d = objectToDescriptor(settingsObj)
+        saveToFile(d)
+        function objectToDescriptor(o) {
+            var d = new ActionDescriptor,
+                l = o.reflect.properties.length;
+            for (var i = 0; i < l; i++) {
+                var k = o.reflect.properties[i].toString();
+                if (k == '__proto__' || k == '__count__' || k == '__class__' || k == 'reflect') continue;
+                var v = o[k];
+                k = s2t(k);
+                switch (typeof (v)) {
+                    case 'boolean': d.putBoolean(k, v); break;
+                    case 'string': d.putString(k, v); break;
+                    case 'number': d.putDouble(k, v); break;
+                    case 'object':
+                        if (v instanceof Array) {
+                            d.putList(k, arrayToList(v, new ActionList))
+                        } else {
+                            d.putObject(k, s2t('object'), objectToDescriptor(v));
+                        }
+                        break;
+                }
+            }
+            return d;
+        }
+        function arrayToList(a, l) {
+            for (var i = 0; i < a.length; i++) { l.putString(a[i]) }
+            return l;
+        }
+    }
+    function getFromFile() {
+        var d = new ActionDescriptor(),
+            f = new File(app.preferencesFolder + '/SD Helper statistics.desc');
+        try {
+            if (f.exists) {
+                f.open('r')
+                f.encoding = 'BINARY'
+                var s = f.read()
+                f.close();
+                d.fromStream(s);
+            }
+        } catch (e) { throw (e, '', 1) }
+        return d
+    }
+    function saveToFile(d) {
+        var f = new File(app.preferencesFolder + '/SD Helper statistics.desc');
+        try {
+            f.open('w')
+            f.encoding = 'BINARY'
+            f.write(d.toStream())
+            f.close()
+            return true
+        } catch (e) { throw (e, '', 1) }
+        return false
     }
 }
 function Locale() {
