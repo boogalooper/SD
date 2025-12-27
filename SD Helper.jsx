@@ -14,7 +14,7 @@
 </javascriptresource>
 // END__HARVEST_EXCEPTION_ZSTRING
 */
-const ver = 0.387,
+const ver = 0.4,
     SD_HOST = '127.0.0.1',
     SD_PORT = 7860,
     API_HOST = '127.0.0.1',
@@ -178,7 +178,7 @@ function main(selection) {
     var hst = activeDocument.activeHistoryState,
         c = doc.getProperty('center').value;
     doc.crop(true);
-    if (cfg.current.qwenFix) {
+    if (cfg.current.qwenResFix) {
         doc.imageSize(width >= height ? 1024 : 0, height > width ? 1024 : 0, true);
         var docRes = doc.getProperty('resolution');
         deltaW = 1024 - doc.getProperty('width') * docRes / 72
@@ -230,7 +230,7 @@ function main(selection) {
         }
         if (!SD.setOptions(checkpoint, vae, vae_path, memory)) throw new Error(str.errUpdating)
     }
-    if (cfg.current.qwenFix) {
+    if (cfg.current.qwenStepsFix) {
         var offset = $.getenv('offset');
         if (offset == null) offset = cfg.current.steps;
     }
@@ -243,13 +243,13 @@ function main(selection) {
         'scheduler': cfg.current.scheduler,
         'cfg_scale': cfg.current.cfg_scale,
         'seed': -1,
-        'steps': cfg.current.qwenFix ? (cfg.current.steps == offset ? cfg.current.steps + 1 : cfg.current.steps) : cfg.current.steps,
-        'width': cfg.current.qwenFix ? 1024 : width,
-        'height': cfg.current.qwenFix ? 1024 : height,
+        'steps': cfg.current.qwenStepsFix ? (cfg.current.steps == offset ? cfg.current.steps + 1 : cfg.current.steps) : cfg.current.steps,
+        'width': cfg.current.qwenResFix ? 1024 : width,
+        'height': cfg.current.qwenResFix ? 1024 : height,
         'denoising_strength': cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('QWEN') == -1 ? cfg.current.denoising_strength : 1,
         'n_iter': 1,
     };
-    if (cfg.current.qwenFix) {
+    if (cfg.current.qwenStepsFix) {
         $.setenv('offset', cfg.current.steps == offset ? cfg.current.steps + 1 : cfg.current.steps)
     }
     if (cfg.sd_model_checkpoint.match(/(flux|kontext)/i)) payload['flux'] = true;
@@ -272,7 +272,7 @@ function main(selection) {
         activeDocument.suspendHistory('Generate image', 'generatedImageToLayer()')
     } else throw new Error(str.errGenerating)
     function generatedImageToLayer() {
-        if (cfg.current.qwenFix) {
+        if (cfg.current.qwenResFix) {
             var len = apl.getProperty('numberOfDocuments')
             doc.openFile(new File(result));
             if (apl.getProperty('numberOfDocuments') > len) {
@@ -335,75 +335,18 @@ function dialogWindow(b, s) {
     cfg.sd_model_checkpoint = cfg.sd_model_checkpoint.replace(/\s\[.+\]$/, '');
     var w = new Window("dialog{orientation:'column',alignChildren:['fill', 'top'],spacing:0,margins:15}"),
         grGlobal = w.add("group{orientation:'row',alignChildren:['left', 'center'],spacing:0,margins:0}"),
-        grCheckoint = w.add("group{orientation:'column',alignChildren:['fill', 'center'],spacing:0,margins:[0,10,0,5]}"),
-        stCheckpoint = grCheckoint.add('statictext'),
-        dlCheckpoint = grCheckoint.add('dropdownlist{preferredSize: [285, -1] }'),
         stWH = grGlobal.add("statictext{preferredSize:[265,-1]}"),
         bnSettings = grGlobal.add("button{preferredSize:[25, 25]}"),
         grSettings = w.add("group{orientation:'column',alignChildren:['fill', 'left'],spacing:5,margins:0}");
-    showControls(grSettings, true);
+    var generationAllowed = showControls(grSettings, true);
     var grOk = w.add("group{orientation:'row',alignChildren:['center','center'],spacing:10,margins:[0, 10, 0, 0]}"),
-        Ok = grOk.add('button', undefined, undefined, { name: 'ok' });
+        bnOk = grOk.add('button', undefined, undefined, { name: 'ok' });
     w.text = 'SD Helper v.' + ver + ' - responce time ' + s + 's';
     stWH.text = str.selection + b.width + 'x' + b.height + ' (' + mathTrunc((b.width * b.height) / 10000) / 100 + ' MP)';
     bnSettings.text = '⚙';
-    stCheckpoint.text = str.checkpoint;
-    Ok.text = str.generate;
+    bnOk.text = str.generate;
+    grSettings.enabled = bnOk.enabled = generationAllowed;
     bnSettings.helpTip = str.settings
-    if (SD['sd-models'].length) for (var i = 0; i < SD['sd-models'].length; i++) dlCheckpoint.add('item', SD['sd-models'][i])
-    var bypass = cfg.sd_model_checkpoint == '' ? true : false;
-    var current = dlCheckpoint.find(cfg.sd_model_checkpoint.replace(/\s\[.+\]$/, ''));
-    if (!current) dlCheckpoint.find(SD['sd_model_checkpoint']);
-    dlCheckpoint.selection = current ? current.index : 0
-    cfg.sd_model_checkpoint = dlCheckpoint.selection.text
-    dlCheckpoint.onChange = function (bypass) {
-        if (!bypass) {
-            cfg.presets[cfg.sd_model_checkpoint] = cfg.current
-            cfg.sd_model_checkpoint = this.selection.text
-        }
-        var found = false;
-        if (cfg.presets[cfg.sd_model_checkpoint]) {
-            cfg.current = new cfg.checkpointSettings()
-            for (var a in cfg.presets[cfg.sd_model_checkpoint]) {
-                cfg.current[a] = cfg.presets[cfg.sd_model_checkpoint][a]
-            }
-            found = true;
-        } else {
-            for (var s in cfg.presets) {
-                if (s.indexOf(cfg.sd_model_checkpoint) != -1) {
-                    for (var a in cfg.presets[s]) {
-                        cfg.current[a] = cfg.presets[s][a]
-                    }
-                    found = true;
-                    break;
-                }
-            }
-        }
-        if (!found) {
-            cfg.current = new cfg.checkpointSettings();
-            if (cfg.sd_model_checkpoint.match(/(flux|kontext)/i)) {
-                cfg.current.scheduler = 'Simple'
-                cfg.current.sampler_name = 'Euler'
-                cfg.current.cfg_scale = 3.5
-                cfg.current.forge_cache = 0.1
-            } else if (cfg.sd_model_checkpoint.match(/(qwen)/i)) {
-                cfg.current.scheduler = 'Simple'
-                cfg.current.sampler_name = 'Euler'
-                cfg.current.cfg_scale = 1
-                cfg.current.forge_cache = 0
-                if (cfg.sd_model_checkpoint.match(/(edit)/i)) cfg.current.qwenFix = true
-            } else if (cfg.sd_model_checkpoint.match(/z.image/i)) {
-                cfg.current.scheduler = 'Simple'
-                cfg.current.sampler_name = 'Euler'
-                cfg.current.cfg_scale = 3
-                cfg.current.denoising_strength = 0.22
-                cfg.current.forge_cache = 0
-            }
-        }
-        showControls(grSettings)
-        w.layout.layout(true)
-    }
-    if (bypass) { dlCheckpoint.onChange(true) }
     bnSettings.onClick = function () {
         var tempSettings = {}
         cloneObject(cfg, tempSettings)
@@ -412,13 +355,24 @@ function dialogWindow(b, s) {
         if (result == 1) {
             var changed = false;
             for (var a in tempSettings) {
-                if (a.indexOf('show') == -1 && a.indexOf('autoResize') == -1 && a.indexOf('forge_control_cache')) continue;
-                if (tempSettings[a] != cfg[a]) {
-                    changed = true
-                    break;
+                if (!a.match(/(autoResize|forge_control_cache|Filter)/)) continue;
+                if (typeof tempSettings[a] != 'object') {
+                    if (tempSettings[a] != cfg[a]) {
+                        changed = true
+                    }
+                } else if (cfg[a] instanceof Array) {
+                    if (tempSettings[a].length != cfg[a].length) changed = true;
+                    for (var b in tempSettings[a]) {
+                        if (tempSettings[a][b] != cfg[a][b]) {
+                            changed = true;
+                            break;
+                        }
+                    }
                 }
+                if (changed) break;
             }
             cloneObject(tempSettings, cfg)
+            $.writeln(changed)
             if (changed) {
                 showControls(grSettings)
                 w.layout.layout(true)
@@ -432,19 +386,85 @@ function dialogWindow(b, s) {
         for (var i = 0; i < len; i++) {
             p.remove(p.children[0])
         }
-        if (cfg.showSd_vae) vae(p)
-        if (cfg.showInpaintingFill && (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') == -1 || !SD.extensions[FLUX_KONTEXT]) && !cfg.sd_model_checkpoint.match(/qwen.+edit/i)) inpaintingFill(p)
-        if (cfg.showPrompt) prompt(p)
-        if (cfg.showNegative_prompt && !cfg.sd_model_checkpoint.match(/(flux|kontext)/i)) negativePrompt(p);
-        if (cfg.showSampler_name) sampler(p)
-        if (cfg.showScheduler) shelduler(p)
-        if (cfg.showSteps) steps(p)
-        if (cfg.showCfg_scale) cfgScale(p)
-        if (cfg.showResize) resizeScale(p)
+        var enabled = checkpoint(p);
+        vae(p);
+        if ((cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') == -1 || !SD.extensions[FLUX_KONTEXT]) && !cfg.sd_model_checkpoint.match(/qwen.+edit/i)) inpaintingFill(p)
+        prompt(p);
+        if (!cfg.sd_model_checkpoint.match(/(flux|kontext)/i)) negativePrompt(p);
+        sampler(p);
+        shelduler(p);
+        steps(p);
+        cfgScale(p);
+        resizeScale(p);
         if (cfg.forge_control_cache && SD.extensions[FLUX_CACHE] && !cfg.sd_model_checkpoint.match(/(qwen|z.image)/i)) cache(p)
         if (cfg.showNegative_prompt && !cfg.sd_model_checkpoint.match(/(kontext|qwen)/i)) denoisingStrength(p)
         if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') != -1 && SD.extensions[FLUX_KONTEXT]) imageReference(p)
         if (SD.forgeUI && cfg.sd_model_checkpoint.match(/qwen.+edit/i)) qwenFix(p)
+        return enabled;
+        function checkpoint(p) {
+            grCheckoint = p.add("group{orientation:'column',alignChildren:['fill', 'center'],spacing:0,margins:[0,10,0,5]}"),
+                stCheckpoint = grCheckoint.add('statictext'),
+                dlCheckpoint = grCheckoint.add('dropdownlist{preferredSize: [285, -1] }');
+            stCheckpoint.text = str.checkpoint;
+            var checkpoints = filteredList(SD['sd-models'], cfg.checkpointFilter);
+            if (checkpoints.length) {
+                for (var i = 0; i < checkpoints.length; i++) dlCheckpoint.add('item', checkpoints[i])
+                var bypass = cfg.sd_model_checkpoint == '' ? true : false;
+                var current = dlCheckpoint.find(cfg.sd_model_checkpoint.replace(/\s\[.+\]$/, '')) ? dlCheckpoint.find(cfg.sd_model_checkpoint.replace(/\s\[.+\]$/, '')) : dlCheckpoint.find('sd_model_checkpoint');
+                dlCheckpoint.selection = current ? current.index : 0
+                cfg.sd_model_checkpoint = dlCheckpoint.selection.text
+            }
+            dlCheckpoint.onChange = function (bypass) {
+                if (!bypass) {
+                    cfg.presets[cfg.sd_model_checkpoint] = cfg.current
+                    cfg.sd_model_checkpoint = this.selection.text
+                }
+                var found = false;
+                if (cfg.presets[cfg.sd_model_checkpoint]) {
+                    cfg.current = new cfg.checkpointSettings()
+                    for (var a in cfg.presets[cfg.sd_model_checkpoint]) {
+                        cfg.current[a] = cfg.presets[cfg.sd_model_checkpoint][a]
+                    }
+                    found = true;
+                } else {
+                    for (var s in cfg.presets) {
+                        if (s.indexOf(cfg.sd_model_checkpoint) != -1) {
+                            for (var a in cfg.presets[s]) {
+                                cfg.current[a] = cfg.presets[s][a]
+                            }
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+                if (!found) {
+                    cfg.current = new cfg.checkpointSettings();
+                    if (cfg.sd_model_checkpoint.match(/(flux|kontext)/i)) {
+                        cfg.current.scheduler = 'Simple'
+                        cfg.current.sampler_name = 'Euler'
+                        cfg.current.cfg_scale = 3.5
+                        cfg.current.forge_cache = 0.1
+                    } else if (cfg.sd_model_checkpoint.match(/(qwen)/i)) {
+                        cfg.current.scheduler = 'Simple'
+                        cfg.current.sampler_name = 'Euler'
+                        cfg.current.cfg_scale = 1
+                        cfg.current.forge_cache = 0
+                        cfg.current.qwenStepsFix = true
+                        if (cfg.sd_model_checkpoint.match(/(edit)/i)) cfg.current.qwenResFix = true;
+                    } else if (cfg.sd_model_checkpoint.match(/z.image/i)) {
+                        cfg.current.scheduler = 'Simple'
+                        cfg.current.sampler_name = 'Euler'
+                        cfg.current.cfg_scale = 3
+                        cfg.current.denoising_strength = 0.22
+                        cfg.current.forge_cache = 0
+                    }
+                }
+                showControls(grSettings)
+                w.layout.layout(true)
+            }
+            if (bypass) { dlCheckpoint.onChange(true) }
+            return checkpoints.length;
+        }
         function inpaintingFill(p) {
             var grInpainting = p.add("group{orientation:'column',alignChildren:['fill', 'center'],spacing:0,margins:0}"),
                 stInpainting = grInpainting.add('statictext'),
@@ -460,33 +480,36 @@ function dialogWindow(b, s) {
             var grVae = p.add("group{orientation:'column',alignChildren:['fill', 'center'],spacing:0,margins:0}"),
                 stVae = grVae.add('statictext');
             stVae.text = str.vae;
-            if (!cfg.sd_model_checkpoint.match(/(qwen|flux|kontext|z.image)/i)) {
-                var dlVae = grVae.add('dropdownlist{preferredSize:[285,-1]}')
-                if (SD['sd-vaes'].length) for (var i = 0; i < SD['sd-vaes'].length; i++) dlVae.add('item', SD['sd-vaes'][i])
-                dlVae.onChange = function () {
-                    cfg.current.sd_vae = this.selection.text
-                }
-                var current = dlVae.find(cfg.current.sd_vae) ? dlVae.find(cfg.current.sd_vae) : dlVae.find(SD['sd_vae']);
-                dlVae.selection = current ? current.index : 0
-            } else {
-                var lEncoders = grVae.add('listbox', [0, 0, 285, 90], undefined, { multiselect: true });
-                stVae.text += '/Text encoder'
-                if (SD['sd-vaes'].length) for (var i = 0; i < SD['sd-vaes'].length; i++) lEncoders.add('item', SD['sd-vaes'][i])
-                for (var i = 0; i < cfg.current.encoders.length; i++) {
-                    var result = lEncoders.find(cfg.current.encoders[i])
-                    if (result)
-                        lEncoders.items[result.index].selected = true
-                }
-                if (!lEncoders.selection) lEncoders.items[0].selected = true
-                lEncoders.onChange = function () {
-                    if (lEncoders.items[0].selected) {
-                        for (var i = 1; i < lEncoders.items.length; i++) {
-                            lEncoders.items[i].selected = false
-                        }
+            var vaes = filteredList(SD['sd-vaes'], cfg.vaeFilter)
+            if (vaes.length) {
+                if (!cfg.sd_model_checkpoint.match(/(qwen|flux|kontext|z.image)/i)) {
+                    var dlVae = grVae.add('dropdownlist{preferredSize:[285,-1]}')
+                    if (vaes.length) for (var i = 0; i < vaes.length; i++) dlVae.add('item', vaes[i])
+                    dlVae.onChange = function () {
+                        cfg.current.sd_vae = this.selection.text
                     }
-                    cfg.current.encoders = [];
-                    for (var i = 0; i < lEncoders.items.length; i++) {
-                        if (lEncoders.items[i].selected) cfg.current.encoders.push(lEncoders.items[i].text)
+                    var current = dlVae.find(cfg.current.sd_vae) ? dlVae.find(cfg.current.sd_vae) : dlVae.find(SD['sd_vae']);
+                    dlVae.selection = current ? current.index : 0
+                } else {
+                    var lEncoders = grVae.add('listbox', [0, 0, 285, 90], undefined, { multiselect: true });
+                    stVae.text += '/Text encoder'
+                    if (vaes.length) for (var i = 0; i < vaes.length; i++) lEncoders.add('item', vaes[i])
+                    for (var i = 0; i < cfg.current.encoders.length; i++) {
+                        var result = lEncoders.find(cfg.current.encoders[i])
+                        if (result)
+                            lEncoders.items[result.index].selected = true
+                    }
+                    if (!lEncoders.selection) lEncoders.items[0].selected = true
+                    lEncoders.onChange = function () {
+                        if (lEncoders.items[0].selected) {
+                            for (var i = 1; i < lEncoders.items.length; i++) {
+                                lEncoders.items[i].selected = false
+                            }
+                        }
+                        cfg.current.encoders = [];
+                        for (var i = 0; i < lEncoders.items.length; i++) {
+                            if (lEncoders.items[i].selected) cfg.current.encoders.push(lEncoders.items[i].text)
+                        }
                     }
                 }
             }
@@ -580,7 +603,6 @@ function dialogWindow(b, s) {
             stSteps.text = str.steps
             slSteps.onChange = function () {
                 stStepsValue.text = cfg.current.steps = mathTrunc(this.value)
-                if (cfg.current.qwenFix) $.setenv('offset', cfg.current.steps)
             }
             slSteps.onChanging = function () { slSteps.onChange() }
             slSteps.addEventListener('keydown', commonHandler)
@@ -734,33 +756,32 @@ function dialogWindow(b, s) {
             }
         }
         function qwenFix(p) {
-            var grQwenFix = p.add("group{orientation:'column',alignChildren:['fill', 'center'],spacing:0,margins:0}"),
-                chQwenFix = grQwenFix.add('checkbox{preferredSize:[285,-1]}');
-            chQwenFix.text = str.qwenFix;
-            chQwenFix.value = cfg.current.qwenFix
-            chQwenFix.onClick = function () {
+            var grQwenFix = p.add("group{orientation:'row',alignChildren:['left', 'center'],spacing:0,margins:0}"),
+            stQwenFix = grQwenFix.add('statictext');
+                chQwenResFix = grQwenFix.add('checkbox');
+                stQwenFix.text = str.qwenFix
+            chQwenStepsFix = grQwenFix.add('checkbox');
+            chQwenResFix.text = str.qwenResFix;
+            chQwenResFix.value = cfg.current.qwenResFix
+            chQwenStepsFix.text = str.qwenStepsFix
+            chQwenStepsFix.value = cfg.current.qwenStepsFix
+            chQwenResFix.onClick = function () {
                 if (p.slResize) {
                     p.slResize.value = this.value ? 1 * 100 : (cfg.autoResize ? autoScale(b) : cfg.current.resize) * 100
                     p.slResize.onChange();
                     p.slResize.enabled = !this.value
                 }
-                cfg.current.qwenFix = this.value
+                cfg.current.qwenResFix = this.value
             }
-            chQwenFix.onClick()
+            chQwenStepsFix.onClick = function(){cfg.current.qwenStepsFix=this.value}
+            chQwenResFix.onClick()
         }
     }
     function settingsWindow(p, cfg) {
         var w = new Window("dialog{orientation:'column',alignChildren:['fill', 'top'],spacing:10,margins:16}"),
-            pnShow = w.add("panel{orientation:'column',alignChildren:['left', 'top'],spacing:0,margins:10}"),
-            chVae = pnShow.add('checkbox'),
-            chInpaitnigFill = pnShow.add('checkbox'),
-            chPrompt = pnShow.add('checkbox'),
-            chNegative = pnShow.add('checkbox'),
-            chSampling = pnShow.add('checkbox'),
-            chSheldule = pnShow.add('checkbox'),
-            chSteps = pnShow.add('checkbox'),
-            chCfg = pnShow.add('checkbox'),
-            chResize = pnShow.add('checkbox'),
+            pnShow = w.add("panel{orientation:'row',alignChildren:['fill', 'top'],spacing:0,margins:10}"),
+            bnChk = pnShow.add('button'),
+            bnVae = pnShow.add('button'),
             pnOutput = w.add("panel{orientation:'column',alignChildren:['fill', 'top'],spacing:5,margins:10}"),
             chFlatten = pnOutput.add('checkbox'),
             chRasterize = pnOutput.add('checkbox'),
@@ -820,22 +841,15 @@ function dialogWindow(b, s) {
         var chRecordSettings = w.add('checkbox'),
             grBn = w.add("group{orientation:'row',alignChildren:['center', 'center'],spacing:10,margins:[0, 10, 0, 0]}"),
             ok = grBn.add('button', undefined, undefined, { name: 'ok' });
+        bnChk.text = str.checkpoint
+        bnVae.text = str.vae + (cfg.sd_model_checkpoint.match(/(qwen|flux|kontext|z.image)/i) ? '/Text encoder' : '')
         rbPixelMode.text = str.wxh;
         rbAreaMode.text = str.area;
         chAutoResize.text = str.autoResizeCaption
-        chCfg.text = str.cfgScale;
         chFlatten.text = str.flatten
-        chInpaitnigFill.text = str.fill;
-        chNegative.text = str.negativePrompt
-        chPrompt.text = str.prompt
         chRasterize.text = str.rasterize
         chRecordSettings.text = str.actionMode
-        chResize.text = str.resize
-        chSampling.text = str.sampling
         chSelectBrush.text = str.selctBrush
-        chSheldule.text = str.schedule
-        chSteps.text = str.steps
-        chVae.text = str.vae
         ok.text = str.apply
         pnBrush.text = str.brush
         pnOutput.text = str.output
@@ -847,19 +861,10 @@ function dialogWindow(b, s) {
         w.text = str.settings
         cfg.autoResizeArea ? rbAreaMode.value = true : rbPixelMode.value = true
         chAutoResize.value = grResizeSl.enabled = cfg.autoResize
-        chCfg.value = cfg.showCfg_scale
         chFlatten.value = cfg.flatten
-        chInpaitnigFill.value = cfg.showInpaintingFill
-        chNegative.value = cfg.showNegative_prompt
-        chPrompt.value = cfg.showPrompt
         chRasterize.value = cfg.rasterizeImage
         chRecordSettings.value = !cfg.recordToAction
-        chResize.value = cfg.showResize
-        chSampling.value = cfg.showSampler_name
         chSelectBrush.value = cfg.selectBrush
-        chSheldule.value = cfg.showScheduler
-        chSteps.value = cfg.showSteps
-        chVae.value = cfg.showSd_vae
         slAbove.value = cfg.autoResizeArea ? cfg.autoResizeAboveArea * 1024 : cfg.autoResizeAbove;
         slLess.value = cfg.autoResizeArea ? cfg.autoResizeLessArea * 1024 : cfg.autoResizeLess;
         stAbove.text = cfg.autoResizeArea ? cfg.autoResizeAboveArea : cfg.autoResizeAbove;
@@ -867,19 +872,16 @@ function dialogWindow(b, s) {
         slOpacity.value = stOpacityValue.text = cfg.brushOpacity
         chFlatten.onClick = function () { cfg.flatten = this.value }
         chRasterize.onClick = function () { cfg.rasterizeImage = this.value }
-        chInpaitnigFill.onClick = function () { cfg.showInpaintingFill = this.value }
-        chVae.onClick = function () { cfg.showSd_vae = this.value }
-        chPrompt.onClick = function () { cfg.showPrompt = this.value }
-        chNegative.onClick = function () { cfg.showNegative_prompt = this.value }
-        chSampling.onClick = function () { cfg.showSampler_name = this.value }
-        chSheldule.onClick = function () { cfg.showScheduler = this.value }
-        chSteps.onClick = function () { cfg.showSteps = this.value }
-        chCfg.onClick = function () { cfg.showCfg_scale = this.value }
-        chResize.onClick = function () { cfg.showResize = this.value }
         chSelectBrush.onClick = function () { cfg.selectBrush = this.value }
         slOpacity.onChange = function () { stOpacityValue.text = cfg.brushOpacity = mathTrunc(this.value) }
         slOpacity.onChanging = function () { slOpacity.onChange() }
         slOpacity.addEventListener('keydown', commonHandler)
+        bnChk.onClick = function () {
+            var result = filterModelsWindow(SD['sd-models'], cfg.checkpointFilter);
+        }
+        bnVae.onClick = function () {
+            var result = filterModelsWindow(SD['sd-vaes'], cfg.vaeFilter);
+        }
         rbPixelMode.onClick = function () {
             cfg.autoResizeArea = false;
             slAbove.value = stAbove.text = cfg.autoResizeAbove;
@@ -914,6 +916,69 @@ function dialogWindow(b, s) {
         chAutoResize.onClick = function () { cfg.autoResize = grResizeSl.enabled = grResizeMode.enabled = this.value; cfg.resize = 1; }
         chRecordSettings.onClick = function () { cfg.recordToAction = !this.value }
         return w
+    }
+    function filterModelsWindow(s, e) {
+        var w = new Window("dialog{orientation:'column',alignChildren:['fill', 'top'],spacing:10,margins:16}"),
+            list = w.add("listbox{preferredSize:[400,300]}"),
+            grBn = w.add("group{orientation:'row',alignChildren:['center', 'center'],spacing:10,margins:[0, 10, 0, 0]}"),
+            ok = grBn.add('button', undefined, undefined, { name: 'ok' });
+        w.text = str.showItems
+        ok.text = str.apply;
+        for (var i = 0; i < s.length; i++) list.add('item', s[i])
+        for (var i = 0; i < s.length; i++) list.items[i].checked = true
+        for (var i = 0; i < e.length; i++) {
+            for (var x = 0; x < s.length; x++) {
+                var cur = s[x].toLocaleUpperCase();
+                if (e[i].toLocaleUpperCase() == cur) {
+                    list.items[x].checked = list.items[x].enabled = false
+                }
+            }
+        }
+        list.onDoubleClick = function () {
+            if (list.selection) {
+                var s = list.selection.index
+                if (list.selection.checked != undefined && !list.selection.text.match(/(^none$|^Automatic$)/)) {
+                    list.selection.checked = !list.selection.checked
+                    reEnableList()
+                    list.onClick()
+                }
+            }
+        }
+        list.onClick = function () {
+            ok.enabled = reEnableList();
+            if (list.selection != null) {
+                list.selection.checked != undefined ? !list.selection.checked : false;
+                list.selection.checked != undefined ? list.selection.checked : false;
+                list.selection.enabled = true
+            }
+        }
+        function reEnableList() {
+            var len = list.items.length,
+                selected = 0;
+            for (var i = 0; i < len; i++) {
+                var c = list.items[i].checked
+                if (c) selected++
+                if (c != undefined) {
+                    list.items[i].enabled = c
+                } else {
+                    var cur = i
+                    for (i = cur; i < len; i++) {
+                        if (list.items[i].checked != undefined) { i--; break };
+                        list.items[i].enabled = list.items[cur - 1].checked
+                    }
+                }
+            }
+            return selected;
+        }
+        ok.onClick = function () {
+            var len = list.items.length;
+            e.splice(0, e.length)
+            for (var i = 0; i < len; i++) {
+                if (!list.items[i].checked) e.push(s[i])
+            }
+            w.close();
+        }
+        w.show()
     }
     function addPresetPanel(context, panel) {
         var grPreset = panel.add("group{orientation: 'row', alignChildren: ['left', 'center'], spacing: 0, margins: 0}"),
@@ -1012,7 +1077,7 @@ function cloneObject(o1, o2) {
     for (var a in tmp) {
         var k = tmp[a].name.toString();
         if (k == '__proto__' || k == '__count__' || k == '__class__' || k == 'reflect') continue;
-        o2[k] = o1[k]
+        if (typeof o1[k] != 'object') { o2[k] = o1[k] } else if (o1[k] instanceof Array) { o2[k] = o1[k].slice() }
     }
 }
 function checkSelection(result) {
@@ -1049,6 +1114,20 @@ function checkSelection(result) {
         }
     }
     return
+}
+function filteredList(a, b) {
+    var result = [];
+    for (var i = 0; i < a.length; i++) {
+        var cur = a[i].toLocaleUpperCase(), found = false;
+        for (var x = 0; x < b.length; x++) {
+            if (cur == b[x].toLocaleUpperCase()) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) result.push(a[i])
+    }
+    return result;
 }
 function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
     this.forgeUI = false;
@@ -1399,7 +1478,7 @@ function AM(target, order) {
         d.putUnitDouble(s2t("height"), s2t("pixelsUnit"), height);
         d.putEnumerated(s2t("horizontal"), s2t("horizontalLocation"), s2t("left"));
         d.putEnumerated(s2t("vertical"), s2t("verticalLocation"), s2t("top"));
-        d.putEnumerated(s2t("canvasExtensionColorType"), s2t("canvasExtensionColorType"), s2t("gray"));
+        d.putEnumerated(s2t("canvasExtensionColorType"), s2t("canvasExtensionColorType"), s2t("white"));
         executeAction(s2t("canvasSize"), d, DialogModes.NO);
     }
     this.close = function (save) {
@@ -1474,7 +1553,8 @@ function Config() {
         this.forge_cache = 0
         this.imageReferences = []
         this.reference = ''
-        this.qwenFix = false
+        this.qwenResFix = false
+        this.qwenStepsFix = false
     }
     var settingsObj = this;
     this.current = new settingsObj.checkpointSettings();
@@ -1483,15 +1563,8 @@ function Config() {
     this.vae = 'sdapi/v1/sd-vae'
     this.flatten = false
     this.rasterizeImage = true
-    this.showInpaintingFill = true
-    this.showSd_vae = true
-    this.showPrompt = true
-    this.showNegative_prompt = true
-    this.showSampler_name = true
-    this.showScheduler = true
-    this.showSteps = true
-    this.showCfg_scale = true
-    this.showResize = true
+    this.checkpointFilter = []
+    this.vaeFilter = []
     this.selectBrush = true
     this.brushOpacity = 50
     this.recordToAction = true
@@ -1820,7 +1893,7 @@ function Locale() {
     this.cache = { ru: 'Использовать First Block Cache (extension)', en: 'Use Block Cache (extension)' }
     this.cacheTitle = { ru: 'Порог кэширования:', en: 'Caching threshold:' }
     this.cfgScale = 'CFG Scale'
-    this.checkpoint = 'Stable Diffusion checkpoint'
+    this.checkpoint = 'Checkpoint'
     this.distilledCfgScale = 'Distilled CFG Scale'
     this.errAnswer = { ru: 'не отвечает!', en: 'not answering!' }
     this.errConnection = { ru: 'Невозможно установить соединение c ', en: 'Impossible to establish a connection with ' }
@@ -1866,10 +1939,12 @@ function Locale() {
     this.steps = 'Sampling steps'
     this.strength = 'Denoising strength'
     this.translate = { ru: 'перевести: ', en: 'translate: ' }
-    this.vae = 'SD VAE'
+    this.vae = 'VAE'
     this.imageRef = { ru: 'Reference image', en: 'Reference image' }
     this.browse = { ru: 'Обзор... ', en: 'Browse...' }
     this.wxh = { ru: 'ширина и высота (px)', en: 'width and height (px)' }
     this.area = { ru: 'площадь (MP)', en: 'area (MP)' }
-    this.qwenFix = 'Qwen edit fix (1024x1024 + steps shfit)'
+    this.qwenFix = 'Qwen fix:'
+    this.qwenResFix = 'Resolution 1024x1024'
+    this.qwenStepsFix = 'Steps shift'
 }
