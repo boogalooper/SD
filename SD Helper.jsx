@@ -25,8 +25,8 @@ const ver = 0.4,
     SD_GET_OPTIONS_DELAY = 3000, // максимальное время ожидания ответа Stable Diffusion при запросе текущих параметров (при превышении скрипт завершит работу)
     SD_RELOAD_CHECKPOINT_DELAY = 12000, // максимальное время ожидания загрузки checkpoint или vae (при превышении скрипт завершит работу)
     SD_GENERATION_DELAY = 150000, // максимальное время ожидания генерации изображения (при превышении скрипт завершит работу)
-    FLUX_KONTEXT = 'forge2_flux_kontext',
-    FLUX_CACHE = 'sd-forge-blockcache',
+    EXT_KONTEXT = 'forge2_flux_kontext',
+    EXT_BLOCKCACHE = 'sd-forge-blockcache',
     UUID = '338cc304-fb6f-4b1f-8ad4-13bbd65f117c';
 var time = (new Date).getTime(),
     SD = new SDApi(SD_HOST, API_HOST, SD_PORT, API_PORT_SEND, API_PORT_LISTEN, new File((new File($.fileName)).path + '/' + API_FILE)),
@@ -41,16 +41,19 @@ var time = (new Date).getTime(),
     lr = new AM('layer'),
     ch = new AM('channel'),
     isDitry = false,
-    isCancelled = false;
-$.localize = true
+    isCancelled = false,
+    initialState = null;
+$.localize = true;
 sts.getSettings();
-if (ScriptUI.environment.keyboardState.shiftKey) $.setenv('dialogMode', true);
-if (ScriptUI.environment.keyboardState.shiftKey && ScriptUI.environment.keyboardState.altKey) sts.showStatistics();
+var UiState = ScriptUI.environment.keyboardState;
+if (UiState.shiftKey) $.setenv('dialogMode', true);
+if (UiState.shiftKey && UiState.altKey) sts.showStatistics();
 try {
     init();
     sts.finish(true);
 } catch (e) {
     sts.finish(false)
+    activeDocument.activeHistoryState = initialState;
     alert(e, undefined, true)
     $.setenv('dialogMode', true)
     isCancelled = true;
@@ -59,7 +62,10 @@ sts.putSettings();
 isCancelled ? 'cancel' : undefined;
 function init() {
     var currentSelection = { result: false, bounds: null, previousGeneration: null, junk: null };
-    if (apl.getProperty('numberOfDocuments') && doc.getProperty('mode').value == 'RGBColor') activeDocument.suspendHistory('Check selection', 'checkSelection(currentSelection)');
+    if (apl.getProperty('numberOfDocuments') && doc.getProperty('mode').value == 'RGBColor') {
+        initialState = activeDocument.activeHistoryState;
+        activeDocument.suspendHistory('Check selection', 'checkSelection(currentSelection)');
+    }
     if (currentSelection.result) {
         var b = currentSelection.bounds,
             w = Math.floor((b.right - b.left) / 8) * 8,
@@ -253,14 +259,14 @@ function main(selection) {
         $.setenv('offset', cfg.current.steps == offset ? cfg.current.steps + 1 : cfg.current.steps)
     }
     if (cfg.sd_model_checkpoint.match(/(flux|kontext)/i)) payload['flux'] = true;
-    if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') != -1 && SD.extensions[FLUX_KONTEXT]) {
+    if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') != -1 && SD.extensions[EXT_KONTEXT]) {
         payload['kontext'] = true
         if (cfg.current.reference != '') {
             var r = new File(cfg.current.reference)
             if (r.exists) payload['reference'] = r.fsName.replace(/\\/g, '\\\\')
         }
     };
-    if (SD.extensions[FLUX_CACHE] && cfg.forge_control_cache && cfg.current.forge_cache > 0 && !cfg.sd_model_checkpoint.match(/(qwen|z.image)/i)) payload['cache'] = cfg.current.forge_cache;
+    if (SD.extensions[EXT_BLOCKCACHE] && cfg.forge_control_cache && cfg.current.forge_cache > 0 && !cfg.sd_model_checkpoint.match(/(qwen|z.image)/i)) payload['cache'] = cfg.current.forge_cache;
     if (cfg.current.inpaintingFill != -1) {
         payload['mask'] = f1.fsName.replace(/\\/g, '\\\\')
         payload['inpainting_fill'] = cfg.current.inpaintingFill + 1
@@ -388,7 +394,7 @@ function dialogWindow(b, s) {
         }
         var enabled = checkpoint(p);
         vae(p);
-        if ((cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') == -1 || !SD.extensions[FLUX_KONTEXT]) && !cfg.sd_model_checkpoint.match(/qwen.+edit/i)) inpaintingFill(p)
+        if ((cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') == -1 || !SD.extensions[EXT_KONTEXT]) && !cfg.sd_model_checkpoint.match(/qwen.+edit/i)) inpaintingFill(p)
         prompt(p);
         if (!cfg.sd_model_checkpoint.match(/(flux|kontext)/i)) negativePrompt(p);
         sampler(p);
@@ -396,9 +402,9 @@ function dialogWindow(b, s) {
         steps(p);
         cfgScale(p);
         resizeScale(p);
-        if (cfg.forge_control_cache && SD.extensions[FLUX_CACHE] && !cfg.sd_model_checkpoint.match(/(qwen|z.image)/i)) cache(p)
+        if (cfg.forge_control_cache && SD.extensions[EXT_BLOCKCACHE] && !cfg.sd_model_checkpoint.match(/(qwen|z.image)/i)) cache(p)
         if (cfg.showNegative_prompt && !cfg.sd_model_checkpoint.match(/(kontext|qwen)/i)) denoisingStrength(p)
-        if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') != -1 && SD.extensions[FLUX_KONTEXT]) imageReference(p)
+        if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') != -1 && SD.extensions[EXT_KONTEXT]) imageReference(p)
         if (SD.forgeUI && cfg.sd_model_checkpoint.match(/qwen.+edit/i)) qwenFix(p)
         return enabled;
         function checkpoint(p) {
@@ -474,7 +480,7 @@ function dialogWindow(b, s) {
                 cfg.current.inpaintingFill = this.selection.index - 1
             }
             dlInpainting.selection = cfg.current.inpaintingFill + 1
-            if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') != -1 && SD.extensions[FLUX_KONTEXT]) grInpainting.enabled = false
+            if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') != -1 && SD.extensions[EXT_KONTEXT]) grInpainting.enabled = false
         }
         function vae(p) {
             var grVae = p.add("group{orientation:'column',alignChildren:['fill', 'center'],spacing:0,margins:0}"),
@@ -757,9 +763,9 @@ function dialogWindow(b, s) {
         }
         function qwenFix(p) {
             var grQwenFix = p.add("group{orientation:'row',alignChildren:['left', 'center'],spacing:0,margins:0}"),
-            stQwenFix = grQwenFix.add('statictext');
-                chQwenResFix = grQwenFix.add('checkbox');
-                stQwenFix.text = str.qwenFix
+                stQwenFix = grQwenFix.add('statictext');
+            chQwenResFix = grQwenFix.add('checkbox');
+            stQwenFix.text = str.qwenFix
             chQwenStepsFix = grQwenFix.add('checkbox');
             chQwenResFix.text = str.qwenResFix;
             chQwenResFix.value = cfg.current.qwenResFix
@@ -773,7 +779,7 @@ function dialogWindow(b, s) {
                 }
                 cfg.current.qwenResFix = this.value
             }
-            chQwenStepsFix.onClick = function(){cfg.current.qwenStepsFix=this.value}
+            chQwenStepsFix.onClick = function () { cfg.current.qwenStepsFix = this.value }
             chQwenResFix.onClick()
         }
     }
@@ -825,7 +831,7 @@ function dialogWindow(b, s) {
             slMemory.onChanging = function () { slMemory.onChange() }
             chMemory.onClick = function () { cfg.control_memory = grMemory.enabled = this.value }
             chCache.text = str.cache
-            chCache.enabled = SD.extensions[FLUX_CACHE]
+            chCache.enabled = SD.extensions[EXT_BLOCKCACHE]
             chCache.value = cfg.forge_control_cache
             chCache.onClick = function () { cfg.forge_control_cache = this.value }
             function memoryHandler(evt) {
@@ -1133,8 +1139,8 @@ function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
     this.forgeUI = false;
     var SdCfg = this;
     SdCfg.extensions = {};
-    SdCfg.extensions[FLUX_KONTEXT] = false;
-    SdCfg.extensions[FLUX_CACHE] = false;
+    SdCfg.extensions[EXT_KONTEXT] = false;
+    SdCfg.extensions[EXT_BLOCKCACHE] = false;
     this.initialize = function () {
         if (!checkConnecton(sdHost, sdPort)) throw new Error(str.errConnection + sdHost + ':' + sdPort + '\nStable Diffusion ' + str.errAnswer);
         if (!(new File(Folder.temp + "/sd_helper.lock").exists)) {
@@ -1308,9 +1314,7 @@ function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
     }
 }
 function AM(target, order) {
-    var s2t = stringIDToTypeID,
-        t2s = typeIDToStringID,
-        AR = ActionReference,
+    var AR = ActionReference,
         AD = ActionDescriptor,
         AL = ActionList;
     target = target ? s2t(target) : null;
