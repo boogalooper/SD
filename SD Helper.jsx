@@ -14,7 +14,7 @@
 </javascriptresource>
 // END__HARVEST_EXCEPTION_ZSTRING
 */
-const ver = 0.4,
+const ver = 0.42,
     SD_HOST = '127.0.0.1',
     SD_PORT = 7860,
     API_HOST = '127.0.0.1',
@@ -46,7 +46,7 @@ var time = (new Date).getTime(),
 $.localize = true;
 sts.getSettings();
 var UiState = ScriptUI.environment.keyboardState;
-if (UiState.shiftKey) $.setenv('dialogMode', true);
+if (UiState.shiftKey && !app.playbackParameters.count == 1) $.setenv('dialogMode', true);
 if (UiState.shiftKey && UiState.altKey) sts.showStatistics();
 try {
     init();
@@ -252,15 +252,15 @@ function main(selection) {
         'steps': cfg.current.qwenStepsFix ? (cfg.current.steps == offset ? cfg.current.steps + 1 : cfg.current.steps) : cfg.current.steps,
         'width': cfg.current.qwenResFix ? 1024 : width,
         'height': cfg.current.qwenResFix ? 1024 : height,
-        'denoising_strength': cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('QWEN') == -1 ? cfg.current.denoising_strength : 1,
+        'denoising_strength': !cfg.sd_model_checkpoint.match(/(kontext|qwen.+edit)/i) ? cfg.current.denoising_strength : 1,
         'n_iter': 1,
     };
     if (cfg.current.qwenStepsFix) {
         $.setenv('offset', cfg.current.steps == offset ? cfg.current.steps + 1 : cfg.current.steps)
     }
     if (cfg.sd_model_checkpoint.match(/(flux|kontext)/i)) payload['flux'] = true;
-    if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') != -1 && SD.extensions[EXT_KONTEXT]) {
-        payload['kontext'] = true
+    if (cfg.sd_model_checkpoint.match(/(kontext|qwen.+edit)/i) && (SD.extensions[EXT_KONTEXT] || cfg.forge_imageStitch)) {
+        if (!cfg.forge_imageStitch) payload['kontext'] = true else payload['stitch'] = true
         if (cfg.current.reference != '') {
             var r = new File(cfg.current.reference)
             if (r.exists) payload['reference'] = r.fsName.replace(/\\/g, '\\\\')
@@ -361,7 +361,7 @@ function dialogWindow(b, s) {
         if (result == 1) {
             var changed = false;
             for (var a in tempSettings) {
-                if (!a.match(/(autoResize|forge_control_cache|Filter)/)) continue;
+                if (!a.match(/(autoResize|forge_control_cache|Filter|forge_imageStitch)/)) continue;
                 if (typeof tempSettings[a] != 'object') {
                     if (tempSettings[a] != cfg[a]) {
                         changed = true
@@ -378,7 +378,6 @@ function dialogWindow(b, s) {
                 if (changed) break;
             }
             cloneObject(tempSettings, cfg)
-            $.writeln(changed)
             if (changed) {
                 showControls(grSettings)
                 w.layout.layout(true)
@@ -404,7 +403,7 @@ function dialogWindow(b, s) {
         resizeScale(p);
         if (cfg.forge_control_cache && SD.extensions[EXT_BLOCKCACHE] && !cfg.sd_model_checkpoint.match(/(qwen|z.image)/i)) cache(p)
         if (cfg.showNegative_prompt && !cfg.sd_model_checkpoint.match(/(kontext|qwen)/i)) denoisingStrength(p)
-        if (cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') != -1 && SD.extensions[EXT_KONTEXT]) imageReference(p)
+        if ((cfg.sd_model_checkpoint.match(/kontext/i) && SD.extensions[EXT_KONTEXT]) || (cfg.sd_model_checkpoint.match(/(kontext|qwen.+edit)/i) && cfg.forge_imageStitch)) imageReference(p)
         if (SD.forgeUI && cfg.sd_model_checkpoint.match(/qwen.+edit/i)) qwenFix(p)
         return enabled;
         function checkpoint(p) {
@@ -819,17 +818,21 @@ function dialogWindow(b, s) {
                 stMemoryTitle = grMemoryTitle.add('statictext{preferredSize:[180,-1]}'),
                 stMemoryValue = grMemoryTitle.add('statictext{preferredSize:[65,-1],justify:"right"}'),
                 slMemory = grMemory.add('slider{minvalue:128,maxvalue:4096}'),
-                chCache = pnMemory.add('checkbox');
+                chCache = pnMemory.add('checkbox'),
+                chStitch = pnMemory.add('checkbox');
             pnMemory.text = str.advanced
             chMemory.text = str.setMatrixMemory
             stMemoryTitle.text = str.setMemory
+            chStitch.text = str.imageStitch
             grMemory.enabled = chMemory.value = cfg.control_memory
             slMemory.value = stMemoryValue.text = cfg.forge_inference_memory
+            chStitch.value = cfg.forge_imageStitch
             slMemory.addEventListener('keydown', memoryHandler)
             slMemory.addEventListener('keydown', memoryHandler)
             slMemory.onChange = function () { stMemoryValue.text = cfg.forge_inference_memory = mathTrunc(this.value / 32) * 32 }
             slMemory.onChanging = function () { slMemory.onChange() }
             chMemory.onClick = function () { cfg.control_memory = grMemory.enabled = this.value }
+            chStitch.onClick = function () { cfg.forge_imageStitch = this.value }
             chCache.text = str.cache
             chCache.enabled = SD.extensions[EXT_BLOCKCACHE]
             chCache.value = cfg.forge_control_cache
@@ -1583,6 +1586,7 @@ function Config() {
     this.forge_inference_memory = 1024
     this.forge_inference_memory_default = 1024
     this.forge_control_cache = false
+    this.forge_imageStitch = false
     this.negativePreset = {
         'SD': '(deformed, distorted, disfigured:1.3), poorly drawn, bad anatomy, wrong anatomy, extra limb, missing limb, floating limbs, (mutated hands and fingers:1.4), disconnected limbs, mutation, mutated, ugly, disgusting, blurry, amputation',
         'Realistic': '(deformed iris, deformed pupils, semi-realistic, cgi, 3d, render, sketch, cartoon, drawing, anime), text, cropped, out of frame, worst quality, low quality, jpeg artifacts, ugly, duplicate, morbid, mutilated, extra fingers, mutated hands, poorly drawn hands, poorly drawn face, mutation, deformed, blurry, dehydrated, bad anatomy, bad proportions, extra limbs, cloned face, disfigured, gross proportions, malformed limbs, missing arms, missing legs, extra arms, extra legs, fused fingers, too many fingers, long neck'
@@ -1951,4 +1955,5 @@ function Locale() {
     this.qwenFix = 'Qwen fix:'
     this.qwenResFix = 'Resolution 1024x1024'
     this.qwenStepsFix = 'Steps shift'
+    this.imageStitch = { ru: 'Использовать imageStitch (extension) для референса', en: 'Use imageStitch (extension) for reference' }
 }

@@ -14,8 +14,9 @@ API_HOST = "127.0.0.1"
 API_PORT_SEND = 6321
 API_PORT_LISTEN = 6320
 LOCK_PATH = os.path.join(tempfile.gettempdir(), "sd_helper.lock")
-TIMEOUT = 5 * 60   # 5 минут
+TIMEOUT = 5 * 60  # 5 минут
 last_request_time = time.time()
+
 
 def timeout_watcher():
     global last_request_time
@@ -25,7 +26,7 @@ def timeout_watcher():
             print("[INFO] Сервер простаивал 5 минут → завершаюсь")
             if os.path.exists(LOCK_PATH):
                 os.remove(LOCK_PATH)
-            os._exit(0)  
+            os._exit(0)
 
 
 def get_data_from_SD(api_name, SD_HOST, SD_PORT):
@@ -117,8 +118,8 @@ def start_local_server():
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     srv.bind((API_HOST, API_PORT_LISTEN))
     srv.listen(1)
-    SD_HOST = None
-    SD_PORT = None
+    SD_HOST = "127.0.0.1"
+    SD_PORT = 7860
     open(LOCK_PATH, "w").close()
     print("Сервер запущен и ожидает подключения...")
 
@@ -221,6 +222,7 @@ def start_local_server():
                         payload["initial_noise_multiplier"] = 1
                         payload["resize_mode"] = 2
                     if "kontext" in data:
+                        print(f"Режим генерации Forge FluxKontext. Entrypoint {entrypoint}")
                         reference_image = None
                         if "reference" in data:
                             reference_image = encode_file_to_base64(
@@ -238,8 +240,30 @@ def start_local_server():
                             },
                         }
                         del payload["init_images"]
-                        del payload["negative_prompt"]
                         entrypoint = "sdapi/v1/txt2img"
+                    if "stitch" in data:
+                        print(f"Режим генерации ImageStitch Integrated. Entrypoint {entrypoint}")
+                        reference_image = None
+                        if "reference" in data:
+                            reference_image = encode_file_to_base64(
+                                data["reference"], False
+                            )
+                        payload["alwayson_scripts"] = {
+                            "ImageStitch Integrated": {
+                                "args": [
+                                    True,
+                                    [
+                                        [
+                                            {
+                                                "image": reference_image,
+                                                "mask": None,
+                                            },
+                                            None,
+                                        ]
+                                    ],
+                                ]
+                            }
+                        }
                     if "cache" in data:
                         if "alwayson_scripts" not in payload:
                             payload["alwayson_scripts"] = {}
@@ -283,13 +307,16 @@ def start_local_server():
                     print("Получен запрос на перевод текста")
                     if check_module("deep_translator"):
                         from deep_translator import GoogleTranslator
+
                         try:
                             translated_text = GoogleTranslator(
                                 source="auto", target="english"
                             ).translate(message["message"])
                         except:
                             translated_text = ""
-                    send_data_to_jsx({"type": "answer", "message": str(translated_text)})
+                    send_data_to_jsx(
+                        {"type": "answer", "message": str(translated_text)}
+                    )
 
         except Exception as e:
             print(f"Произошла ошибка: {e}")
@@ -297,5 +324,6 @@ def start_local_server():
 
         finally:
             client_socket.close()
+
 
 start_local_server()
