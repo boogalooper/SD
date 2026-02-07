@@ -14,7 +14,7 @@
 </javascriptresource>
 // END__HARVEST_EXCEPTION_ZSTRING
 */
-const ver = 0.42,
+const ver = 0.425,
     SD_HOST = '127.0.0.1',
     SD_PORT = 7860,
     API_HOST = '127.0.0.1',
@@ -27,7 +27,8 @@ const ver = 0.42,
     SD_GENERATION_DELAY = 150000, // максимальное время ожидания генерации изображения (при превышении скрипт завершит работу)
     EXT_KONTEXT = 'forge2_flux_kontext',
     EXT_BLOCKCACHE = 'sd-forge-blockcache',
-    UUID = '338cc304-fb6f-4b1f-8ad4-13bbd65f117c';
+    UUID = '338cc304-fb6f-4b1f-8ad4-13bbd65f117c',
+    DIV = 16;
 var time = (new Date).getTime(),
     SD = new SDApi(SD_HOST, API_HOST, SD_PORT, API_PORT_SEND, API_PORT_LISTEN, new File((new File($.fileName)).path + '/' + API_FILE)),
     s2t = stringIDToTypeID,
@@ -68,11 +69,13 @@ function init() {
     }
     if (currentSelection.result) {
         var b = currentSelection.bounds,
-            w = Math.floor((b.right - b.left) / 8) * 8,
-            h = Math.floor((b.bottom - b.top) / 8) * 8;
-        if (w != (b.right - b.left) || h != (b.bottom - b.top)) {
-            b.bottom = b.top + h;
-            b.right = b.left + w;
+            dW = (b.right - b.left) - Math.floor((b.right - b.left) / DIV) * DIV,
+            dH = (b.bottom - b.top) - Math.floor((b.bottom - b.top) / DIV) * DIV;
+        if (dW || dH) {
+            b.top = b.top + Math.floor(dH / 2)
+            b.left = b.left + Math.floor(dW / 2)
+            b.bottom = b.bottom - (dH - Math.floor(dH / 2))
+            b.right = b.right - (dW - Math.floor(dW / 2))
         }
         b.width = b.right - b.left
         b.height = b.bottom - b.top
@@ -91,8 +94,10 @@ function init() {
                     } else if (result != undefined) {
                         cfg.putSettings()
                         cfg.putSettings(true)
-                        SD.setOptions(null, null, null, 64)
-                        SD['forge_inference_memory'] = 64
+                        if (cfg.control_memory) {
+                            SD.setOptions(null, null, null, 64)
+                            SD['forge_inference_memory'] = 64
+                        }
                         main(currentSelection);
                     }
                 }
@@ -133,8 +138,10 @@ function init() {
                             tempSettings.negativePreset = cfg.negativePreset
                             tempSettings.putSettings()
                         }
-                        SD.setOptions(null, null, null, 64)
-                        SD['forge_inference_memory'] = 64
+                        if (cfg.control_memory) {
+                            SD.setOptions(null, null, null, 64)
+                            SD['forge_inference_memory'] = 64
+                        }
                         main(currentSelection);
                     }
                 }
@@ -151,11 +158,11 @@ function main(selection) {
     var checkpoint = (cfg.sd_model_checkpoint == SD['sd_model_checkpoint'] ? null : findOption(cfg.sd_model_checkpoint, SD['sd-models'], SD['sd_model_checkpoint'])),
         vae = (cfg.current.sd_vae == SD['sd_vae'] ? null : findOption(cfg.current.sd_vae, SD['sd-vaes'], SD['sd_vae'])),
         encoders = checkEncoders(cfg.current.encoders, SD['forge_additional_modules'], SD['sd_modules']),
-        memory = cfg.control_memory ? (SD['forge_inference_memory'] == cfg.forge_inference_memory ? null : cfg.forge_inference_memory) : (SD['forge_inference_memory'] == cfg.forge_inference_memory_default ? null : cfg.forge_inference_memory_default);
+        memory = cfg.control_memory ? (SD['forge_inference_memory'] == cfg.forge_inference_memory ? null : cfg.forge_inference_memory) : null;
     if (checkpoint != cfg.sd_model_checkpoint && checkpoint != null) cfg.sd_model_checkpoint = checkpoint;
     if (cfg.autoResize && !isDitry) cfg.current.resize = autoScale(selection.bounds)
-    var width = cfg.current.resize != 1 ? (mathTrunc((selection.bounds.width * cfg.current.resize) / 8) * 8) : selection.bounds.width,
-        height = cfg.current.resize != 1 ? (mathTrunc((selection.bounds.height * cfg.current.resize) / 8) * 8) : selection.bounds.height;
+    var width = cfg.current.resize != 1 ? (mathTrunc((selection.bounds.width * cfg.current.resize) / DIV) * DIV) : selection.bounds.width,
+        height = cfg.current.resize != 1 ? (mathTrunc((selection.bounds.height * cfg.current.resize) / DIV) * DIV) : selection.bounds.height;
     if (selection.previousGeneration) doc.hideSelectedLayers();
     if (doc.getProperty('quickMask')) {
         doc.quickMask('clearEvent');
@@ -260,8 +267,9 @@ function main(selection) {
     }
     if (cfg.sd_model_checkpoint.match(/(flux|kontext)/i)) payload['flux'] = true;
     if (cfg.sd_model_checkpoint.match(/(kontext|qwen.+edit)/i) && (SD.extensions[EXT_KONTEXT] || cfg.forge_imageStitch)) {
-        if (!cfg.forge_imageStitch) payload['kontext'] = true else payload['stitch'] = true
+        if (!cfg.forge_imageStitch) payload['kontext'] = true
         if (cfg.current.reference != '') {
+            if (cfg.forge_imageStitch) payload['stitch'] = true
             var r = new File(cfg.current.reference)
             if (r.exists) payload['reference'] = r.fsName.replace(/\\/g, '\\\\')
         }
@@ -642,8 +650,8 @@ function dialogWindow(b, s) {
             slResize.addEventListener('keydown', commonHandler)
             function setTitle() {
                 var s = str.resize,
-                    w = mathTrunc((b.width * cfg.current.resize) / 8) * 8,
-                    h = mathTrunc((b.height * cfg.current.resize) / 8) * 8,
+                    w = mathTrunc((b.width * cfg.current.resize) / DIV) * DIV,
+                    h = mathTrunc((b.height * cfg.current.resize) / DIV) * DIV,
                     mp = mathTrunc(w * h / 10000) / 100;
                 return cfg.current.resize != 1 ? s + ' ' + w + 'x' + h + ' (' + mp + ' MP)' : s
             }
