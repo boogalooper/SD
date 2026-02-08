@@ -14,7 +14,7 @@
 </javascriptresource>
 // END__HARVEST_EXCEPTION_ZSTRING
 */
-const ver = 0.425,
+const ver = 0.426,
     SD_HOST = '127.0.0.1',
     SD_PORT = 7860,
     API_HOST = '127.0.0.1',
@@ -266,8 +266,8 @@ function main(selection) {
         $.setenv('offset', cfg.current.steps == offset ? cfg.current.steps + 1 : cfg.current.steps)
     }
     if (cfg.sd_model_checkpoint.match(/(flux|kontext)/i)) payload['flux'] = true;
-    if (cfg.sd_model_checkpoint.match(/(kontext|qwen.+edit)/i) && (SD.extensions[EXT_KONTEXT] || cfg.forge_imageStitch)) {
-        if (!cfg.forge_imageStitch) payload['kontext'] = true
+    if (cfg.sd_model_checkpoint.match(/(kontext|qwen.+edit|klein)/i) && (SD.extensions[EXT_KONTEXT] || cfg.forge_imageStitch)) {
+        if (!cfg.forge_imageStitch && cfg.sd_model_checkpoint.match(/kontext/i)) payload['kontext'] = true
         if (cfg.current.reference != '') {
             if (cfg.forge_imageStitch) payload['stitch'] = true
             var r = new File(cfg.current.reference)
@@ -411,7 +411,7 @@ function dialogWindow(b, s) {
         resizeScale(p);
         if (cfg.forge_control_cache && SD.extensions[EXT_BLOCKCACHE] && !cfg.sd_model_checkpoint.match(/(qwen|z.image)/i)) cache(p)
         if (cfg.showNegative_prompt && !cfg.sd_model_checkpoint.match(/(kontext|qwen)/i)) denoisingStrength(p)
-        if ((cfg.sd_model_checkpoint.match(/kontext/i) && SD.extensions[EXT_KONTEXT]) || (cfg.sd_model_checkpoint.match(/(kontext|qwen.+edit)/i) && cfg.forge_imageStitch)) imageReference(p)
+        if ((cfg.sd_model_checkpoint.match(/kontext/i) && SD.extensions[EXT_KONTEXT]) || (cfg.sd_model_checkpoint.match(/(kontext|qwen.+edit|klein)/i) && cfg.forge_imageStitch)) imageReference(p)
         if (SD.forgeUI && cfg.sd_model_checkpoint.match(/qwen.+edit/i)) qwenFix(p)
         return enabled;
         function checkpoint(p) {
@@ -832,6 +832,7 @@ function dialogWindow(b, s) {
             chMemory.text = str.setMatrixMemory
             stMemoryTitle.text = str.setMemory
             chStitch.text = str.imageStitch
+            if (SD['forge_inference_memory'] == undefined) cfg.control_memory = chMemory.enabled = false
             grMemory.enabled = chMemory.value = cfg.control_memory
             slMemory.value = stMemoryValue.text = cfg.forge_inference_memory
             chStitch.value = cfg.forge_imageStitch
