@@ -191,7 +191,7 @@ function main(selection) {
     var hst = activeDocument.activeHistoryState,
         c = doc.getProperty('center').value;
     doc.crop(true);
-    if (cfg.current.qwenResFix) {
+    if (cfg.current.qwenResFix && cfg.sd_model_checkpoint.match(/qwen.+edit/i)) {
         doc.imageSize(width >= height ? 1024 : 0, height > width ? 1024 : 0, true);
         var docRes = doc.getProperty('resolution');
         deltaW = 1024 - doc.getProperty('width') * docRes / 72
@@ -243,7 +243,7 @@ function main(selection) {
         }
         if (!SD.setOptions(checkpoint, vae, vae_path, memory)) throw new Error(str.errUpdating)
     }
-    if (cfg.current.qwenStepsFix) {
+    if (cfg.current.qwenStepsFix&& cfg.sd_model_checkpoint.match(/qwen.+edit/i)) {
         var offset = $.getenv('offset');
         if (offset == null) offset = cfg.current.steps;
     }
@@ -256,13 +256,13 @@ function main(selection) {
         'scheduler': cfg.current.scheduler,
         'cfg_scale': cfg.current.cfg_scale,
         'seed': -1,
-        'steps': cfg.current.qwenStepsFix ? (cfg.current.steps == offset ? cfg.current.steps + 1 : cfg.current.steps) : cfg.current.steps,
-        'width': cfg.current.qwenResFix ? 1024 : width,
-        'height': cfg.current.qwenResFix ? 1024 : height,
+        'steps': cfg.current.qwenStepsFix && cfg.sd_model_checkpoint.match(/qwen.+edit/i) ? (cfg.current.steps == offset ? cfg.current.steps + 1 : cfg.current.steps) : cfg.current.steps,
+        'width': cfg.current.qwenResFix && cfg.sd_model_checkpoint.match(/qwen.+edit/i)? 1024 : width,
+        'height': cfg.current.qwenResFix && cfg.sd_model_checkpoint.match(/qwen.+edit/i)? 1024 : height,
         'denoising_strength': !cfg.sd_model_checkpoint.match(/(kontext|qwen.+edit)/i) ? cfg.current.denoising_strength : 1,
         'n_iter': 1,
     };
-    if (cfg.current.qwenStepsFix) {
+    if (cfg.current.qwenStepsFix&& cfg.sd_model_checkpoint.match(/qwen.+edit/i)) {
         $.setenv('offset', cfg.current.steps == offset ? cfg.current.steps + 1 : cfg.current.steps)
     }
     if (cfg.sd_model_checkpoint.match(/(flux|kontext)/i)) payload['flux'] = true;
@@ -292,7 +292,7 @@ function main(selection) {
         activeDocument.suspendHistory('Generate image', 'generatedImageToLayer()')
     } else throw new Error(str.errGenerating)
     function generatedImageToLayer() {
-        if (cfg.current.qwenResFix) {
+        if (cfg.current.qwenResFix && cfg.sd_model_checkpoint.match(/qwen.+edit/i)) {
             var len = apl.getProperty('numberOfDocuments')
             doc.openFile(new File(result));
             if (apl.getProperty('numberOfDocuments') > len) {
@@ -469,7 +469,7 @@ function dialogWindow(b, s) {
                         cfg.current.cfg_scale = 1
                         cfg.current.forge_cache = 0
                         cfg.current.qwenStepsFix = true
-                        if (cfg.sd_model_checkpoint.match(/(edit)/i)) cfg.current.qwenResFix = true;
+                        if (cfg.sd_model_checkpoint.match(/(qwen.+edit)/i)) cfg.current.qwenResFix = true;
                     } else if (cfg.sd_model_checkpoint.match(/z.image/i)) {
                         cfg.current.scheduler = 'Simple'
                         cfg.current.sampler_name = 'Euler'
