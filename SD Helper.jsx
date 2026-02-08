@@ -28,7 +28,7 @@ const ver = 0.426,
     EXT_KONTEXT = 'forge2_flux_kontext',
     EXT_BLOCKCACHE = 'sd-forge-blockcache',
     UUID = '338cc304-fb6f-4b1f-8ad4-13bbd65f117c',
-    DIV = 16;
+    TILE_SIZE = 16;
 var time = (new Date).getTime(),
     SD = new SDApi(SD_HOST, API_HOST, SD_PORT, API_PORT_SEND, API_PORT_LISTEN, new File((new File($.fileName)).path + '/' + API_FILE)),
     s2t = stringIDToTypeID,
@@ -69,8 +69,8 @@ function init() {
     }
     if (currentSelection.result) {
         var b = currentSelection.bounds,
-            dW = (b.right - b.left) - Math.floor((b.right - b.left) / DIV) * DIV,
-            dH = (b.bottom - b.top) - Math.floor((b.bottom - b.top) / DIV) * DIV;
+            dW = (b.right - b.left) - Math.floor((b.right - b.left) / TILE_SIZE) * TILE_SIZE,
+            dH = (b.bottom - b.top) - Math.floor((b.bottom - b.top) / TILE_SIZE) * TILE_SIZE;
         if (dW || dH) {
             b.top = b.top + Math.floor(dH / 2)
             b.left = b.left + Math.floor(dW / 2)
@@ -161,8 +161,8 @@ function main(selection) {
         memory = cfg.control_memory ? (SD['forge_inference_memory'] == cfg.forge_inference_memory ? null : cfg.forge_inference_memory) : null;
     if (checkpoint != cfg.sd_model_checkpoint && checkpoint != null) cfg.sd_model_checkpoint = checkpoint;
     if (cfg.autoResize && !isDitry) cfg.current.resize = autoScale(selection.bounds)
-    var width = cfg.current.resize != 1 ? (mathTrunc((selection.bounds.width * cfg.current.resize) / DIV) * DIV) : selection.bounds.width,
-        height = cfg.current.resize != 1 ? (mathTrunc((selection.bounds.height * cfg.current.resize) / DIV) * DIV) : selection.bounds.height;
+    var width = cfg.current.resize != 1 ? (mathTrunc((selection.bounds.width * cfg.current.resize) / TILE_SIZE) * TILE_SIZE) : selection.bounds.width,
+        height = cfg.current.resize != 1 ? (mathTrunc((selection.bounds.height * cfg.current.resize) / TILE_SIZE) * TILE_SIZE) : selection.bounds.height;
     if (selection.previousGeneration) doc.hideSelectedLayers();
     if (doc.getProperty('quickMask')) {
         doc.quickMask('clearEvent');
@@ -650,8 +650,8 @@ function dialogWindow(b, s) {
             slResize.addEventListener('keydown', commonHandler)
             function setTitle() {
                 var s = str.resize,
-                    w = mathTrunc((b.width * cfg.current.resize) / DIV) * DIV,
-                    h = mathTrunc((b.height * cfg.current.resize) / DIV) * DIV,
+                    w = mathTrunc((b.width * cfg.current.resize) / TILE_SIZE) * TILE_SIZE,
+                    h = mathTrunc((b.height * cfg.current.resize) / TILE_SIZE) * TILE_SIZE,
                     mp = mathTrunc(w * h / 10000) / 100;
                 return cfg.current.resize != 1 ? s + ' ' + w + 'x' + h + ' (' + mp + ' MP)' : s
             }
