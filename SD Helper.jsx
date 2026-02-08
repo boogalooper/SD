@@ -270,8 +270,14 @@ function main(selection) {
         if (!cfg.forge_imageStitch && cfg.sd_model_checkpoint.match(/kontext/i)) payload['kontext'] = true
         if (cfg.current.reference != '') {
             if (cfg.forge_imageStitch) payload['stitch'] = true
-            var r = new File(cfg.current.reference)
-            if (r.exists) payload['reference'] = r.fsName.replace(/\\/g, '\\\\')
+            var r = new File(cfg.current.reference),
+                r1 = new File(Folder.temp + '/SDH_REF.jpg');
+            open(r);
+            doc.openFile(r);
+            doc.addNoise(1);
+            doc.saveACopy(r1)
+            doc.close();
+            if (r.exists) payload['reference'] = r1.fsName.replace(/\\/g, '\\\\')
         }
     };
     if (SD.extensions[EXT_BLOCKCACHE] && cfg.forge_control_cache && cfg.current.forge_cache > 0 && !cfg.sd_model_checkpoint.match(/(qwen|z.image)/i)) payload['cache'] = cfg.current.forge_cache;
@@ -1378,6 +1384,11 @@ function AM(target, order) {
         d1.putUnitDouble(s2t('right'), s2t('pixelsUnit'), bounds.right);
         d.putObject(s2t('to'), s2t('rectangle'), d1);
         executeAction(s2t(addTo ? 'addTo' : 'set'), d, DialogModes.NO);
+    }
+    this.addNoise= function(level){
+        (d = new AD).putEnumerated(s2t("distribution"), s2t("distribution"), s2t("uniformDistribution"));
+        d.putUnitDouble(s2t("noise"), s2t("percentUnit"), level);
+        executeAction(s2t("addNoise"), d, DialogModes.NO);
     }
     this.deleteLayer = function (id) {
         id ? (r = new AR).putIdentifier(s2t('layer'), id) : (r = new AR).putEnumerated(s2t('layer'), s2t('ordinal'), s2t('targetEnum'));

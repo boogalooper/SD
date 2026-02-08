@@ -226,7 +226,7 @@ def start_local_server():
                         reference_image = None
                         if "reference" in data:
                             reference_image = encode_file_to_base64(
-                                data["reference"], False
+                                data["reference"], True
                             )
                         payload["alwayson_scripts"] = {
                             "Forge FluxKontext": {
@@ -246,7 +246,7 @@ def start_local_server():
                         reference_image = None
                         if "reference" in data:
                             reference_image = encode_file_to_base64(
-                                data["reference"], False
+                                data["reference"], True
                             )
                         payload["alwayson_scripts"] = {
                             "ImageStitch Integrated": {
