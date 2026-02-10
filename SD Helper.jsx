@@ -46,9 +46,9 @@ var time = (new Date).getTime(),
     initialState = null;
 $.localize = true;
 sts.getSettings();
-var UiState = ScriptUI.environment.keyboardState;
-if (UiState.shiftKey && !app.playbackParameters.count == 1) $.setenv('dialogMode', true);
-if (UiState.shiftKey && UiState.altKey) sts.showStatistics();
+var ks = ScriptUI.environment.keyboardState;
+if (ks.shiftKey && playbackParameters.count != 1) $.setenv('dialogMode', true);
+if (ks.shiftKey && ks.altKey) sts.showStatistics();
 try {
     init();
     sts.finish(true);
@@ -59,14 +59,18 @@ try {
     $.setenv('dialogMode', true)
     isCancelled = true;
 }
-sts.putSettings();
+finally {
+    sts.putSettings()
+}
 isCancelled ? 'cancel' : undefined;
 function init() {
+    if (!apl.getProperty('numberOfDocuments')) return
+    initialState = activeDocument.activeHistoryState;
+    if (doc.getProperty('mode').value != 'RGBColor') throw new Error(str.errMode);
+
     var currentSelection = { result: false, bounds: null, previousGeneration: null, junk: null };
-    if (apl.getProperty('numberOfDocuments') && doc.getProperty('mode').value == 'RGBColor') {
-        initialState = activeDocument.activeHistoryState;
-        activeDocument.suspendHistory('Check selection', 'checkSelection(currentSelection)');
-    }
+    activeDocument.suspendHistory('Check selection', 'checkSelection(currentSelection)');
+
     if (currentSelection.result) {
         var b = currentSelection.bounds,
             dW = (b.right - b.left) - Math.floor((b.right - b.left) / TILE_SIZE) * TILE_SIZE,
@@ -1943,6 +1947,7 @@ function Locale() {
     this.errTimeout = { ru: '\nПревышено время ожидания ответа!', en: '\nExceeding the response time!' }
     this.errTranslate = { ru: 'Модуль перевода недоступен!', en: 'The translation module is not available!' }
     this.errUpdating = { ru: 'Переключение на выбранную модель завершилось с ошибкой!\nПревышено время ожидания ответа!', en: 'Switching to the selected checkpoint ended with the error!\nExceeded the response time!' }
+    this.errMode = { ru: 'Stable Diffusion работает только с RGB документами!', en: 'Stable Diffusion works only with RGB documents!' }
     this.fill = 'Inpainting fill mode'
     this.flatten = { ru: 'Склеивать слои перед генерацией', en: 'Flatten layers before generation' }
     this.generate = { ru: 'Генерация', en: 'Generate' }
