@@ -14,7 +14,7 @@
 </javascriptresource>
 // END__HARVEST_EXCEPTION_ZSTRING
 */
-const ver = 0.427,
+const ver = 0.43,
     SD_HOST = '127.0.0.1',
     SD_PORT = 7860,
     API_HOST = '127.0.0.1',
@@ -67,10 +67,8 @@ function init() {
     if (!apl.getProperty('numberOfDocuments')) return
     initialState = activeDocument.activeHistoryState;
     if (doc.getProperty('mode').value != 'RGBColor') throw new Error(str.errMode);
-
     var currentSelection = { result: false, bounds: null, previousGeneration: null, junk: null };
     activeDocument.suspendHistory('Check selection', 'checkSelection(currentSelection)');
-
     if (currentSelection.result) {
         var b = currentSelection.bounds,
             dW = (b.right - b.left) - Math.floor((b.right - b.left) / TILE_SIZE) * TILE_SIZE,
@@ -162,11 +160,16 @@ function main(selection) {
     var checkpoint = (cfg.sd_model_checkpoint == SD['sd_model_checkpoint'] ? null : findOption(cfg.sd_model_checkpoint, SD['sd-models'], SD['sd_model_checkpoint'])),
         vae = (cfg.current.sd_vae == SD['sd_vae'] ? null : findOption(cfg.current.sd_vae, SD['sd-vaes'], SD['sd_vae'])),
         encoders = checkEncoders(cfg.current.encoders, SD['forge_additional_modules'], SD['sd_modules']),
-        memory = cfg.control_memory ? (SD['forge_inference_memory'] == cfg.forge_inference_memory ? null : cfg.forge_inference_memory) : null;
+        memory = cfg.control_memory ? (SD['forge_inference_memory'] == cfg.forge_inference_memory ? null : cfg.forge_inference_memory) : null,
+        scale;
     if (checkpoint != cfg.sd_model_checkpoint && checkpoint != null) cfg.sd_model_checkpoint = checkpoint;
-    if (cfg.autoResize && !isDitry) cfg.current.resize = autoScale(selection.bounds)
-    var width = cfg.current.resize != 1 ? (mathTrunc((selection.bounds.width * cfg.current.resize) / TILE_SIZE) * TILE_SIZE) : selection.bounds.width,
-        height = cfg.current.resize != 1 ? (mathTrunc((selection.bounds.height * cfg.current.resize) / TILE_SIZE) * TILE_SIZE) : selection.bounds.height;
+    if (cfg.current.autoResize) {
+        scale = isDitry ? cfg.current.resize : autoScale(selection.bounds)
+    } else { scale = cfg.current.manualScale }
+    var width = scale != 1 ? (mathTrunc((selection.bounds.width * scale) / TILE_SIZE) * TILE_SIZE) : selection.bounds.width,
+        height = scale != 1 ? (mathTrunc((selection.bounds.height * scale) / TILE_SIZE) * TILE_SIZE) : selection.bounds.height;
+    width = (width == 0 ? TILE_SIZE : width)
+    height = (height == 0 ? TILE_SIZE : height)
     if (selection.previousGeneration) doc.hideSelectedLayers();
     if (doc.getProperty('quickMask')) {
         doc.quickMask('clearEvent');
@@ -221,7 +224,7 @@ function main(selection) {
     }
     doc.flatten()
     if (cfg.current.inpaintingFill != -1) doc.pastePixels();
-    if (cfg.current.resize < 1) doc.imageSize(width, height)
+    if (scale < 1) doc.imageSize(width, height)
     if (cfg.current.inpaintingFill != -1) {
         var f1 = new File(Folder.temp + '/SDH_MASK.jpg');
         doc.saveACopy(f1);
@@ -488,7 +491,6 @@ function dialogWindow(b, s) {
                 showControls(grSettings)
                 w.layout.layout(true)
             }
-            //  if (bypass) { dlCheckpoint.onChange(true) }
             return checkpoints.length;
         }
         function inpaintingFill(p) {
@@ -649,34 +651,50 @@ function dialogWindow(b, s) {
         }
         function resizeScale(p) {
             var grResize = p.add("group{orientation:'column',alignChildren:['fill', 'top'],spacing:0,margins:0}"),
-                grResizeTitle = grResize.add("group{orientation:'row',alignChildren:['left', 'center'],spacing:10,margins:0}"),
-                stResize = grResizeTitle.add('statictext{preferredSize:[220,-1]}'),
+                grResizeTitle = grResize.add("group{orientation:'row',alignChildren:['left', 'center'],spacing:0,margins:0}"),
+                chResize = grResizeTitle.add('checkbox'),
+                stResize = grResizeTitle.add('statictext{preferredSize:[205,-1]}'),
                 stResizeValue = grResizeTitle.add('statictext{preferredSize:[65,-1],justify:"right"}'),
                 slResize = grResize.add('slider{minvalue:1,maxvalue:400}');
+            chResize.helpTip = str.autoResize
+            chResize.value = cfg.current.autoResize
+            setSliderValue();
+            stResize.text = setTitle()
             slResize.onChange = function () {
                 stResizeValue.text = cfg.current.resize = mathTrunc(this.value) / 100
-                stResizeValue.text = cfg.current.resize
+                if (!cfg.current.autoResize) cfg.current.manualScale = cfg.current.resize
                 stResize.text = setTitle()
                 isDitry = true
             }
             slResize.onChanging = function () { slResize.onChange() }
             slResize.addEventListener('keydown', commonHandler)
-            function setTitle() {
-                var s = str.resize,
-                    w = mathTrunc((b.width * cfg.current.resize) / TILE_SIZE) * TILE_SIZE,
-                    h = mathTrunc((b.height * cfg.current.resize) / TILE_SIZE) * TILE_SIZE,
-                    mp = mathTrunc(w * h / 10000) / 100;
-                return cfg.current.resize != 1 ? s + ' ' + w + 'x' + h + ' (' + mp + ' MP)' : s
+            chResize.onClick = function () {
+                cfg.current.autoResize = this.value
+                setSliderValue()
+                stResize.text = setTitle()
             }
-            if (cfg.autoResize) {
-                cfg.current.resize = autoScale(b)
-                slResize.value = cfg.current.resize * 100
-                stResizeValue.text = cfg.current.resize
-                stResize.text = setTitle()
-            } else {
-                slResize.value = cfg.current.resize * 100
-                stResizeValue.text = cfg.current.resize = mathTrunc(slResize.value) / 100
-                stResize.text = setTitle()
+            function setTitle() {
+                var s = (cfg.current.autoResize ? str.autoResize : str.resize),
+                    scale = cfg.current.autoResize ? cfg.current.resize : cfg.current.manualScale,
+                    w = mathTrunc((b.width * scale) / TILE_SIZE) * TILE_SIZE,
+                    h = mathTrunc((b.height * scale) / TILE_SIZE) * TILE_SIZE;
+                w = (w == 0 ? TILE_SIZE : w)
+                h = (h == 0 ? TILE_SIZE : h)
+                var mp = mathTrunc(w * h / 10000) / 100;
+                return cfg.current.scale != 1 ? s + ': ' + w + 'x' + h + ' (' + mp + ' MP)' : s
+            }
+            function setSliderValue() {
+                if (cfg.current.autoResize) {
+                    var scale = autoScale(b);
+                    cfg.current.resize = scale
+                    slResize.value = scale * 100
+                    stResizeValue.text = scale
+                    stResize.text = setTitle()
+                } else {
+                    slResize.value = cfg.current.manualScale * 100
+                    stResizeValue.text = cfg.current.manualScale = mathTrunc(slResize.value) / 100
+                    stResize.text = setTitle()
+                }
             }
             p.slResize = slResize
         }
@@ -799,7 +817,7 @@ function dialogWindow(b, s) {
             chQwenStepsFix.value = cfg.current.qwenStepsFix
             chQwenResFix.onClick = function () {
                 if (p.slResize) {
-                    p.slResize.value = this.value ? 1 * 100 : (cfg.autoResize ? autoScale(b) : cfg.current.resize) * 100
+                    p.slResize.value = this.value ? 1 * 100 : (cfg.current.autoResize ? autoScale(b) : cfg.current.manualScale) * 100
                     p.slResize.onChange();
                     p.slResize.enabled = !this.value
                 }
@@ -824,11 +842,10 @@ function dialogWindow(b, s) {
             stOpacityTitle = grOpacityTitle.add('statictext{preferredSize:[180,-1]}'),
             stOpacityValue = grOpacityTitle.add('statictext{preferredSize:[65,-1],justify:"right"}'),
             slOpacity = grOpacity.add('slider{minvalue:0,maxvalue:100}'),
-            pnResize = w.add("panel{orientation:'column',alignChildren:['fill', 'top'],spacing:10,margins:10}"),
-            chAutoResize = pnResize.add('checkbox'),
-            grResizeMode = pnResize.add("group{orientation:'row',alignChildren:['left', 'center'],spacing:10,margins:0}"),
-            rbPixelMode = grResizeMode.add('radiobutton'),
-            rbAreaMode = grResizeMode.add('radiobutton'),
+            pnResize = w.add("panel{orientation:'column',alignChildren:['fill', 'top'],spacing:0,margins:10}"),
+            grResize = pnResize.add("group{orientation:'row',alignChildren:['left', 'top'],spacing:0,margins:5}"),
+            stLessLabel = grResize.add('statictext{preferredSize:[130,-1],justify:"left"}'),
+            stAboveLabel = grResize.add('statictext{preferredSize:[100,-1],justify:"left"}'),
             grChResize = pnResize.add("group{orientation:'column',alignChildren:['fill', 'center'],spacing:10,margins:0}"),
             grResizeSl = grChResize.add("group{orientation:'row',alignChildren:['left', 'center'],spacing:10,margins:0}"),
             grLess = grResizeSl.add("group{orientation:'row',alignChildren:['left', 'center'],spacing:0,margins:0,preferredSize:[100,-1]}"),
@@ -880,9 +897,7 @@ function dialogWindow(b, s) {
             ok = grBn.add('button', undefined, undefined, { name: 'ok' });
         bnChk.text = str.checkpoint
         bnVae.text = str.vae + (cfg.sd_model_checkpoint.match(/(qwen|flux|kontext|z.image)/i) ? '/Text encoder' : '')
-        rbPixelMode.text = str.wxh;
-        rbAreaMode.text = str.area;
-        chAutoResize.text = str.autoResizeCaption
+        s
         chFlatten.text = str.flatten
         chRasterize.text = str.rasterize
         chRecordSettings.text = str.actionMode
@@ -890,22 +905,20 @@ function dialogWindow(b, s) {
         ok.text = str.apply
         pnBrush.text = str.brush
         pnOutput.text = str.output
-        pnResize.text = str.autoResize
+        pnResize.text = str.autoResizeOptions
         pnShow.text = str.showItems
-        slAbove.helpTip = str.max
-        slLess.helpTip = str.min
+        stLessLabel.text = str.min + ' (px)'
+        stAboveLabel.text = str.max + ' (px)'
         stOpacityTitle.text = str.opacity
         w.text = str.settings
-        cfg.autoResizeArea ? rbAreaMode.value = true : rbPixelMode.value = true
-        chAutoResize.value = grResizeSl.enabled = cfg.autoResize
         chFlatten.value = cfg.flatten
         chRasterize.value = cfg.rasterizeImage
         chRecordSettings.value = !cfg.recordToAction
         chSelectBrush.value = cfg.selectBrush
-        slAbove.value = cfg.autoResizeArea ? cfg.autoResizeAboveArea * 1024 : cfg.autoResizeAbove;
-        slLess.value = cfg.autoResizeArea ? cfg.autoResizeLessArea * 1024 : cfg.autoResizeLess;
-        stAbove.text = cfg.autoResizeArea ? cfg.autoResizeAboveArea : cfg.autoResizeAbove;
-        stLess.text = cfg.autoResizeArea ? cfg.autoResizeLessArea : cfg.autoResizeLess;
+        slAbove.value =cfg.autoResizeAbove;
+        slLess.value =  cfg.autoResizeLess;
+        stAbove.text =cfg.autoResizeAbove;
+        stLess.text =  cfg.autoResizeLess;
         slOpacity.value = stOpacityValue.text = cfg.brushOpacity
         chFlatten.onClick = function () { cfg.flatten = this.value }
         chRasterize.onClick = function () { cfg.rasterizeImage = this.value }
@@ -919,23 +932,11 @@ function dialogWindow(b, s) {
         bnVae.onClick = function () {
             var result = filterModelsWindow(SD['sd-vaes'], cfg.vaeFilter);
         }
-        rbPixelMode.onClick = function () {
-            cfg.autoResizeArea = false;
-            slAbove.value = stAbove.text = cfg.autoResizeAbove;
-            slLess.value = stLess.text = cfg.autoResizeLess;
-        }
-        rbAreaMode.onClick = function () {
-            cfg.autoResizeArea = true
-            slAbove.value = stAbove.text = cfg.autoResizeAboveArea;
-            slLess.value = stLess.text = cfg.autoResizeLessArea;
-        }
         slLess.onChange = function () {
-            stLess.text = cfg.autoResizeArea ? (cfg.autoResizeLessArea = mathTrunc(this.value / 1024 * 100) / 100) :
-                (cfg.autoResizeLess = mathTrunc(this.value / 32) * 32)
+            stLess.text =                 (cfg.autoResizeLess = mathTrunc(this.value / 32) * 32)
         }
         slAbove.onChange = function () {
-            stAbove.text = cfg.autoResizeArea ? (cfg.autoResizeAboveArea = mathTrunc(this.value / 1024 * 100) / 100) :
-                (cfg.autoResizeAbove = mathTrunc(this.value / 32) * 32)
+            stAbove.text =                 (cfg.autoResizeAbove = mathTrunc(this.value / 32) * 32)
         }
         slLess.onChanging = function () { slLess.onChange() }
         slLess.addEventListener('keydown', resizeHandler)
@@ -950,7 +951,6 @@ function dialogWindow(b, s) {
                 }
             }
         }
-        chAutoResize.onClick = function () { cfg.autoResize = grResizeSl.enabled = grResizeMode.enabled = this.value; cfg.resize = 1; }
         chRecordSettings.onClick = function () { cfg.recordToAction = !this.value }
         return w
     }
@@ -1095,18 +1095,10 @@ function mathTrunc(val) {
 function autoScale(b) {
     var less = b.width < b.height ? b.width : b.height,
         above = b.width > b.height ? b.width : b.height,
-        areaMp = (b.width * b.height) / 1000000,
         scale = 0;
-    if (cfg.autoResizeArea) {
-        if (areaMp < cfg.autoResizeLessArea) { scale = cfg.autoResizeLessArea / areaMp }
-        else if (areaMp > cfg.autoResizeAboveArea) { scale = cfg.autoResizeAboveArea / areaMp }
-        else { scale = 1; }
-        scale = Math.round(Math.sqrt(scale) * 1000) / 1000
-    } else {
-        if (less < cfg.autoResizeLess) scale = Math.ceil(cfg.autoResizeLess / less * 1000) / 1000
-        if (above > cfg.autoResizeAbove) scale = Math.floor(cfg.autoResizeAbove / above * 1000) / 1000
-        if (less >= cfg.autoResizeLess && above <= cfg.autoResizeAbove) scale = 1
-    }
+    if (less < cfg.autoResizeLess) scale = Math.ceil(cfg.autoResizeLess / less * 1000) / 1000
+    if (above > cfg.autoResizeAbove) scale = Math.floor(cfg.autoResizeAbove / above * 1000) / 1000
+    if (less >= cfg.autoResizeLess && above <= cfg.autoResizeAbove) scale = 1
     return (scale > 4 ? 4 : scale)
 }
 function cloneObject(o1, o2) {
@@ -1586,7 +1578,6 @@ function Config() {
         this.denoising_strength = 0.22
         this.prompt = ''
         this.negative_prompt = ''
-        this.resize = 1
         this.inpaintingFill = -1
         this.positivePreset = ''
         this.negativePreset = 'SD'
@@ -1595,6 +1586,9 @@ function Config() {
         this.reference = ''
         this.qwenResFix = false
         this.qwenStepsFix = false
+        this.autoResize = true
+        this.resize = 1
+        this.manualScale = 1
     }
     var settingsObj = this;
     this.current = new settingsObj.checkpointSettings();
@@ -1608,12 +1602,8 @@ function Config() {
     this.selectBrush = true
     this.brushOpacity = 50
     this.recordToAction = true
-    this.autoResize = false
-    this.autoResizeArea = false
     this.autoResizeLess = 512
     this.autoResizeAbove = 1408
-    this.autoResizeLessArea = 0.5
-    this.autoResizeAboveArea = 1
     this.positivePreset = {}
     this.control_memory = false
     this.forge_inference_memory = 1024
@@ -1929,7 +1919,7 @@ function Locale() {
     this.advanced = { ru: 'Расширенные нестройки', en: 'Advanced settings' }
     this.apply = { ru: 'Применить настройки', en: 'Apply settings' }
     this.autoResize = { ru: 'Авто масштаб', en: 'Auto resize' }
-    this.autoResizeCaption = { ru: 'Масштаб зависит от размера выделения', en: 'Set scale value based on selection size:' }
+    this.autoResizeOptions = { ru: 'Параметры авто масштаба', en: 'Auto resize oprions' }
     this.brush = { ru: 'Настройки кисти', en: 'Brush settings' }
     this.cache = { ru: 'Использовать First Block Cache (extension)', en: 'Use Block Cache (extension)' }
     this.cacheTitle = { ru: 'Порог кэширования:', en: 'Caching threshold:' }
@@ -1951,8 +1941,8 @@ function Locale() {
     this.fill = 'Inpainting fill mode'
     this.flatten = { ru: 'Склеивать слои перед генерацией', en: 'Flatten layers before generation' }
     this.generate = { ru: 'Генерация', en: 'Generate' }
-    this.max = { ru: 'максимум', en: 'maximum' }
-    this.min = { ru: 'минимум', en: 'minimum' }
+    this.max = { ru: 'Максимум', en: 'Maximum' }
+    this.min = { ru: 'Минимум', en: 'Minimum' }
     this.module = { ru: 'Модуль sd-webui-api ', en: 'Module sd-webui-api ' }
     this.negativePrompt = 'Negative prompt'
     this.notFound = { ru: '\nне найден!', en: 'not found!' }
@@ -1969,7 +1959,7 @@ function Locale() {
     this.progressGenerate = { ru: 'Генерация изображения...', en: 'Image generation...' }
     this.prompt = 'Prompt'
     this.rasterize = { ru: 'Растеризовать сгенерированное изображение', en: 'Rasterize generated image' }
-    this.resize = 'Resize scale'
+    this.resize = 'Resize'
     this.sampling = 'Sampling method'
     this.schedule = 'Schedule type'
     this.selctBrush = { ru: 'Активировать кисть после генерации', en: 'Select brush after processing' }
@@ -1985,7 +1975,6 @@ function Locale() {
     this.imageRef = { ru: 'Reference image', en: 'Reference image' }
     this.browse = { ru: 'Обзор... ', en: 'Browse...' }
     this.wxh = { ru: 'ширина и высота (px)', en: 'width and height (px)' }
-    this.area = { ru: 'площадь (MP)', en: 'area (MP)' }
     this.qwenFix = 'Qwen fix:'
     this.qwenResFix = 'Resolution 1024x1024'
     this.qwenStepsFix = 'Steps shift'
