@@ -59,9 +59,10 @@ def timestamp():
 def encode_file_to_base64(path, remove):
     with open(path, "rb") as file:
         encoded_data = base64.b64encode(file.read()).decode("utf-8")
+        image_b64 = f"data:image/png;base64,{encoded_data}"
     if remove:
         os.remove(path)
-    return encoded_data
+    return image_b64
 
 
 def decode_and_save_base64(base64_str, save_path):
@@ -248,22 +249,16 @@ def start_local_server():
                             reference_image = encode_file_to_base64(
                                 data["reference"], True
                             )
-                        payload["alwayson_scripts"] = {
-                            "ImageStitch Integrated": {
-                                "args": [
-                                    True,
-                                    [
+                            payload["alwayson_scripts"] = {
+                                "ImageStitch Integrated": {
+                                    "args": [
+                                        True,
                                         [
-                                            {
-                                                "image": reference_image,
-                                                "mask": None,
-                                            },
-                                            None,
-                                        ]
-                                    ],
-                                ]
+                                            reference_image,
+                                        ],
+                                    ]
+                                },
                             }
-                        }
                     if "cache" in data:
                         if "alwayson_scripts" not in payload:
                             payload["alwayson_scripts"] = {}

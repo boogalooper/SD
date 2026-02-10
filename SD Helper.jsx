@@ -243,7 +243,7 @@ function main(selection) {
         }
         if (!SD.setOptions(checkpoint, vae, vae_path, memory)) throw new Error(str.errUpdating)
     }
-    if (cfg.current.qwenStepsFix&& cfg.sd_model_checkpoint.match(/qwen.+edit/i)) {
+    if (cfg.current.qwenStepsFix && cfg.sd_model_checkpoint.match(/qwen.+edit/i)) {
         var offset = $.getenv('offset');
         if (offset == null) offset = cfg.current.steps;
     }
@@ -257,12 +257,12 @@ function main(selection) {
         'cfg_scale': cfg.current.cfg_scale,
         'seed': -1,
         'steps': cfg.current.qwenStepsFix && cfg.sd_model_checkpoint.match(/qwen.+edit/i) ? (cfg.current.steps == offset ? cfg.current.steps + 1 : cfg.current.steps) : cfg.current.steps,
-        'width': cfg.current.qwenResFix && cfg.sd_model_checkpoint.match(/qwen.+edit/i)? 1024 : width,
-        'height': cfg.current.qwenResFix && cfg.sd_model_checkpoint.match(/qwen.+edit/i)? 1024 : height,
-        'denoising_strength': !cfg.sd_model_checkpoint.match(/(kontext|qwen.+edit)/i) ? cfg.current.denoising_strength : 1,
+        'width': cfg.current.qwenResFix && cfg.sd_model_checkpoint.match(/qwen.+edit/i) ? 1024 : width,
+        'height': cfg.current.qwenResFix && cfg.sd_model_checkpoint.match(/qwen.+edit/i) ? 1024 : height,
+        'denoising_strength': cfg.current.denoising_strength,
         'n_iter': 1,
     };
-    if (cfg.current.qwenStepsFix&& cfg.sd_model_checkpoint.match(/qwen.+edit/i)) {
+    if (cfg.current.qwenStepsFix && cfg.sd_model_checkpoint.match(/qwen.+edit/i)) {
         $.setenv('offset', cfg.current.steps == offset ? cfg.current.steps + 1 : cfg.current.steps)
     }
     if (cfg.sd_model_checkpoint.match(/(flux|kontext)/i)) payload['flux'] = true;
@@ -309,6 +309,7 @@ function main(selection) {
         if (cfg.rasterizeImage) { try { lr.rasterize() } catch (e) { } }
         lr.setName(LAYER_NAME)
         doc.makeSelectionFromLayer('mask', selection.junk)
+        if (!doc.hasProperty('selection')) { doc.makeSelection(selection.bounds) }
         doc.makeSelectionMask()
         doc.deleteLayer(selection.junk)
         lr.selectChannel('mask');
@@ -416,7 +417,7 @@ function dialogWindow(b, s) {
         cfgScale(p);
         resizeScale(p);
         if (cfg.forge_control_cache && SD.extensions[EXT_BLOCKCACHE] && !cfg.sd_model_checkpoint.match(/(qwen|z.image)/i)) cache(p)
-        if (cfg.showNegative_prompt && !cfg.sd_model_checkpoint.match(/(kontext|qwen)/i)) denoisingStrength(p)
+        denoisingStrength(p)
         if ((cfg.sd_model_checkpoint.match(/kontext/i) && SD.extensions[EXT_KONTEXT]) || (cfg.sd_model_checkpoint.match(/(kontext|qwen.+edit|klein)/i) && cfg.forge_imageStitch)) imageReference(p)
         if (SD.forgeUI && cfg.sd_model_checkpoint.match(/qwen.+edit/i)) qwenFix(p)
         return enabled;
@@ -458,17 +459,19 @@ function dialogWindow(b, s) {
                 }
                 if (!found) {
                     cfg.current = new cfg.checkpointSettings();
-                    if (cfg.sd_model_checkpoint.match(/(flux|kontext)/i)) {
-                        cfg.current.scheduler = 'Simple'
-                        cfg.current.sampler_name = 'Euler'
+                    if (cfg.sd_model_checkpoint.match(/(flux|kontext|z-image)/i)) {
+                        cfg.current.scheduler = cfg.sd_model_checkpoint.match(/(klein)/i) ? 'LCM' : 'Simple'
+                        cfg.current.sampler_name = cfg.sd_model_checkpoint.match(/(klein)/i) ? 'Normal' : 'Euler'
                         cfg.current.cfg_scale = 3.5
                         cfg.current.forge_cache = 0.1
+                        cfg.current.denoising_strength = 1
                     } else if (cfg.sd_model_checkpoint.match(/(qwen)/i)) {
                         cfg.current.scheduler = 'Simple'
                         cfg.current.sampler_name = 'Euler'
                         cfg.current.cfg_scale = 1
                         cfg.current.forge_cache = 0
                         cfg.current.qwenStepsFix = true
+                        cfg.current.denoising_strength = 1
                         if (cfg.sd_model_checkpoint.match(/(qwen.+edit)/i)) cfg.current.qwenResFix = true;
                     } else if (cfg.sd_model_checkpoint.match(/z.image/i)) {
                         cfg.current.scheduler = 'Simple'
@@ -481,7 +484,7 @@ function dialogWindow(b, s) {
                 showControls(grSettings)
                 w.layout.layout(true)
             }
-            if (bypass) { dlCheckpoint.onChange(true) }
+            //  if (bypass) { dlCheckpoint.onChange(true) }
             return checkpoints.length;
         }
         function inpaintingFill(p) {
@@ -1385,7 +1388,7 @@ function AM(target, order) {
         d.putObject(s2t('to'), s2t('rectangle'), d1);
         executeAction(s2t(addTo ? 'addTo' : 'set'), d, DialogModes.NO);
     }
-    this.addNoise= function(level){
+    this.addNoise = function (level) {
         (d = new AD).putEnumerated(s2t("distribution"), s2t("distribution"), s2t("uniformDistribution"));
         d.putUnitDouble(s2t("noise"), s2t("percentUnit"), level);
         executeAction(s2t("addNoise"), d, DialogModes.NO);
