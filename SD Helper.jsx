@@ -14,7 +14,7 @@
 </javascriptresource>
 // END__HARVEST_EXCEPTION_ZSTRING
 */
-const ver = 0.426,
+const ver = 0.427,
     SD_HOST = '127.0.0.1',
     SD_PORT = 7860,
     API_HOST = '127.0.0.1',
@@ -268,7 +268,7 @@ function main(selection) {
     if (cfg.sd_model_checkpoint.match(/(flux|kontext)/i)) payload['flux'] = true;
     if (cfg.sd_model_checkpoint.match(/(kontext|qwen.+edit|klein)/i) && (SD.extensions[EXT_KONTEXT] || cfg.forge_imageStitch)) {
         if (!cfg.forge_imageStitch && cfg.sd_model_checkpoint.match(/kontext/i)) payload['kontext'] = true
-        if (cfg.current.reference != '') {
+        if (cfg.current.reference != '' && new File(cfg.current.reference).exists) {
             if (cfg.forge_imageStitch) payload['stitch'] = true
             var r = new File(cfg.current.reference),
                 r1 = new File(Folder.temp + '/SDH_REF.jpg');
@@ -746,6 +746,12 @@ function dialogWindow(b, s) {
                 dlRef.add('item', str.browse)
                 var cur = findReference(cfg.current.imageReferences, cfg.current.reference);
                 dlRef.selection = cur ? cur : 0;
+                if (cur) {
+                    dlRef.selection = cur
+                } else {
+                    dlRef.selection = 0
+                    cfg.current.reference = ''
+                }
             }
             function shortenPath(s) {
                 var win;
