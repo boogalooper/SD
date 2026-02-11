@@ -1201,7 +1201,6 @@ function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
         if (SdCfg.forgeUI) {
             var result = sendMessage({ type: 'get', message: 'sdapi/v1/extensions' }, true);
             if (result) {
-                if (!result.length) throw new Error(str.errList + 'sdapi/v1/extensions' + str.errExists)
                 for (var i = 0; i < result.length; i++) if (SdCfg.extensions[result[i].name] != undefined) SdCfg.extensions[result[i].name] = result[i].enabled
             } else { throw new Error(str.errSettings + 'sdapi/v1/extensions' + str.errTimeout) }
         }
