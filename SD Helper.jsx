@@ -24,9 +24,8 @@ const ver = 0.43,
     LAYER_NAME = 'SD generated image',
     SD_GET_OPTIONS_DELAY = 3000, // максимальное время ожидания ответа Stable Diffusion при запросе текущих параметров (при превышении скрипт завершит работу)
     SD_RELOAD_CHECKPOINT_DELAY = 12000, // максимальное время ожидания загрузки checkpoint или vae (при превышении скрипт завершит работу)
-    SD_GENERATION_DELAY = 150000, // максимальное время ожидания генерации изображения (при превышении скрипт завершит работу)
+    SD_GENERATION_DELAY = 160000, // максимальное время ожидания генерации изображения (при превышении скрипт завершит работу)
     EXT_KONTEXT = 'forge2_flux_kontext',
-    EXT_BLOCKCACHE = 'sd-forge-blockcache',
     UUID = '338cc304-fb6f-4b1f-8ad4-13bbd65f117c',
     TILE_SIZE = 16;
 var time = (new Date).getTime(),
@@ -287,8 +286,7 @@ function main(selection) {
             if (r.exists) payload['reference'] = r1.fsName.replace(/\\/g, '\\\\')
         }
     };
-    if (SD.extensions[EXT_BLOCKCACHE] && cfg.forge_control_cache && cfg.current.forge_cache > 0 && !cfg.sd_model_checkpoint.match(/(qwen|z.image)/i)) payload['cache'] = cfg.current.forge_cache;
-    if (cfg.current.inpaintingFill != -1) {
+       if (cfg.current.inpaintingFill != -1) {
         payload['mask'] = f1.fsName.replace(/\\/g, '\\\\')
         payload['inpainting_fill'] = cfg.current.inpaintingFill + 1
     }
@@ -383,7 +381,7 @@ function dialogWindow(b, s) {
         if (result == 1) {
             var changed = false;
             for (var a in tempSettings) {
-                if (!a.match(/(autoResize|forge_control_cache|Filter|forge_imageStitch)/)) continue;
+                if (!a.match(/(autoResize|Filter|forge_imageStitch)/)) continue;
                 if (typeof tempSettings[a] != 'object') {
                     if (tempSettings[a] != cfg[a]) {
                         changed = true
@@ -423,7 +421,6 @@ function dialogWindow(b, s) {
         steps(p);
         cfgScale(p);
         resizeScale(p);
-        if (cfg.forge_control_cache && SD.extensions[EXT_BLOCKCACHE] && !cfg.sd_model_checkpoint.match(/(qwen|z.image)/i)) cache(p)
         denoisingStrength(p)
         if ((cfg.sd_model_checkpoint.match(/kontext/i) && SD.extensions[EXT_KONTEXT]) || (cfg.sd_model_checkpoint.match(/(kontext|qwen.+edit|klein)/i) && cfg.forge_imageStitch)) imageReference(p)
         if (SD.forgeUI && cfg.sd_model_checkpoint.match(/qwen.+edit/i)) qwenFix(p)
@@ -470,13 +467,11 @@ function dialogWindow(b, s) {
                         cfg.current.scheduler = cfg.sd_model_checkpoint.match(/(klein)/i) ? 'LCM' : 'Simple'
                         cfg.current.sampler_name = cfg.sd_model_checkpoint.match(/(klein)/i) ? 'Normal' : 'Euler'
                         cfg.current.cfg_scale = 3.5
-                        cfg.current.forge_cache = 0.1
                         cfg.current.denoising_strength = 1
                     } else if (cfg.sd_model_checkpoint.match(/(qwen)/i)) {
                         cfg.current.scheduler = 'Simple'
                         cfg.current.sampler_name = 'Euler'
                         cfg.current.cfg_scale = 1
-                        cfg.current.forge_cache = 0
                         cfg.current.qwenStepsFix = true
                         cfg.current.denoising_strength = 1
                         if (cfg.sd_model_checkpoint.match(/(qwen.+edit)/i)) cfg.current.qwenResFix = true;
@@ -485,7 +480,6 @@ function dialogWindow(b, s) {
                         cfg.current.sampler_name = 'Euler'
                         cfg.current.cfg_scale = 3
                         cfg.current.denoising_strength = 0.22
-                        cfg.current.forge_cache = 0
                     }
                 }
                 showControls(grSettings)
@@ -698,18 +692,6 @@ function dialogWindow(b, s) {
             }
             p.slResize = slResize
         }
-        function cache(p) {
-            var grCache = p.add("group{orientation:'column',alignChildren:['fill', 'center'],spacing:5,margins:0}"),
-                grCacheTitle = grCache.add("group{orientation:'row',alignChildren:['left', 'center'],spacing:10,margins:0}"),
-                stCacheTitle = grCacheTitle.add('statictext{preferredSize:[220,-1]}'),
-                stCacheValue = grCacheTitle.add('statictext{preferredSize:[65,-1],justify:"right"}'),
-                slCache = grCache.add('slider{minvalue:0,maxvalue:100}');
-            stCacheTitle.text = str.cacheTitle
-            slCache.value = cfg.current.forge_cache * 100
-            stCacheValue.text = cfg.current.forge_cache
-            slCache.onChange = function () { stCacheValue.text = cfg.current.forge_cache = mathTrunc(this.value) / 100 }
-            slCache.onChanging = function () { slCache.onChange() }
-        }
         function denoisingStrength(p) {
             var grStrength = p.add("group{orientation:'column',alignChildren:['fill', 'top'],spacing:0,margins:0}"),
                 grStrengthTitle = grStrength.add("group{orientation:'row',alignChildren:['left', 'center'],spacing:10,margins:0}"),
@@ -862,7 +844,6 @@ function dialogWindow(b, s) {
                 stMemoryTitle = grMemoryTitle.add('statictext{preferredSize:[180,-1]}'),
                 stMemoryValue = grMemoryTitle.add('statictext{preferredSize:[65,-1],justify:"right"}'),
                 slMemory = grMemory.add('slider{minvalue:128,maxvalue:4096}'),
-                chCache = pnMemory.add('checkbox'),
                 chStitch = pnMemory.add('checkbox');
             pnMemory.text = str.advanced
             chMemory.text = str.setMatrixMemory
@@ -878,10 +859,6 @@ function dialogWindow(b, s) {
             slMemory.onChanging = function () { slMemory.onChange() }
             chMemory.onClick = function () { cfg.control_memory = grMemory.enabled = this.value }
             chStitch.onClick = function () { cfg.forge_imageStitch = this.value }
-            chCache.text = str.cache
-            chCache.enabled = SD.extensions[EXT_BLOCKCACHE]
-            chCache.value = cfg.forge_control_cache
-            chCache.onClick = function () { cfg.forge_control_cache = this.value }
             function memoryHandler(evt) {
                 if (evt.shiftKey) {
                     if (evt.keyIdentifier == 'Right' || evt.keyIdentifier == 'Up') {
@@ -1163,7 +1140,6 @@ function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
     var SdCfg = this;
     SdCfg.extensions = {};
     SdCfg.extensions[EXT_KONTEXT] = false;
-    SdCfg.extensions[EXT_BLOCKCACHE] = false;
     this.initialize = function () {
         if (!checkConnecton(sdHost, sdPort)) throw new Error(str.errConnection + sdHost + ':' + sdPort + '\nStable Diffusion ' + str.errAnswer);
         if (!(new File(Folder.temp + "/sd_helper.lock").exists)) {
@@ -1581,7 +1557,6 @@ function Config() {
         this.inpaintingFill = -1
         this.positivePreset = ''
         this.negativePreset = 'SD'
-        this.forge_cache = 0
         this.imageReferences = []
         this.reference = ''
         this.qwenResFix = false
@@ -1608,7 +1583,6 @@ function Config() {
     this.control_memory = false
     this.forge_inference_memory = 1024
     this.forge_inference_memory_default = 1024
-    this.forge_control_cache = false
     this.forge_imageStitch = false
     this.negativePreset = {
         'SD': '(deformed, distorted, disfigured:1.3), poorly drawn, bad anatomy, wrong anatomy, extra limb, missing limb, floating limbs, (mutated hands and fingers:1.4), disconnected limbs, mutation, mutated, ugly, disgusting, blurry, amputation',
@@ -1921,8 +1895,6 @@ function Locale() {
     this.autoResize = { ru: 'Авто масштаб', en: 'Auto resize' }
     this.autoResizeOptions = { ru: 'Параметры авто масштаба', en: 'Auto resize oprions' }
     this.brush = { ru: 'Настройки кисти', en: 'Brush settings' }
-    this.cache = { ru: 'Использовать First Block Cache (extension)', en: 'Use Block Cache (extension)' }
-    this.cacheTitle = { ru: 'Порог кэширования:', en: 'Caching threshold:' }
     this.cfgScale = 'CFG Scale'
     this.checkpoint = 'Checkpoint'
     this.distilledCfgScale = 'Distilled CFG Scale'

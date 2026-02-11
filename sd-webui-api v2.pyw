@@ -259,19 +259,6 @@ def start_local_server():
                                     ]
                                 },
                             }
-                    if "cache" in data:
-                        if "alwayson_scripts" not in payload:
-                            payload["alwayson_scripts"] = {}
-                        payload["alwayson_scripts"]["First Block Cache / TeaCache"] = {
-                            "args": [
-                                True,
-                                "First Block Cache",
-                                float(data["cache"]),
-                                1,
-                                0,
-                                False,
-                            ]
-                        }
                     outfile = call_generate_api(
                         entrypoint, payload, SD_HOST, SD_PORT, data["output"]
                     )
