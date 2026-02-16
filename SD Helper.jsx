@@ -14,7 +14,7 @@
 </javascriptresource>
 // END__HARVEST_EXCEPTION_ZSTRING
 */
-const ver = 0.43,
+const ver = 0.44,
     SD_HOST = '127.0.0.1',
     SD_PORT = 7860,
     API_HOST = '127.0.0.1',
@@ -286,7 +286,7 @@ function main(selection) {
             if (r.exists) payload['reference'] = r1.fsName.replace(/\\/g, '\\\\')
         }
     };
-       if (cfg.current.inpaintingFill != -1) {
+    if (cfg.current.inpaintingFill != -1) {
         payload['mask'] = f1.fsName.replace(/\\/g, '\\\\')
         payload['inpainting_fill'] = cfg.current.inpaintingFill + 1
     }
@@ -464,17 +464,15 @@ function dialogWindow(b, s) {
                 if (!found) {
                     cfg.current = new cfg.checkpointSettings();
                     if (cfg.sd_model_checkpoint.match(/(flux|kontext|z-image)/i)) {
-                        cfg.current.scheduler = cfg.sd_model_checkpoint.match(/(klein)/i) ? 'LCM' : 'Simple'
-                        cfg.current.sampler_name = cfg.sd_model_checkpoint.match(/(klein)/i) ? 'Normal' : 'Euler'
+                        cfg.current.scheduler = cfg.sd_model_checkpoint.match(/klein/i) ? 'LCM' : 'Simple'
+                        cfg.current.sampler_name = cfg.sd_model_checkpoint.match(/klein/i) ? 'Normal' : 'Euler'
                         cfg.current.cfg_scale = 3.5
                         cfg.current.denoising_strength = 1
                     } else if (cfg.sd_model_checkpoint.match(/(qwen)/i)) {
                         cfg.current.scheduler = 'Simple'
-                        cfg.current.sampler_name = 'Euler'
+                        cfg.current.sampler_name = 'Normal'
                         cfg.current.cfg_scale = 1
-                        cfg.current.qwenStepsFix = true
                         cfg.current.denoising_strength = 1
-                        if (cfg.sd_model_checkpoint.match(/(qwen.+edit)/i)) cfg.current.qwenResFix = true;
                     } else if (cfg.sd_model_checkpoint.match(/z.image/i)) {
                         cfg.current.scheduler = 'Simple'
                         cfg.current.sampler_name = 'Euler'
@@ -541,13 +539,24 @@ function dialogWindow(b, s) {
                 stPrompt = grPrompt.add('statictext');
             var presets = addPresetPanel('positivePreset', grPrompt);
             var etPrompt = grPrompt.add('edittext{preferredSize:[285,80],properties:{multiline: true, scrollable: true}}'),
-                bnTranslate = grPrompt.add('button');
+                grButtons = grPrompt.add("group{orientation:'row',alignChildren:['fill', 'top'],spacing:0,margins:0}"),
+                bnTranslate = grButtons.add('button{preferredSize:[140,-1]}');
+            bnLora = grButtons.add('button{preferredSize:[140,-1]}');
             presets.onChange(true)
             bnTranslate.text = str.translate + '-> en';
+            bnLora.text = str.lora
             etPrompt.onChange = function () { cfg.current.prompt = this.text }
+            bnLora.onClick = function () {
+                var result = []
+                selectWindow(SD['loras'], result, false, str.lora)
+                if (result.length) { 
+                    etPrompt.text = '<lora:' + result[0] + ':1>\n' + etPrompt.text 
+                    etPrompt.onChange()
+                }
+            }
             bnTranslate.onClick = function () {
                 if (etPrompt.text != '') {
-                    var result = SD.translate(etPrompt.text)
+                    var result = SD.translate(etPrompt.text.replace('\n',''))
                     if (result) {
                         etPrompt.text = result
                         etPrompt.onChange()
@@ -892,10 +901,10 @@ function dialogWindow(b, s) {
         chRasterize.value = cfg.rasterizeImage
         chRecordSettings.value = !cfg.recordToAction
         chSelectBrush.value = cfg.selectBrush
-        slAbove.value =cfg.autoResizeAbove;
-        slLess.value =  cfg.autoResizeLess;
-        stAbove.text =cfg.autoResizeAbove;
-        stLess.text =  cfg.autoResizeLess;
+        slAbove.value = cfg.autoResizeAbove;
+        slLess.value = cfg.autoResizeLess;
+        stAbove.text = cfg.autoResizeAbove;
+        stLess.text = cfg.autoResizeLess;
         slOpacity.value = stOpacityValue.text = cfg.brushOpacity
         chFlatten.onClick = function () { cfg.flatten = this.value }
         chRasterize.onClick = function () { cfg.rasterizeImage = this.value }
@@ -903,17 +912,13 @@ function dialogWindow(b, s) {
         slOpacity.onChange = function () { stOpacityValue.text = cfg.brushOpacity = mathTrunc(this.value) }
         slOpacity.onChanging = function () { slOpacity.onChange() }
         slOpacity.addEventListener('keydown', commonHandler)
-        bnChk.onClick = function () {
-            var result = filterModelsWindow(SD['sd-models'], cfg.checkpointFilter);
-        }
-        bnVae.onClick = function () {
-            var result = filterModelsWindow(SD['sd-vaes'], cfg.vaeFilter);
-        }
+        bnChk.onClick = function () { selectWindow(SD['sd-models'], cfg.checkpointFilter, true, str.showItems); }
+        bnVae.onClick = function () { selectWindow(SD['sd-vaes'], cfg.vaeFilter, true, str.showItems); }
         slLess.onChange = function () {
-            stLess.text =                 (cfg.autoResizeLess = mathTrunc(this.value / 32) * 32)
+            stLess.text = (cfg.autoResizeLess = mathTrunc(this.value / 32) * 32)
         }
         slAbove.onChange = function () {
-            stAbove.text =                 (cfg.autoResizeAbove = mathTrunc(this.value / 32) * 32)
+            stAbove.text = (cfg.autoResizeAbove = mathTrunc(this.value / 32) * 32)
         }
         slLess.onChanging = function () { slLess.onChange() }
         slLess.addEventListener('keydown', resizeHandler)
@@ -931,39 +936,49 @@ function dialogWindow(b, s) {
         chRecordSettings.onClick = function () { cfg.recordToAction = !this.value }
         return w
     }
-    function filterModelsWindow(s, e) {
+    function selectWindow(s, e, filterMode, title) {
         var w = new Window("dialog{orientation:'column',alignChildren:['fill', 'top'],spacing:10,margins:16}"),
             list = w.add("listbox{preferredSize:[400,300]}"),
             grBn = w.add("group{orientation:'row',alignChildren:['center', 'center'],spacing:10,margins:[0, 10, 0, 0]}"),
             ok = grBn.add('button', undefined, undefined, { name: 'ok' });
-        w.text = str.showItems
+        w.text = title
         ok.text = str.apply;
         for (var i = 0; i < s.length; i++) list.add('item', s[i])
-        for (var i = 0; i < s.length; i++) list.items[i].checked = true
-        for (var i = 0; i < e.length; i++) {
-            for (var x = 0; x < s.length; x++) {
-                var cur = s[x].toLocaleUpperCase();
-                if (e[i].toLocaleUpperCase() == cur) {
-                    list.items[x].checked = list.items[x].enabled = false
+        if (filterMode) {
+            for (var i = 0; i < s.length; i++) list.items[i].checked = true
+            for (var i = 0; i < e.length; i++) {
+                for (var x = 0; x < s.length; x++) {
+                    var cur = s[x].toLocaleUpperCase();
+                    if (e[i].toLocaleUpperCase() == cur) {
+                        list.items[x].checked = list.items[x].enabled = false
+                    }
                 }
             }
         }
         list.onDoubleClick = function () {
-            if (list.selection) {
-                var s = list.selection.index
-                if (list.selection.checked != undefined && !list.selection.text.match(/(^none$|^Automatic$)/)) {
-                    list.selection.checked = !list.selection.checked
-                    reEnableList()
-                    list.onClick()
+            if (filterMode) {
+                if (list.selection) {
+                    var s = list.selection.index
+                    if (list.selection.checked != undefined && !list.selection.text.match(/(^none$|^Automatic$)/)) {
+                        list.selection.checked = !list.selection.checked
+                        reEnableList()
+                        list.onClick()
+                    }
                 }
+            } else {
+                e.push(list.selection.text)
+                w.close()
             }
         }
         list.onClick = function () {
-            ok.enabled = reEnableList();
-            if (list.selection != null) {
-                list.selection.checked != undefined ? !list.selection.checked : false;
-                list.selection.checked != undefined ? list.selection.checked : false;
-                list.selection.enabled = true
+            ok.enabled = filterMode ? reEnableList() : list.selection;
+            if (filterMode) {
+                if (list.selection != null) {
+                    list.selection.checked != undefined ? !list.selection.checked : false;
+                    list.selection.checked != undefined ? list.selection.checked : false;
+                    list.selection.enabled = true
+                }
+
             }
         }
         function reEnableList() {
@@ -985,13 +1000,19 @@ function dialogWindow(b, s) {
             return selected;
         }
         ok.onClick = function () {
-            var len = list.items.length;
-            e.splice(0, e.length)
-            for (var i = 0; i < len; i++) {
-                if (!list.items[i].checked) e.push(s[i])
+            if (filterMode) {
+                var len = list.items.length;
+                e.splice(0, e.length)
+                for (var i = 0; i < len; i++) {
+                    if (!list.items[i].checked) e.push(s[i])
+                }
+            } else {
+                e.push(list.selection.text)
             }
             w.close();
+
         }
+        if (!filterMode) ok.enabled = false
         w.show()
     }
     function addPresetPanel(context, panel) {
@@ -1204,6 +1225,11 @@ function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
                 for (var i = 0; i < result.length; i++) if (SdCfg.extensions[result[i].name] != undefined) SdCfg.extensions[result[i].name] = result[i].enabled
             } else { throw new Error(str.errSettings + 'sdapi/v1/extensions' + str.errTimeout) }
         }
+        var result = sendMessage({ type: 'get', message: 'sdapi/v1/loras' }, true);
+        if (result) {
+            SdCfg['loras'] = [];
+            for (var i = 0; i < result.length; i++) SdCfg['loras'].push(result[i].name)
+        } else { throw new Error(str.errSettings + 'sdapi/v1/loras' + str.errTimeout) }
         return true
     }
     this.setOptions = function (checkpoint, vae, vae_path, memory) {
@@ -1941,7 +1967,8 @@ function Locale() {
     this.showItems = { ru: 'Показывать опции', en: 'Show items' }
     this.steps = 'Sampling steps'
     this.strength = 'Denoising strength'
-    this.translate = { ru: 'перевести: ', en: 'translate: ' }
+    this.translate = { ru: 'Перевести: ', en: 'Translate: ' }
+    this.lora = { ru: 'Добавить lora', en: 'Add lora' }
     this.vae = 'VAE'
     this.imageRef = { ru: 'Reference image', en: 'Reference image' }
     this.browse = { ru: 'Обзор... ', en: 'Browse...' }
