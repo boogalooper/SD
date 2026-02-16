@@ -14,7 +14,7 @@
 </javascriptresource>
 // END__HARVEST_EXCEPTION_ZSTRING
 */
-const ver = 0.44,
+const ver = 0.45,
     SD_HOST = '127.0.0.1',
     SD_PORT = 7860,
     API_HOST = '127.0.0.1',
@@ -197,13 +197,6 @@ function main(selection) {
     var hst = activeDocument.activeHistoryState,
         c = doc.getProperty('center').value;
     doc.crop(true);
-    if (cfg.current.qwenResFix && cfg.sd_model_checkpoint.match(/qwen.+edit/i)) {
-        doc.imageSize(width >= height ? 1024 : 0, height > width ? 1024 : 0, true);
-        var docRes = doc.getProperty('resolution');
-        deltaW = 1024 - doc.getProperty('width') * docRes / 72
-        deltaH = 1024 - doc.getProperty('height') * docRes / 72
-        doc.canvasSize(deltaW, deltaH);
-    }
     if (cfg.current.inpaintingFill != -1) {
         lr.selectChannel('mask');
         lr.selectAllPixels();
@@ -249,10 +242,6 @@ function main(selection) {
         }
         if (!SD.setOptions(checkpoint, vae, vae_path, memory)) throw new Error(str.errUpdating)
     }
-    if (cfg.current.qwenStepsFix && cfg.sd_model_checkpoint.match(/qwen.+edit/i)) {
-        var offset = $.getenv('offset');
-        if (offset == null) offset = cfg.current.steps;
-    }
     var payload = {
         'input': f.fsName.replace(/\\/g, '\\\\'),
         'output': p.fsName.replace(/\\/g, '\\\\'),
@@ -262,15 +251,12 @@ function main(selection) {
         'scheduler': cfg.current.scheduler,
         'cfg_scale': cfg.current.cfg_scale,
         'seed': -1,
-        'steps': cfg.current.qwenStepsFix && cfg.sd_model_checkpoint.match(/qwen.+edit/i) ? (cfg.current.steps == offset ? cfg.current.steps + 1 : cfg.current.steps) : cfg.current.steps,
-        'width': cfg.current.qwenResFix && cfg.sd_model_checkpoint.match(/qwen.+edit/i) ? 1024 : width,
-        'height': cfg.current.qwenResFix && cfg.sd_model_checkpoint.match(/qwen.+edit/i) ? 1024 : height,
+        'steps': cfg.current.steps,
+        'width': width,
+        'height': height,
         'denoising_strength': cfg.current.denoising_strength,
         'n_iter': 1,
     };
-    if (cfg.current.qwenStepsFix && cfg.sd_model_checkpoint.match(/qwen.+edit/i)) {
-        $.setenv('offset', cfg.current.steps == offset ? cfg.current.steps + 1 : cfg.current.steps)
-    }
     if (cfg.sd_model_checkpoint.match(/(flux|kontext)/i)) payload['flux'] = true;
     if (cfg.sd_model_checkpoint.match(/(kontext|qwen.+edit|klein)/i) && (SD.extensions[EXT_KONTEXT] || cfg.forge_imageStitch)) {
         if (!cfg.forge_imageStitch && cfg.sd_model_checkpoint.match(/kontext/i)) payload['kontext'] = true
@@ -297,15 +283,6 @@ function main(selection) {
         activeDocument.suspendHistory('Generate image', 'generatedImageToLayer()')
     } else throw new Error(str.errGenerating)
     function generatedImageToLayer() {
-        if (cfg.current.qwenResFix && cfg.sd_model_checkpoint.match(/qwen.+edit/i)) {
-            var len = apl.getProperty('numberOfDocuments')
-            doc.openFile(new File(result));
-            if (apl.getProperty('numberOfDocuments') > len) {
-                doc.canvasSize(-deltaW, -deltaH);
-                doc.imageSize(width, height, true);
-                doc.close(true)
-            }
-        }
         doc.place(new File(result))
         var placedBounds = doc.descToObject(lr.getProperty('bounds').value);
         var dW = (selection.bounds.right - selection.bounds.left) / (placedBounds.right - placedBounds.left);
@@ -423,7 +400,6 @@ function dialogWindow(b, s) {
         resizeScale(p);
         denoisingStrength(p)
         if ((cfg.sd_model_checkpoint.match(/kontext/i) && SD.extensions[EXT_KONTEXT]) || (cfg.sd_model_checkpoint.match(/(kontext|qwen.+edit|klein)/i) && cfg.forge_imageStitch)) imageReference(p)
-        if (SD.forgeUI && cfg.sd_model_checkpoint.match(/qwen.+edit/i)) qwenFix(p)
         return enabled;
         function checkpoint(p) {
             grCheckoint = p.add("group{orientation:'column',alignChildren:['fill', 'center'],spacing:0,margins:[0,10,0,5]}"),
@@ -545,18 +521,19 @@ function dialogWindow(b, s) {
             presets.onChange(true)
             bnTranslate.text = str.translate + '-> en';
             bnLora.text = str.lora
+            bnLora.enabled = SD['loras'].length
             etPrompt.onChange = function () { cfg.current.prompt = this.text }
             bnLora.onClick = function () {
                 var result = []
                 selectWindow(SD['loras'], result, false, str.lora)
-                if (result.length) { 
-                    etPrompt.text = '<lora:' + result[0] + ':1>\n' + etPrompt.text 
+                if (result.length) {
+                    etPrompt.text = '<lora:' + result[0] + ':1>\n' + etPrompt.text
                     etPrompt.onChange()
                 }
             }
             bnTranslate.onClick = function () {
                 if (etPrompt.text != '') {
-                    var result = SD.translate(etPrompt.text.replace('\n',''))
+                    var result = SD.translate(etPrompt.text.replace('\n', ' '))
                     if (result) {
                         etPrompt.text = result
                         etPrompt.onChange()
@@ -795,27 +772,6 @@ function dialogWindow(b, s) {
                 }
                 return null
             }
-        }
-        function qwenFix(p) {
-            var grQwenFix = p.add("group{orientation:'row',alignChildren:['left', 'center'],spacing:0,margins:0}"),
-                stQwenFix = grQwenFix.add('statictext');
-            chQwenResFix = grQwenFix.add('checkbox');
-            stQwenFix.text = str.qwenFix
-            chQwenStepsFix = grQwenFix.add('checkbox');
-            chQwenResFix.text = str.qwenResFix;
-            chQwenResFix.value = cfg.current.qwenResFix
-            chQwenStepsFix.text = str.qwenStepsFix
-            chQwenStepsFix.value = cfg.current.qwenStepsFix
-            chQwenResFix.onClick = function () {
-                if (p.slResize) {
-                    p.slResize.value = this.value ? 1 * 100 : (cfg.current.autoResize ? autoScale(b) : cfg.current.manualScale) * 100
-                    p.slResize.onChange();
-                    p.slResize.enabled = !this.value
-                }
-                cfg.current.qwenResFix = this.value
-            }
-            chQwenStepsFix.onClick = function () { cfg.current.qwenStepsFix = this.value }
-            chQwenResFix.onClick()
         }
     }
     function settingsWindow(p, cfg) {
@@ -1584,8 +1540,6 @@ function Config() {
         this.negativePreset = 'SD'
         this.imageReferences = []
         this.reference = ''
-        this.qwenResFix = false
-        this.qwenStepsFix = false
         this.autoResize = true
         this.resize = 1
         this.manualScale = 1
@@ -1973,8 +1927,5 @@ function Locale() {
     this.imageRef = { ru: 'Reference image', en: 'Reference image' }
     this.browse = { ru: 'Обзор... ', en: 'Browse...' }
     this.wxh = { ru: 'ширина и высота (px)', en: 'width and height (px)' }
-    this.qwenFix = 'Qwen fix:'
-    this.qwenResFix = 'Resolution 1024x1024'
-    this.qwenStepsFix = 'Steps shift'
     this.imageStitch = { ru: 'Использовать imageStitch (extension) для референса', en: 'Use imageStitch (extension) for reference' }
 }
