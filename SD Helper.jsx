@@ -440,17 +440,17 @@ function dialogWindow(b, s) {
                 if (!found) {
                     cfg.current = new cfg.checkpointSettings();
                     if (cfg.sd_model_checkpoint.match(/(flux|kontext|z-image)/i)) {
-                        cfg.current.scheduler = cfg.sd_model_checkpoint.match(/klein/i) ? 'LCM' : 'Simple'
-                        cfg.current.sampler_name = cfg.sd_model_checkpoint.match(/klein/i) ? 'Normal' : 'Euler'
+                        cfg.current.sampler_name = (cfg.sd_model_checkpoint.match(/klein/i) ? 'LCM' : 'Euler')
+                        cfg.current.scheduler = (cfg.sd_model_checkpoint.match(/klein/i) ? 'Normal' : 'Simple')
                         cfg.current.cfg_scale = 3.5
                         cfg.current.denoising_strength = 1
-                    } else if (cfg.sd_model_checkpoint.match(/(qwen)/i)) {
+                    } else if (cfg.sd_model_checkpoint.match(/qwen/i)) {
                         cfg.current.scheduler = 'Simple'
-                        cfg.current.sampler_name = 'Normal'
+                        cfg.current.sampler_name = 'Euler'
                         cfg.current.cfg_scale = 1
                         cfg.current.denoising_strength = 1
                     } else if (cfg.sd_model_checkpoint.match(/z.image/i)) {
-                        cfg.current.scheduler = 'Simple'
+                        cfg.current.scheduler = 'Normal'
                         cfg.current.sampler_name = 'Euler'
                         cfg.current.cfg_scale = 3
                         cfg.current.denoising_strength = 0.22
