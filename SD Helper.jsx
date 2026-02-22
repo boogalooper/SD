@@ -442,7 +442,7 @@ function dialogWindow(b, s) {
                     if (cfg.sd_model_checkpoint.match(/(flux|kontext|z-image)/i)) {
                         cfg.current.sampler_name = (cfg.sd_model_checkpoint.match(/klein/i) ? 'LCM' : 'Euler')
                         cfg.current.scheduler = (cfg.sd_model_checkpoint.match(/klein/i) ? 'Normal' : 'Simple')
-                        cfg.current.cfg_scale = 3.5
+                        cfg.current.cfg_scale = 3
                         cfg.current.denoising_strength = 1
                     } else if (cfg.sd_model_checkpoint.match(/qwen/i)) {
                         cfg.current.scheduler = 'Simple'
@@ -516,11 +516,11 @@ function dialogWindow(b, s) {
             var presets = addPresetPanel('positivePreset', grPrompt);
             var etPrompt = grPrompt.add('edittext{preferredSize:[285,80],properties:{multiline: true, scrollable: true}}'),
                 grButtons = grPrompt.add("group{orientation:'row',alignChildren:['fill', 'top'],spacing:0,margins:0}"),
-                bnTranslate = grButtons.add('button{preferredSize:[140,-1]}');
-            bnLora = grButtons.add('button{preferredSize:[140,-1]}');
+                bnTranslate = grButtons.add('button{preferredSize:[230,-1]}');
+            bnLora = grButtons.add('button{preferredSize:[55,-1]}');
             presets.onChange(true)
             bnTranslate.text = str.translate + '-> en';
-            bnLora.text = str.lora
+            bnLora.text = '+ ' + str.lora
             bnLora.enabled = SD['loras'].length
             etPrompt.onChange = function () { cfg.current.prompt = this.text }
             bnLora.onClick = function () {
@@ -819,7 +819,6 @@ function dialogWindow(b, s) {
             slMemory.value = stMemoryValue.text = cfg.forge_inference_memory
             chStitch.value = cfg.forge_imageStitch
             slMemory.addEventListener('keydown', memoryHandler)
-            slMemory.addEventListener('keydown', memoryHandler)
             slMemory.onChange = function () { stMemoryValue.text = cfg.forge_inference_memory = mathTrunc(this.value / 32) * 32 }
             slMemory.onChanging = function () { slMemory.onChange() }
             chMemory.onClick = function () { cfg.control_memory = grMemory.enabled = this.value }
@@ -839,11 +838,10 @@ function dialogWindow(b, s) {
             ok = grBn.add('button', undefined, undefined, { name: 'ok' });
         bnChk.text = str.checkpoint
         bnVae.text = str.vae + (cfg.sd_model_checkpoint.match(/(qwen|flux|kontext|z.image)/i) ? '/Text encoder' : '')
-        s
         chFlatten.text = str.flatten
         chRasterize.text = str.rasterize
         chRecordSettings.text = str.actionMode
-        chSelectBrush.text = str.selctBrush
+        chSelectBrush.text = str.selectBrush
         ok.text = str.apply
         pnBrush.text = str.brush
         pnOutput.text = str.output
@@ -996,18 +994,18 @@ function dialogWindow(b, s) {
             var cur = panel.children[2].text
             nm = prompt(str.presetPromt, dlPreset.selection.text + str.presetCopy, str.presetNew);
             if (nm != null && nm != '') {
-                if (cfg.getPreset(context, nm) == '' && nm != str.presetDefailt) {
+                if (cfg.getPreset(context, nm) == '' && nm != str.presetDefault) {
                     cfg.putPreset(context, nm, cur, 'add')
                     loadPresets()
                     dlPreset.selection = dlPreset.find(nm)
                 } else {
-                    if (nm != str.presetDefailt) {
+                    if (nm != str.presetDefault) {
                         if (confirm(localize(str.errPreset, nm), false, str.presetNew)) {
                             cfg.putPreset(context, nm, cur, 'save')
                             dlPreset.selection = dlPreset.find(nm)
                         }
                     } else {
-                        alert(str.errDefalutPreset, strErr, 1)
+                        alert(str.errDefaultPreset, strErr, 1)
                     }
                 }
             }
@@ -1028,7 +1026,7 @@ function dialogWindow(b, s) {
             var len = dlPreset.items.length
             for (var i = 0; i < len; i++) { dlPreset.remove(dlPreset.items[0]) }
             var items = cfg.getPresetList(context)
-            dlPreset.add('item', str.presetDefailt)
+            dlPreset.add('item', str.presetDefault)
             for (var i = 0; i < items.length; i++) { dlPreset.add('item', items[i].key) }
         }
         return dlPreset
@@ -1431,6 +1429,7 @@ function AM(target, order) {
         executeAction(s2t('placeEvent'), d, DialogModes.NO);
     }
     this.rasterize = function () {
+        (r = new AR).putEnumerated(s2t('layer'), s2t('ordinal'), s2t('targetEnum'));
         (d = new AD).putReference(s2t('target'), r);
         executeAction(s2t('rasterizePlaced'), d, DialogModes.NO);
     }
@@ -1614,7 +1613,7 @@ function Config() {
                     case 'number': d.putDouble(k, v); break;
                     case 'object':
                         if (v instanceof Array) {
-                            d.putList(k, arrayToList(v, new ActionList))
+                            d.putList(k, arrayToList(v, new ActionList()))
                         } else {
                             d.putObject(k, s2t('object'), objectToDescriptor(v));
                         }
@@ -1869,17 +1868,17 @@ function Statistics() {
 }
 function Locale() {
     this.actionMode = { ru: 'Не записывать параметры генерации в экшен', en: 'Do not record generation settings to action' }
-    this.advanced = { ru: 'Расширенные нестройки', en: 'Advanced settings' }
+    this.advanced = { ru: 'Расширенные настройки', en: 'Advanced settings' }
     this.apply = { ru: 'Применить настройки', en: 'Apply settings' }
     this.autoResize = { ru: 'Авто масштаб', en: 'Auto resize' }
-    this.autoResizeOptions = { ru: 'Параметры авто масштаба', en: 'Auto resize oprions' }
+    this.autoResizeOptions = { ru: 'Параметры авто масштаба', en: 'Auto resize options' }
     this.brush = { ru: 'Настройки кисти', en: 'Brush settings' }
     this.cfgScale = 'CFG Scale'
     this.checkpoint = 'Checkpoint'
     this.distilledCfgScale = 'Distilled CFG Scale'
     this.errAnswer = { ru: 'не отвечает!', en: 'not answering!' }
     this.errConnection = { ru: 'Невозможно установить соединение c ', en: 'Impossible to establish a connection with ' }
-    this.errDefalutPreset = { ru: 'Используйте другое имя при создании пресета!', en: 'Use a different name when creating a preset!' }
+    this.errDefaultPreset = { ru: 'Используйте другое имя при создании пресета!', en: 'Use a different name when creating a preset!' }
     this.errExists = { ru: ' пуст!\nУбедитесь что они добавлены в папку Stable Diffusion', en: ' is empty!\nMake sure that it exists in the Stable Diffusion folder' }
     this.errGenerating = { ru: 'Произошла ошибка в процессе генерации изображения!', en: 'An error occurred in the process of generating the image!' }
     this.errList = { ru: 'Список ', en: 'List ' }
@@ -1901,7 +1900,7 @@ function Locale() {
     this.output = { ru: 'Параметры изображения', en: 'Image settings' }
     this.presetAdd = { ru: 'Добавить', en: 'Add new' }
     this.presetCopy = { ru: ' копия', en: ' copy' }
-    this.presetDefailt = { ru: 'по-умолчанию', en: 'default' }
+    this.presetDefault = { ru: 'по-умолчанию', en: 'default' }
     this.presetDelete = { ru: 'Удалить', en: 'Delete' }
     this.presetNew = { ru: 'Сохранение пресета', en: 'Saving a preset' }
     this.presetPromt = { ru: 'Укажите имя пресета\nБудут сохранены настройки имени подкаталога и файла.', en: 'Specify the name of the preset\nSubdirectory and file name settings will be saved.' }
@@ -1913,7 +1912,7 @@ function Locale() {
     this.resize = 'Resize'
     this.sampling = 'Sampling method'
     this.schedule = 'Schedule type'
-    this.selctBrush = { ru: 'Активировать кисть после генерации', en: 'Select brush after processing' }
+    this.selectBrush = { ru: 'Активировать кисть после генерации', en: 'Select brush after processing' }
     this.selection = { ru: 'Выделение: ', en: 'Selection: ' }
     this.setMatrixMemory = { ru: 'Установить размер памяти для вычисления матриц:', en: 'Set memory size for matrix computation:' }
     this.setMemory = 'Inference memory (Mb):'
@@ -1922,7 +1921,7 @@ function Locale() {
     this.steps = 'Sampling steps'
     this.strength = 'Denoising strength'
     this.translate = { ru: 'Перевести: ', en: 'Translate: ' }
-    this.lora = { ru: 'Добавить lora', en: 'Add lora' }
+    this.lora = 'LoRA'
     this.vae = 'VAE'
     this.imageRef = { ru: 'Reference image', en: 'Reference image' }
     this.browse = { ru: 'Обзор... ', en: 'Browse...' }
