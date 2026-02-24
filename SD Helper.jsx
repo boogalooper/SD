@@ -14,7 +14,7 @@
 </javascriptresource>
 // END__HARVEST_EXCEPTION_ZSTRING
 */
-const ver = 0.45,
+const ver = 0.46,
     SD_HOST = '127.0.0.1',
     SD_PORT = 7860,
     API_HOST = '127.0.0.1',
@@ -23,8 +23,8 @@ const ver = 0.45,
     API_FILE = 'sd-webui-api v2.pyw',
     LAYER_NAME = 'SD generated image',
     SD_GET_OPTIONS_DELAY = 3000, // максимальное время ожидания ответа Stable Diffusion при запросе текущих параметров (при превышении скрипт завершит работу)
-    SD_RELOAD_CHECKPOINT_DELAY = 12000, // максимальное время ожидания загрузки checkpoint или vae (при превышении скрипт завершит работу)
-    SD_GENERATION_DELAY = 160000, // максимальное время ожидания генерации изображения (при превышении скрипт завершит работу)
+    SD_RELOAD_CHECKPOINT_DELAY = 100000, // максимальное время ожидания загрузки checkpoint или vae (при превышении скрипт завершит работу)
+    SD_GENERATION_DELAY = 120000, // максимальное время ожидания генерации изображения (при превышении скрипт завершит работу)
     EXT_KONTEXT = 'forge2_flux_kontext',
     UUID = '338cc304-fb6f-4b1f-8ad4-13bbd65f117c',
     TILE_SIZE = 16;
@@ -54,7 +54,11 @@ try {
 } catch (e) {
     sts.finish(false)
     activeDocument.activeHistoryState = initialState;
-    alert(e, undefined, true)
+    if (e.message == str.errCancelling.toString()) {
+        SD.interrupt()
+    } else {
+        alert(e, undefined, true)
+    }
     $.setenv('dialogMode', true)
     isCancelled = true;
 }
@@ -278,12 +282,24 @@ function main(selection) {
     }
     apl.waitForRedraw()
     sts.init([cfg.sd_model_checkpoint]);
-    var result = SD.sendPayload(payload);
-    if (result) {
+
+    var result = {}, f;
+    app.doProgress('Progress', "mainProgress(result);");
+
+    function mainProgress(result) {
+        if (!app.doProgressSegmentTask(30, 0, 100, "stageOne(result);")) { return; }
+        if (result instanceof Object && result.message == 'init') { if (!app.doProgressSegmentTask(70, 30, 100, "stageTwo(result);")) { return; } }
+        f = new File(result.message)
+    }
+    function stageOne(result) { return SD.initPayload(payload, result) }
+    function stageTwo(result) { return SD.waitForPayload(result); }
+
+    if (f && f.exists) {
         activeDocument.suspendHistory('Generate image', 'generatedImageToLayer()')
     } else throw new Error(str.errGenerating)
+
     function generatedImageToLayer() {
-        doc.place(new File(result))
+        doc.place(f)
         var placedBounds = doc.descToObject(lr.getProperty('bounds').value);
         var dW = (selection.bounds.right - selection.bounds.left) / (placedBounds.right - placedBounds.left);
         var dH = (selection.bounds.bottom - selection.bounds.top) / (placedBounds.bottom - placedBounds.top)
@@ -300,18 +316,19 @@ function main(selection) {
             doc.selectBrush();
             doc.setBrushOpacity(cfg.brushOpacity)
         }
-        (new File(result)).remove();
+        f.remove();
+
     }
 }
 function findOption(s, o, def) {
-    for (a in o) if (o[a] == s) return s;
+    for (var a in o) if (o[a] == s) return s;
     return def;
 }
 function checkEncoders(encoders, loaded, modules) {
     if (!SD.forgeUI) return null
     var filteredEncoders = [],
         fileModules = modules.slice();
-    for (a in fileModules) fileModules[a] = new File(fileModules[a])
+    for (var a in fileModules) fileModules[a] = new File(fileModules[a])
     for (var i = 0; i < encoders.length; i++) {
         for (var x = 0; x < fileModules.length; x++) {
             if (encoders[i] == decodeURI(fileModules[x].name)) {
@@ -1116,13 +1133,14 @@ function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
     SdCfg.extensions = {};
     SdCfg.extensions[EXT_KONTEXT] = false;
     this.initialize = function () {
-        if (!checkConnecton(sdHost, sdPort)) throw new Error(str.errConnection + sdHost + ':' + sdPort + '\nStable Diffusion ' + str.errAnswer);
+        if (!checkConnection(sdHost, sdPort)) throw new Error(str.errConnection + sdHost + ':' + sdPort + '\nStable Diffusion ' + str.errAnswer);
         if (!(new File(Folder.temp + "/sd_helper.lock").exists)) {
+            if (!apiFile.exists) { apiFile = new File(apiFile.fsName.substring(0, apiFile.fsName.length - 1)); }
             if (!apiFile.exists) throw new Error(str.module + apiFile.fsName + str.notFound)
             apiFile.execute();
             var result = sendMessage({ type: 'handshake', message: { sdHost: sdHost, sdPort: sdPort } }, true);
             if (!result) throw new Error(str.errConnection + apiHost + ':' + portSend + '\n' + str.module + str.errAnswer)
-        } else if (!checkConnecton(apiHost, portSend)) {
+        } else if (!checkConnection(apiHost, portSend)) {
             apiFile.execute();
             var result = sendMessage({ type: 'handshake', message: { sdHost: sdHost, sdPort: sdPort } }, true);
             if (!result) throw new Error(str.errConnection + apiHost + ':' + portSend + '\n' + str.module + str.errAnswer)
@@ -1160,7 +1178,7 @@ function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
             for (var i = 0; i < result.length; i++) vaes.push(result[i].model_name)
             vaes.sort();
             SdCfg['sd-vaes'] = [].concat(defaultVaes, vaes)
-        } else { throw new Error(str.errSettings + + cfg.vae + str.errTimeout) }
+        } else { throw new Error(str.errSettings + cfg.vae + str.errTimeout) }
         var result = sendMessage({ type: 'get', message: 'sdapi/v1/schedulers' }, true);
         if (result) {
             SdCfg['schedulers'] = []
@@ -1186,6 +1204,7 @@ function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
         } else { throw new Error(str.errSettings + 'sdapi/v1/loras' + str.errTimeout) }
         return true
     }
+
     this.setOptions = function (checkpoint, vae, vae_path, memory) {
         var message = {}
         message['sd_model_checkpoint'] = checkpoint ? checkpoint.replace(/\\/g, '\\\\') : null
@@ -1197,70 +1216,79 @@ function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
         if (sendMessage({ type: 'update', message: message }, true, SD_RELOAD_CHECKPOINT_DELAY)) return true
         return false;
     }
-    this.sendPayload = function (payload) {
-        var result = sendMessage({ type: 'payload', message: payload }, true, SD_GENERATION_DELAY, cfg.sd_model_checkpoint.replace(/\.[^\.]+$/, ''), str.progressGenerate, dl.getDelay(cfg.sd_model_checkpoint))
-        if (result) return result['message']
-        return null;
+    this.initPayload = function (payload, result) {
+        var answer = sendMessage({ type: 'payload', message: payload }, true, SD_RELOAD_CHECKPOINT_DELAY, cfg.sd_model_checkpoint.replace(/\.[^\.]+$/, ''), SD_RELOAD_CHECKPOINT_DELAY)
+        if (answer instanceof Object) {
+            if (answer['type'] == 'answer') {
+                result.message = answer['message']
+                return true
+            }
+        } else if (answer == false) {
+            throw new Error(str.errCancelling)
+        } else { throw new Error(str.errTimeout) }
+    }
+    this.waitForPayload = function (result) {
+        var answer = sendMessage({}, true, SD_GENERATION_DELAY, str.progressGenerate, dl.getDelay(cfg.sd_model_checkpoint), true)
+        if (answer instanceof Object) {
+            if (answer['type'] == 'answer') {
+                result.message = answer['message']
+                return true
+            }
+        } else if (answer == false) {
+            throw new Error(str.errCancelling)
+        } else { throw new Error(str.errTimeout) }
     }
     this.translate = function (s) {
         var result = sendMessage({ type: 'translate', message: s }, true, SD_RELOAD_CHECKPOINT_DELAY)
         if (result) return result['message']
         return null;
     }
-    function checkConnecton(host, port) {
-        var socket = new Socket;
-        answer = socket.open(host + ':' + port);
+    this.interrupt = function () {
+        sendMessage({ type: 'interrupt', message: '' }, false)
+    }
+    function checkConnection(host, port) {
+        var socket = new Socket,
+            answer = socket.open(host + ':' + port);
         socket.close()
         return answer
     }
-    function sendMessage(o, getAnswer, delay, title, message, max) {
+    function sendMessage(o, getAnswer, delay, title, max, writeStatistics) {
         var tcp = new Socket,
             delay = delay ? delay : SD_GET_OPTIONS_DELAY;
         tcp.open(apiHost + ':' + portSend, 'UTF-8')
         tcp.writeln(objectToJSON(o))
         tcp.close()
         if (getAnswer) {
-            if (title) {
-                var w = new Window('palette', title),
-                    bar = w.add('progressbar', undefined, 0, max),
-                    stProgress = w.add('statictext', undefined, message);
-                stProgress.preferredSize = [350, 20];
-                stProgress.alignment = 'left'
-                bar.preferredSize = [350, 20];
-                bar.value = 0;
-                w.show();
-            }
+            if (title) { var slice = 1 / max * 4; }
             var t1 = (new Date).getTime(),
                 t2 = 0,
-                t3 = t1;
-            var tcp = new Socket;
+                t3 = t1,
+                tcp = new Socket;
             if (tcp.listen(portListen, 'UTF-8')) {
                 for (; ;) {
                     t2 = (new Date).getTime();
-                    if (t2 - t1 > delay) {
-                        if (title) w.close();
-                        return null;
-                    }
-                    if (title && t2 - t3 > 100) {
+                    if (t2 - t1 > delay) { return null; }
+                    if (title && t2 - t3 >= 1) {
                         t3 = t2
-                        stProgress.text = message + ' ' + ((t2 - t1) / 1000) + ' s.'
-                        if (bar.value >= max) bar.value = 0;
-                        bar.value = bar.value + 100;
-                        w.update();
+                        var text = writeStatistics ? title + '\t ' + Math.floor((t2 - t1) / 100) / 10 + ' s. ' : title;
+                        if (!app.doProgressTask(slice, "workChunk('" + text + "');")) { return false; }
                     }
                     var answer = tcp.poll();
                     if (answer != null) {
                         var a = eval('(' + answer.readln() + ')');
                         answer.close();
-                        if (title) {
+                        if (writeStatistics) {
                             dl.saveDelay(cfg.sd_model_checkpoint, t2 - t1)
-                            w.close()
                         }
                         return a;
                     }
                 }
             }
         }
+    }
+    function workChunk(text) {
+        app.changeProgressText(text);
+        $.sleep(0);
     }
     function objectToJSON(obj) {
         if (obj === null) {
@@ -1710,7 +1738,7 @@ function Delay() {
         if (d != undefined) descriptorToObject(settingsObj, d);
         if (settingsObj[checkpoint]) {
             var sum = 0;
-            for (a in settingsObj[checkpoint]) sum += settingsObj[checkpoint][a]
+            for (var a in settingsObj[checkpoint]) sum += settingsObj[checkpoint][a]
             sum = Math.round(sum / settingsObj[checkpoint].length);
             return sum < 1000 ? 1000 : sum
         } else {
@@ -1761,9 +1789,7 @@ function Statistics() {
     this.generations = {};
     this.faceRestore = {};
     var current = [];
-    this.init = function (s) {
-        current = s
-    }
+    this.init = function (s) { current = s }
     this.finish = function (result) {
         for (var a in current) {
             if (!settingsObj.generations[current[a]]) settingsObj.generations[current[a]] = { success: 0, error: 0 };
@@ -1771,21 +1797,21 @@ function Statistics() {
         }
     }
     this.showStatistics = function () {
-        var result = [], s = 0, e = 0, tmp = '';
-        for (a in settingsObj.generations) {
-            s += settingsObj.generations[a].success
-            e += settingsObj.generations[a].error
-            result.push(settingsObj.generations[a].toSource() + ' ' + a.replace(/\..+$/, ''))
+        var t = '';
+        if (settingsObj.generations) t = summarize(settingsObj.generations, 'Image generation.')
+        if (t != '') t += '\n\n';
+        if (settingsObj.faceRestore) t += summarize(settingsObj.faceRestore, 'Face restore.')
+        if (t != '') alert(t, 'Generation statistics')
+    }
+    function summarize(o, t) {
+        var s = 0, e = 0, r = [];
+        for (var a in o) {
+            s += o[a].success
+            e += o[a].error
+            r.push(o[a].toSource() + ' ' + a.replace(/\..+$/, ''))
         }
-        if (result.length) tmp = 'Generation: success: ' + s + ' errors: ' + e + '\n' + result.join('\n') + '\n\n';
-        var result = [], s = 0, e = 0;
-        for (a in settingsObj.faceRestore) {
-            s += settingsObj.faceRestore[a].success
-            e += settingsObj.faceRestore[a].error
-            result.push(settingsObj.faceRestore[a].toSource() + ' ' + a.replace(/\..+$/, ''))
-        }
-        if (result.length) tmp += 'Face resore: success: ' + s + ' errors: ' + e + '\n' + result.join('\n');
-        if (tmp != '') alert(tmp, 'Generation statistics')
+        if (r.length) t += ' success:' + s + ' errors: ' + e + '\n' + r.join('\n');
+        return t
     }
     this.getSettings = function () {
         try { var d = getFromFile(); } catch (e) { }
@@ -1851,7 +1877,7 @@ function Statistics() {
                 f.close();
                 d.fromStream(s);
             }
-        } catch (e) { throw (e, '', 1) }
+        } catch (e) { throw (e) }
         return d
     }
     function saveToFile(d) {
@@ -1862,7 +1888,7 @@ function Statistics() {
             f.write(d.toStream())
             f.close()
             return true
-        } catch (e) { throw (e, '', 1) }
+        } catch (e) { throw (e) }
         return false
     }
 }
@@ -1888,6 +1914,7 @@ function Locale() {
     this.errTranslate = { ru: 'Модуль перевода недоступен!', en: 'The translation module is not available!' }
     this.errUpdating = { ru: 'Переключение на выбранную модель завершилось с ошибкой!\nПревышено время ожидания ответа!', en: 'Switching to the selected checkpoint ended with the error!\nExceeded the response time!' }
     this.errMode = { ru: 'Stable Diffusion работает только с RGB документами!', en: 'Stable Diffusion works only with RGB documents!' }
+    this.errCancelling = { ru: 'Генерация отменена!', en: 'User cancelled generation' }
     this.fill = 'Inpainting fill mode'
     this.flatten = { ru: 'Склеивать слои перед генерацией', en: 'Flatten layers before generation' }
     this.generate = { ru: 'Генерация', en: 'Generate' }
@@ -1906,7 +1933,7 @@ function Locale() {
     this.presetPromt = { ru: 'Укажите имя пресета\nБудут сохранены настройки имени подкаталога и файла.', en: 'Specify the name of the preset\nSubdirectory and file name settings will be saved.' }
     this.presetRefresh = { ru: 'Обновить', en: 'Refresh' }
     this.presetSave = { ru: 'Сохранить', en: 'Save' }
-    this.progressGenerate = { ru: 'Генерация изображения...', en: 'Image generation...' }
+    this.progressGenerate = { ru: 'Генерация изображения... ', en: 'Image generation... ' }
     this.prompt = 'Prompt'
     this.rasterize = { ru: 'Растеризовать сгенерированное изображение', en: 'Rasterize generated image' }
     this.resize = 'Resize'

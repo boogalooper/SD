@@ -283,7 +283,7 @@ function dialogWindow(bounds) {
     slider.onChanging = function () { slider.onChange() }
 
     slider.addEventListener('keydown', commonHandler)
-    slider.addEventListener('keyup', altHandler)
+    slider.addEventListener('keyup', commonHandler)
 
     function commonHandler(evt) {
         if (evt.shiftKey) {
