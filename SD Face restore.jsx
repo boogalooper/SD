@@ -22,6 +22,7 @@ const SD_HOST = '127.0.0.1',
     LAYER_NAME = 'SD face restore',
     UUID = 'e29b10c8-a069-4e9c-bc6f-426c5ae0f90e',
     GUID = '7e989ac3-c5ec-4ab8-84eb-eaf051877fdf',
+    SD_INIT_DELAY = 5000,
     SD_GET_OPTIONS_DELAY = 3000, // максимальное время ожидания ответа Stable Diffusion при запросе текущих параметров
     SD_GENERATION_DELAY = 80000; // максимальное время ожидания генерации изображения
 var time = (new Date).getTime(),
@@ -36,7 +37,7 @@ var time = (new Date).getTime(),
     doc = new AM('document'),
     lr = new AM('layer'),
     ch = new AM('channel'),
-    ver = 0.155;
+    ver = 0.156;
 isCancelled = false;
 $.localize = true
 sts.getSettings();
@@ -359,16 +360,16 @@ function checkSelection(result) {
 function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
     var SdCfg = this;
     this.initialize = function (fastMode) {
-        if (!checkConnecton(sdHost, sdPort)) throw new Error(str.errConnection + sdHost + ':' + sdPort + '\nStable Diffusion ' + str.errAnswer)
-        if (!(new File(Folder.temp + "/sd_helper.lock").exists)) {
+        var lockFile = new File(Folder.temp + "/sd_helper.lock");
+        if (!checkConnection(sdHost, sdPort)) throw new Error(str.errConnection + sdHost + ':' + sdPort + '\nStable Diffusion ' + str.errAnswer);
+        if (!lockFile.exists || !checkConnection(apiHost, portSend)) {
+            if (lockFile.exists) lockFile.remove();
+            if (!apiFile.exists) { apiFile = new File(apiFile.fsName.substring(0, apiFile.fsName.length - 1)); }
             if (!apiFile.exists) throw new Error(str.module + apiFile.fsName + str.notFound)
             apiFile.execute();
-            var result = sendMessage({ type: 'handshake', message: { sdHost: sdHost, sdPort: sdPort } }, true);
-            if (!result) throw new Error(str.errConnection + apiHost + ':' + portSend + '\n' + str.module + str.errAnswer)
-        } else if (!checkConnecton(apiHost, portSend)) {
-            apiFile.execute();
-            var result = sendMessage({ type: 'handshake', message: { sdHost: sdHost, sdPort: sdPort } }, true);
-            if (!result) throw new Error(str.errConnection + apiHost + ':' + portSend + '\n' + str.module + str.errAnswer)
+            var result = sendMessage({}, true, SD_INIT_DELAY);
+            if (result) { sendMessage({ type: 'handshake', message: { sdHost: sdHost, sdPort: sdPort } }, true); }
+            else { throw new Error(str.errConnection + apiHost + ':' + portSend + '\n' + str.module + str.errAnswer) }
         }
         return true
     }
@@ -377,7 +378,7 @@ function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
         if (result) return result['message']
         return null;
     }
-    function checkConnecton(host, port) {
+    function checkConnection(host, port) {
         var socket = new Socket,
             answer = socket.open(host + ':' + port);
         socket.close()
