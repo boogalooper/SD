@@ -210,7 +210,7 @@ def mask_large_data(obj, max_len=100):
         return obj
 
 
-def call_generate_api(api_endpoint, payload, out_dir, stop_event):
+def call_generate_api(api_endpoint, payload, out_dir, stop_event, skipInit):
     global SD_HOST, SD_PORT
     init_sent = False
 
@@ -234,7 +234,7 @@ def call_generate_api(api_endpoint, payload, out_dir, stop_event):
                     data = json.loads(resp.read().decode())
                     step = data["state"].get("sampling_step", 0)
 
-                    if step > 0 and not init_sent:
+                    if not skipInit and step > 0 and not init_sent:
                         init_sent = True
                         send_data_to_jsx({"type": "answer", "message": "init"})
                         break
@@ -261,13 +261,13 @@ def call_generate_api(api_endpoint, payload, out_dir, stop_event):
             print("[INFO] Генерация была прервана")
             return
 
-        if "images" in result and result["images"]: 
+        if "images" in result and result["images"]:
             last_path = None
             for i, image in enumerate(result["images"]):
                 save_path = os.path.join(out_dir, f"{timestamp()}-{i}.jpg")
                 decode_and_save_base64(image, save_path)
                 last_path = save_path
-            if not init_sent:
+            if not skipInit and not init_sent:
                 init_sent = True
                 send_data_to_jsx({"type": "answer", "message": "init"})
             send_data_to_jsx({"type": "answer", "message": last_path})
@@ -275,7 +275,7 @@ def call_generate_api(api_endpoint, payload, out_dir, stop_event):
         elif "image" in result and result["image"]:
             save_path = os.path.join(out_dir, f"{timestamp()}.jpg")
             decode_and_save_base64(result["image"], save_path)
-            if not init_sent:
+            if not skipInit and not init_sent:
                 init_sent = True
                 send_data_to_jsx({"type": "answer", "message": "init"})
             send_data_to_jsx({"type": "answer", "message": save_path})
@@ -305,28 +305,21 @@ def generation_worker():
 
     while not worker_stop_event.is_set():
         try:
-            entrypoint, payload, out_dir = generation_queue.get(timeout=1)
+            entrypoint, payload, out_dir, skipInit = generation_queue.get(timeout=1)
         except queue.Empty:
             continue
 
         print(f"[WORKER] Выполняется задача: {entrypoint}")
 
         current_stop_event = threading.Event()
-        call_generate_api(entrypoint, payload, out_dir, current_stop_event)
+        call_generate_api(entrypoint, payload, out_dir, current_stop_event, skipInit)
 
         generation_queue.task_done()
         print("[WORKER] Задача завершена")
 
 
-def enqueue_generation(entrypoint, payload, out_dir):
-    # global current_stop_event
-
-    # if current_stop_event and not current_stop_event.is_set():
-    # print("[QUEUE] Прерывание текущей генерации")
-    # current_stop_event.set()
-    # safe_interrupt()
-
-    generation_queue.put((entrypoint, payload, out_dir))
+def enqueue_generation(entrypoint, payload, out_dir, skipInit):
+    generation_queue.put((entrypoint, payload, out_dir, skipInit))
     print("[QUEUE] Задача добавлена в очередь")
 
 
@@ -446,7 +439,7 @@ def handle_client(client_socket):
                     "ImageStitch Integrated": {"args": [True, [reference]]}
                 }
 
-            enqueue_generation(entrypoint, payload, data["output"])
+            enqueue_generation(entrypoint, payload, data["output"], False)
 
         # FACE RESTORE
         elif msg_type == "faceRestore":
@@ -462,7 +455,9 @@ def handle_client(client_socket):
                 payload["codeformer_visibility"] = data["codeformer_visibility"]
                 payload["codeformer_weight"] = data["codeformer_weight"]
 
-            enqueue_generation("sdapi/v1/extra-single-image", payload, data["output"])
+            enqueue_generation(
+                "sdapi/v1/extra-single-image", payload, data["output"], True
+            )
 
         # TRANSLATE
         elif msg_type == "translate":

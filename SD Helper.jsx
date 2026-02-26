@@ -1258,7 +1258,7 @@ function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
                 return null;
             }
             if (title) {
-                slice = 1 / max * 4;
+                slice = 1 / max * 40;
             }
             t1 = (new Date).getTime();
             t3 = t1;

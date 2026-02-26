@@ -176,8 +176,7 @@ function main(selection) {
     if (cfg.gfpgan) tmp.push('GFPGAN');
     if (cfg.codeFormer) tmp.push('CodeFormer');
     sts.init(tmp);
-    var init = SD.initPayload(payload);
-    var result = SD.waitForPayload({});
+    var result = SD.initPayload(payload);
     if (result) {
         activeDocument.suspendHistory('Generate image', 'generatedImageToLayer()')
     } else throw new Error(str.errGenerating)
@@ -369,12 +368,7 @@ function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
         return true
     }
     this.initPayload = function (payload) {
-        var result = sendMessage({ type: 'faceRestore', message: payload }, true, SD_GENERATION_DELAY)
-        if (result) return result['message']
-        return null;
-    }
-    this.waitForPayload = function (payload) {
-        var result = sendMessage({}, true, SD_GENERATION_DELAY, 'Progress', str.progressGenerate, dl.getDelay())
+        var result = sendMessage({ type: 'faceRestore', message: payload }, true, SD_GENERATION_DELAY, 'Progress', str.progressGenerate, dl.getDelay())
         if (result) return result['message']
         return null;
     }
