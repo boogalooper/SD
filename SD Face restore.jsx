@@ -361,9 +361,9 @@ function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
     var SdCfg = this;
     this.initialize = function (fastMode) {
         var lockFile = new File(Folder.temp + "/sd_helper.lock");
-        if (!checkConnection(sdHost, sdPort)) throw new Error(str.errConnection + sdHost + ':' + sdPort + '\nStable Diffusion ' + str.errAnswer);
         if (!lockFile.exists || !checkConnection(apiHost, portSend)) {
             if (lockFile.exists) lockFile.remove();
+            if (!checkConnection(sdHost, sdPort)) throw new Error(str.errConnection + sdHost + ':' + sdPort + '\nStable Diffusion ' + str.errAnswer);
             if (!apiFile.exists) { apiFile = new File(apiFile.fsName.substring(0, apiFile.fsName.length - 1)); }
             if (!apiFile.exists) throw new Error(str.module + apiFile.fsName + str.notFound)
             apiFile.execute();
