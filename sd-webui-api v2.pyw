@@ -297,12 +297,12 @@ def generation_worker():
 
 
 def enqueue_generation(entrypoint, payload, out_dir):
-    global current_stop_event
+    #global current_stop_event
 
-    if current_stop_event and not current_stop_event.is_set():
-        print("[QUEUE] Прерывание текущей генерации")
-        current_stop_event.set()
-        safe_interrupt()
+    #if current_stop_event and not current_stop_event.is_set():
+        #print("[QUEUE] Прерывание текущей генерации")
+        #current_stop_event.set()
+        #safe_interrupt()
 
     generation_queue.put((entrypoint, payload, out_dir))
     print("[QUEUE] Задача добавлена в очередь")

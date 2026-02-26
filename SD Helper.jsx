@@ -23,7 +23,7 @@ const ver = 0.461,
     API_FILE = 'sd-webui-api v2.pyw',
     LAYER_NAME = 'SD generated image',
     SD_INIT_DELAY = 5000,
-    SD_GET_OPTIONS_DELAY = 3000, // максимальное время ожидания ответа Stable Diffusion при запросе текущих параметров (при превышении скрипт завершит работу)
+    SD_GET_OPTIONS_DELAY = 3500, // максимальное время ожидания ответа Stable Diffusion при запросе текущих параметров (при превышении скрипт завершит работу)
     SD_RELOAD_CHECKPOINT_DELAY = 100000, // максимальное время ожидания загрузки checkpoint или vae (при превышении скрипт завершит работу)
     SD_GENERATION_DELAY = 120000, // максимальное время ожидания генерации изображения (при превышении скрипт завершит работу)
     EXT_KONTEXT = 'forge2_flux_kontext',
@@ -1137,13 +1137,7 @@ function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
         var lockFile = new File(Folder.temp + "/sd_helper.lock");
         if (!lockFile.exists || !checkConnection(apiHost, portSend)) {
             if (lockFile.exists) lockFile.remove();
-            if (!checkConnection(sdHost, sdPort)) throw new Error(str.errConnection + sdHost + ':' + sdPort + '\nStable Diffusion ' + str.errAnswer);
-            if (!apiFile.exists) { apiFile = new File(apiFile.fsName.substring(0, apiFile.fsName.length - 1)); }
-            if (!apiFile.exists) throw new Error(str.module + apiFile.fsName + str.notFound)
-            apiFile.execute();
-            var result = sendMessage({}, true, SD_INIT_DELAY);
-            if (result) { sendMessage({ type: 'handshake', message: { sdHost: sdHost, sdPort: sdPort } }, true); }
-            else { throw new Error(str.errConnection + apiHost + ':' + portSend + '\n' + str.module + str.errAnswer) }
+            app.doForcedProgress('Starting python server... ', 'startServer()')
         }
         var result = sendMessage({ type: 'get', message: 'sdapi/v1/options' }, true);
         if (result) {
@@ -1205,6 +1199,15 @@ function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
         return true
     }
 
+    function startServer() {
+        if (!checkConnection(sdHost, sdPort)) throw new Error(str.errConnection + sdHost + ':' + sdPort + '\nStable Diffusion ' + str.errAnswer);
+        if (!apiFile.exists) { apiFile = new File(apiFile.fsName.substring(0, apiFile.fsName.length - 1)); }
+        if (!apiFile.exists) throw new Error(str.module + apiFile.fsName + str.notFound)
+        apiFile.execute();
+        var result = sendMessage({}, true, SD_INIT_DELAY);
+        if (result) { sendMessage({ type: 'handshake', message: { sdHost: sdHost, sdPort: sdPort } }, true); }
+        else { throw new Error(str.errConnection + apiHost + ':' + portSend + '\n' + str.module + str.errAnswer) }
+    }
     this.setOptions = function (checkpoint, vae, vae_path, memory) {
         var message = {}
         message['sd_model_checkpoint'] = checkpoint ? checkpoint.replace(/\\/g, '\\\\') : null

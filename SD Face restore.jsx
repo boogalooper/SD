@@ -363,13 +363,7 @@ function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
         var lockFile = new File(Folder.temp + "/sd_helper.lock");
         if (!lockFile.exists || !checkConnection(apiHost, portSend)) {
             if (lockFile.exists) lockFile.remove();
-            if (!checkConnection(sdHost, sdPort)) throw new Error(str.errConnection + sdHost + ':' + sdPort + '\nStable Diffusion ' + str.errAnswer);
-            if (!apiFile.exists) { apiFile = new File(apiFile.fsName.substring(0, apiFile.fsName.length - 1)); }
-            if (!apiFile.exists) throw new Error(str.module + apiFile.fsName + str.notFound)
-            apiFile.execute();
-            var result = sendMessage({}, true, SD_INIT_DELAY);
-            if (result) { sendMessage({ type: 'handshake', message: { sdHost: sdHost, sdPort: sdPort } }, true); }
-            else { throw new Error(str.errConnection + apiHost + ':' + portSend + '\n' + str.module + str.errAnswer) }
+            app.doForcedProgress('Starting python server... ', 'startServer()')
         }
         return true
     }
@@ -432,6 +426,15 @@ function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
                 }
             }
         }
+    }
+    function startServer() {
+        if (!checkConnection(sdHost, sdPort)) throw new Error(str.errConnection + sdHost + ':' + sdPort + '\nStable Diffusion ' + str.errAnswer);
+        if (!apiFile.exists) { apiFile = new File(apiFile.fsName.substring(0, apiFile.fsName.length - 1)); }
+        if (!apiFile.exists) throw new Error(str.module + apiFile.fsName + str.notFound)
+        apiFile.execute();
+        var result = sendMessage({}, true, SD_INIT_DELAY);
+        if (result) { sendMessage({ type: 'handshake', message: { sdHost: sdHost, sdPort: sdPort } }, true); }
+        else { throw new Error(str.errConnection + apiHost + ':' + portSend + '\n' + str.module + str.errAnswer) }
     }
     function objectToJSON(obj) {
         if (obj === null) {
