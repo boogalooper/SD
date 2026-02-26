@@ -14,7 +14,7 @@
 </javascriptresource>
 // END__HARVEST_EXCEPTION_ZSTRING
 */
-const ver = 0.461,
+const ver = 0.462,
     SD_HOST = '127.0.0.1',
     SD_PORT = 7860,
     API_HOST = '127.0.0.1',
@@ -22,7 +22,7 @@ const ver = 0.461,
     API_PORT_LISTEN = 6321,
     API_FILE = 'sd-webui-api v2.pyw',
     LAYER_NAME = 'SD generated image',
-    SD_INIT_DELAY = 5000,
+    SD_INIT_DELAY = 7000,
     SD_GET_OPTIONS_DELAY = 3500, // максимальное время ожидания ответа Stable Diffusion при запросе текущих параметров (при превышении скрипт завершит работу)
     SD_RELOAD_CHECKPOINT_DELAY = 100000, // максимальное время ожидания загрузки checkpoint или vae (при превышении скрипт завершит работу)
     SD_GENERATION_DELAY = 120000, // максимальное время ожидания генерации изображения (при превышении скрипт завершит работу)
@@ -283,22 +283,18 @@ function main(selection) {
     }
     apl.waitForRedraw()
     sts.init([cfg.sd_model_checkpoint]);
-
     var result = {}, f;
     app.doProgress('Progress', "mainProgress(result);");
-
     function mainProgress(result) {
         if (!app.doProgressSegmentTask(30, 0, 100, "stageOne(result);")) { return; }
-        if (result instanceof Object && result.message == 'init') { if (!app.doProgressSegmentTask(70, 30, 100, "stageTwo(result);")) { return; } }
+        if (result instanceof Object && result.message == 'init') { if (!app.doProgressSegmentTask(70, 30, 100, "stageTwo(result);")) { return; } } else { alert(result.toSource()) }
         f = new File(result.message)
     }
     function stageOne(result) { return SD.initPayload(payload, result) }
     function stageTwo(result) { return SD.waitForPayload(result); }
-
     if (f && f.exists) {
         activeDocument.suspendHistory('Generate image', 'generatedImageToLayer()')
-    } else throw new Error(str.errGenerating)
-
+    } else throw new Error(str.errGenerating + result.toSource())
     function generatedImageToLayer() {
         doc.place(f)
         var placedBounds = doc.descToObject(lr.getProperty('bounds').value);
@@ -318,7 +314,6 @@ function main(selection) {
             doc.setBrushOpacity(cfg.brushOpacity)
         }
         f.remove();
-
     }
 }
 function findOption(s, o, def) {
@@ -950,7 +945,6 @@ function dialogWindow(b, s) {
                     list.selection.checked != undefined ? list.selection.checked : false;
                     list.selection.enabled = true
                 }
-
             }
         }
         function reEnableList() {
@@ -982,7 +976,6 @@ function dialogWindow(b, s) {
                 e.push(list.selection.text)
             }
             w.close();
-
         }
         if (!filterMode) ok.enabled = false
         w.show()
@@ -1198,7 +1191,6 @@ function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
         } else { throw new Error(str.errSettings + 'sdapi/v1/loras' + str.errTimeout) }
         return true
     }
-
     function startServer() {
         if (!checkConnection(sdHost, sdPort)) throw new Error(str.errConnection + sdHost + ':' + sdPort + '\nStable Diffusion ' + str.errAnswer);
         if (!apiFile.exists) { apiFile = new File(apiFile.fsName.substring(0, apiFile.fsName.length - 1)); }
@@ -1256,37 +1248,53 @@ function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
         return answer
     }
     function sendMessage(o, getAnswer, delay, title, max, writeStatistics) {
-        var tcp = new Socket,
-            delay = delay ? delay : SD_GET_OPTIONS_DELAY;
-        tcp.open(apiHost + ':' + portSend, 'UTF-8')
-        tcp.writeln(objectToJSON(o))
-        tcp.close()
+        delay = delay ? delay : SD_GET_OPTIONS_DELAY;
+        var listener = null;
+        var t1 = 0, t2 = 0, t3 = 0;
+        var slice = 0;
         if (getAnswer) {
-            if (title) { var slice = 1 / max * 4; }
-            var t1 = (new Date).getTime(),
-                t2 = 0,
-                t3 = t1,
-                tcp = new Socket;
-            if (tcp.listen(portListen, 'UTF-8')) {
-                for (; ;) {
-                    t2 = (new Date).getTime();
-                    if (t2 - t1 > delay) { return null; }
-                    if (title && t2 - t3 >= 1) {
-                        t3 = t2
-                        var text = writeStatistics ? title + '\t ' + Math.floor((t2 - t1) / 100) / 10 + ' s. ' : title;
-                        if (!app.doProgressTask(slice, "workChunk('" + text + "');")) { return false; }
-                    }
-                    var answer = tcp.poll();
-                    if (answer != null) {
-                        var a = eval('(' + answer.readln() + ')');
-                        answer.close();
-                        if (writeStatistics) {
-                            dl.saveDelay(cfg.sd_model_checkpoint, t2 - t1)
-                        }
-                        return a;
-                    }
+            listener = new Socket;
+            if (!listener.listen(portListen, 'UTF-8')) {
+                return null;
+            }
+            if (title) {
+                slice = 1 / max * 4;
+            }
+            t1 = (new Date).getTime();
+            t3 = t1;
+        }
+        var sender = new Socket;
+        sender.open(apiHost + ':' + portSend, 'UTF-8');
+        sender.writeln(objectToJSON(o));
+        sender.close();
+        if (!getAnswer) return true;
+        for (; ;) {
+            t2 = (new Date).getTime();
+            if (t2 - t1 > delay) {
+                listener.close();
+                return null;
+            }
+            if (title && t2 - t3 >= 1) {
+                t3 = t2;
+                var text = writeStatistics
+                    ? title + '\t ' + Math.floor((t2 - t1) / 100) / 10 + ' s. '
+                    : title;
+                if (!app.doProgressTask(slice, "workChunk('" + text + "');")) {
+                    listener.close();
+                    return false;
                 }
             }
+            var answer = listener.poll();
+            if (answer != null) {
+                try { var a = eval('(' + answer.readln() + ')'); } catch (e) { a = null };
+                answer.close();
+                listener.close();
+                if (writeStatistics) {
+                    dl.saveDelay(cfg.sd_model_checkpoint, t2 - t1);
+                }
+                return a;
+            }
+            $.sleep(1);
         }
     }
     function workChunk(text) {

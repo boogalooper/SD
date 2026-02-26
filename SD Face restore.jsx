@@ -22,7 +22,7 @@ const SD_HOST = '127.0.0.1',
     LAYER_NAME = 'SD face restore',
     UUID = 'e29b10c8-a069-4e9c-bc6f-426c5ae0f90e',
     GUID = '7e989ac3-c5ec-4ab8-84eb-eaf051877fdf',
-    SD_INIT_DELAY = 5000,
+    SD_INIT_DELAY = 7000,
     SD_GET_OPTIONS_DELAY = 3000, // максимальное время ожидания ответа Stable Diffusion при запросе текущих параметров
     SD_GENERATION_DELAY = 80000; // максимальное время ожидания генерации изображения
 var time = (new Date).getTime(),
@@ -176,7 +176,8 @@ function main(selection) {
     if (cfg.gfpgan) tmp.push('GFPGAN');
     if (cfg.codeFormer) tmp.push('CodeFormer');
     sts.init(tmp);
-    var result = SD.sendPayload(payload);
+    var init = SD.initPayload(payload);
+    var result = SD.waitForPayload({});
     if (result) {
         activeDocument.suspendHistory('Generate image', 'generatedImageToLayer()')
     } else throw new Error(str.errGenerating)
@@ -367,11 +368,17 @@ function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
         }
         return true
     }
-    this.sendPayload = function (payload) {
-        var result = sendMessage({ type: 'faceRestore', message: payload }, true, SD_GENERATION_DELAY, 'Progress', str.progressGenerate, dl.getDelay())
+    this.initPayload = function (payload) {
+        var result = sendMessage({ type: 'faceRestore', message: payload }, true, SD_GENERATION_DELAY)
         if (result) return result['message']
         return null;
     }
+    this.waitForPayload = function (payload) {
+        var result = sendMessage({}, true, SD_GENERATION_DELAY, 'Progress', str.progressGenerate, dl.getDelay())
+        if (result) return result['message']
+        return null;
+    }
+
     function checkConnection(host, port) {
         var socket = new Socket,
             answer = socket.open(host + ':' + port);

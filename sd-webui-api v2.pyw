@@ -57,14 +57,25 @@ def decode_and_save_base64(base64_str, save_path):
         f.write(base64.b64decode(base64_str))
 
 
-def send_data_to_jsx(message):
-    try:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.connect((API_HOST, API_PORT_SEND))
-            s.sendall(json.dumps(message).encode("utf-8"))
-        print(f"[DEBUG] Ответ отправлен в JSX")
-    except Exception as e:
-        print(f"[ERROR] Ошибка отправки в JSX: {e}")
+def send_data_to_jsx(message, retries=3, delay=0.1):
+    for attempt in range(retries):
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(3)
+                s.connect((API_HOST, API_PORT_SEND))
+                s.sendall(json.dumps(message).encode("utf-8"))
+            print(f"[DEBUG] Ответ отправлен в JSX")
+            return True
+
+        except ConnectionRefusedError:
+            print(f"[WARN] JSX не готов (попытка {attempt+1}/{retries})")
+        except Exception as e:
+            print(f"[WARN] Ошибка отправки (попытка {attempt+1}): {e}")
+
+        time.sleep(delay)
+
+    print(f"[ERROR] Не удалось отправить данные в JSX после {retries} попыток")
+    return False
 
 
 # ==============================
@@ -198,8 +209,10 @@ def mask_large_data(obj, max_len=100):
     else:
         return obj
 
+
 def call_generate_api(api_endpoint, payload, out_dir, stop_event):
     global SD_HOST, SD_PORT
+    init_sent = False
 
     print(f"[INFO] Запуск генерации через {api_endpoint}")
     print(mask_large_data(payload))
@@ -211,6 +224,8 @@ def call_generate_api(api_endpoint, payload, out_dir, stop_event):
         return
 
     def progress_watcher():
+        nonlocal init_sent
+
         while not stop_event.is_set():
             try:
                 with urllib.request.urlopen(
@@ -218,12 +233,14 @@ def call_generate_api(api_endpoint, payload, out_dir, stop_event):
                 ) as resp:
                     data = json.loads(resp.read().decode())
                     step = data["state"].get("sampling_step", 0)
-                    if step > 0:
-                        print(f"[INFO] Прогресс генерации: шаг {step}")
+
+                    if step > 0 and not init_sent:
+                        init_sent = True
                         send_data_to_jsx({"type": "answer", "message": "init"})
                         break
             except:
                 pass
+
             time.sleep(0.5)
 
     threading.Thread(target=progress_watcher, daemon=True).start()
@@ -244,18 +261,23 @@ def call_generate_api(api_endpoint, payload, out_dir, stop_event):
             print("[INFO] Генерация была прервана")
             return
 
-        if "images" in result and result["images"]:
+        if "images" in result and result["images"]: 
             last_path = None
             for i, image in enumerate(result["images"]):
                 save_path = os.path.join(out_dir, f"{timestamp()}-{i}.jpg")
                 decode_and_save_base64(image, save_path)
                 last_path = save_path
-
+            if not init_sent:
+                init_sent = True
+                send_data_to_jsx({"type": "answer", "message": "init"})
             send_data_to_jsx({"type": "answer", "message": last_path})
 
         elif "image" in result and result["image"]:
             save_path = os.path.join(out_dir, f"{timestamp()}.jpg")
             decode_and_save_base64(result["image"], save_path)
+            if not init_sent:
+                init_sent = True
+                send_data_to_jsx({"type": "answer", "message": "init"})
             send_data_to_jsx({"type": "answer", "message": save_path})
 
         else:
@@ -297,12 +319,12 @@ def generation_worker():
 
 
 def enqueue_generation(entrypoint, payload, out_dir):
-    #global current_stop_event
+    # global current_stop_event
 
-    #if current_stop_event and not current_stop_event.is_set():
-        #print("[QUEUE] Прерывание текущей генерации")
-        #current_stop_event.set()
-        #safe_interrupt()
+    # if current_stop_event and not current_stop_event.is_set():
+    # print("[QUEUE] Прерывание текущей генерации")
+    # current_stop_event.set()
+    # safe_interrupt()
 
     generation_queue.put((entrypoint, payload, out_dir))
     print("[QUEUE] Задача добавлена в очередь")
@@ -323,7 +345,6 @@ def get_data_from_SD(api_name):
     except Exception as e:
         print(f"[ERROR] Ошибка получения данных: {e}")
         return None
-
 
 
 # ==============================
@@ -388,7 +409,7 @@ def handle_client(client_socket):
                 payload["distilled_cfg_scale"] = data["cfg_scale"]
                 payload["cfg_scale"] = 1
 
-            #INPAINT    
+            # INPAINT
             if "mask" in data:
                 payload["mask"] = encode_file_to_base64(data["mask"], True)
                 payload["inpainting_fill"] = data["inpainting_fill"]
