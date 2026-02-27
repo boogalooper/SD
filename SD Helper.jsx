@@ -14,7 +14,7 @@
 </javascriptresource>
 // END__HARVEST_EXCEPTION_ZSTRING
 */
-const ver = 0.462,
+const ver = 0.463,
     SD_HOST = '127.0.0.1',
     SD_PORT = 7860,
     API_HOST = '127.0.0.1',
@@ -162,8 +162,8 @@ function init() {
 function main(selection) {
     cfg.sd_model_checkpoint = cfg.sd_model_checkpoint.replace(/\s\[.+\]$/, '');
     var checkpoint = (cfg.sd_model_checkpoint == SD['sd_model_checkpoint'] ? null : findOption(cfg.sd_model_checkpoint, SD['sd-models'], SD['sd_model_checkpoint'])),
-        vae = (cfg.current.sd_vae == SD['sd_vae'] ? null : findOption(cfg.current.sd_vae, SD['sd-vaes'], SD['sd_vae'])),
-        encoders = checkEncoders(cfg.current.encoders, SD['forge_additional_modules'], SD['sd_modules']),
+        vae = SD.forgeUI ? null : ((cfg.current.sd_vae == SD['sd_vae'] ? null : findOption(cfg.current.sd_vae, SD['sd-vaes'], SD['sd_vae']))),
+        encoders = checkEncoders(cfg.sd_model_checkpoint.match(/(qwen|flux|kontext|z.image)/i) ? cfg.current.encoders : [cfg.current.sd_vae], SD['forge_additional_modules'], SD['sd_modules']),
         memory = cfg.control_memory ? (SD['forge_inference_memory'] == cfg.forge_inference_memory ? null : cfg.forge_inference_memory) : null,
         scale;
     if (checkpoint != cfg.sd_model_checkpoint && checkpoint != null) cfg.sd_model_checkpoint = checkpoint;
@@ -233,7 +233,7 @@ function main(selection) {
     doc.setProperty('center', c);
     var p = (new Folder(Folder.temp + '/outputs/img2img-images'))
     if (!p.exists) p.create()
-    if (checkpoint || (!cfg.sd_model_checkpoint.match(/(qwen|flux|kontext|z.image)/i) ? vae : encoders) || memory) {
+    if (checkpoint || (SD.forgeUI ? encoders != null : vae) || memory) {
         var vae_path = [];
         if (SD.forgeUI) {
             if (!cfg.sd_model_checkpoint.match(/(qwen|flux|kontext|z.image)/i)) {
@@ -321,7 +321,7 @@ function findOption(s, o, def) {
     return def;
 }
 function checkEncoders(encoders, loaded, modules) {
-    if (!SD.forgeUI) return null
+    if (!SD.forgeUI) return []
     var filteredEncoders = [],
         fileModules = modules.slice();
     for (var a in fileModules) fileModules[a] = new File(fileModules[a])
