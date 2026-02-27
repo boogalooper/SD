@@ -11,6 +11,10 @@ import threading
 import tempfile
 import queue
 import http.client
+import builtins
+
+# Отключаем print
+builtins.print = lambda *args, **kwargs: None
 
 # ==============================
 # НАСТРОЙКИ
@@ -31,6 +35,7 @@ generation_queue = queue.Queue()
 worker_thread = None
 worker_stop_event = threading.Event()
 current_stop_event = None
+ack_event = threading.Event()
 
 # ==============================
 # ВСПОМОГАТЕЛЬНЫЕ
@@ -57,25 +62,17 @@ def decode_and_save_base64(base64_str, save_path):
         f.write(base64.b64decode(base64_str))
 
 
-def send_data_to_jsx(message, retries=3, delay=0.1):
-    for attempt in range(retries):
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.settimeout(3)
-                s.connect((API_HOST, API_PORT_SEND))
-                s.sendall(json.dumps(message).encode("utf-8"))
-            print(f"[DEBUG] Ответ отправлен в JSX")
-            return True
+def send_data_to_jsx(message):
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(5)
+            s.connect((API_HOST, API_PORT_SEND))
+            s.sendall(json.dumps(message).encode("utf-8"))
+        return True
 
-        except ConnectionRefusedError:
-            print(f"[WARN] JSX не готов (попытка {attempt+1}/{retries})")
-        except Exception as e:
-            print(f"[WARN] Ошибка отправки (попытка {attempt+1}): {e}")
-
-        time.sleep(delay)
-
-    print(f"[ERROR] Не удалось отправить данные в JSX после {retries} попыток")
-    return False
+    except Exception as e:
+        print(f"[WARN] Ошибка отправки: {e}")
+        return False
 
 
 # ==============================
@@ -211,22 +208,33 @@ def mask_large_data(obj, max_len=100):
 
 
 def call_generate_api(api_endpoint, payload, out_dir, stop_event, skipInit):
-    global SD_HOST, SD_PORT
-    init_sent = False
+    global SD_HOST, SD_PORT  # должно быть в самом начале
 
     print(f"[INFO] Запуск генерации через {api_endpoint}")
     print(mask_large_data(payload))
 
-    # Ждём освобождения Forge
     if not wait_until_sd_ready():
         print("[ERROR] Forge не готов к генерации")
         send_data_to_jsx({"type": "answer", "message": None})
         return
 
-    def progress_watcher():
-        nonlocal init_sent
+    generation_done = threading.Event()
+    generation_result = {"path": None}
 
-        while not stop_event.is_set():
+    def progress_watcher():
+        init_sent = False
+
+        # --- Если skipInit, просто ждём завершения генерации ---
+        if skipInit:
+            generation_done.wait()
+            send_data_to_jsx({
+                "type": "answer",
+                "message": generation_result["path"]
+            })
+            return
+
+        # --- Ждём начала sampling ---
+        while not stop_event.is_set() and not generation_done.is_set():
             try:
                 with urllib.request.urlopen(
                     f"http://{SD_HOST}:{SD_PORT}/sdapi/v1/progress", timeout=5
@@ -234,18 +242,53 @@ def call_generate_api(api_endpoint, payload, out_dir, stop_event, skipInit):
                     data = json.loads(resp.read().decode())
                     step = data["state"].get("sampling_step", 0)
 
-                    if not skipInit and step > 0 and not init_sent:
-                        init_sent = True
-                        send_data_to_jsx({"type": "answer", "message": "init"})
-                        break
-            except:
-                pass
+                    if step > 0:
+                        print("[INFO] Отправка init в JSX")
 
-            time.sleep(0.5)
+                        ack_event.clear()
+                        send_data_to_jsx({"type": "answer", "message": "init"})
+
+                        # Ждём подтверждение максимум 5 секунд
+                        if not ack_event.wait(timeout=5):
+                            print("[WARN] JSX не подтвердил init за 5 секунд, продолжаем")
+                        else:
+                            print("[INFO] ACK получен")
+
+                        init_sent = True
+                        break
+
+            except Exception as e:
+                print(f"[WARN] Ошибка progress watcher: {e}")
+
+            time.sleep(0.3)
+
+        # --- Если генерация завершилась слишком быстро ---
+        if not init_sent:
+            print("[INFO] Генерация завершилась до sampling_step > 0")
+
+            ack_event.clear()
+            send_data_to_jsx({"type": "answer", "message": "init"})
+
+            if not ack_event.wait(timeout=5):
+                print("[WARN] JSX не подтвердил init за 5 секунд, продолжаем")
+            else:
+                print("[INFO] ACK получен")
+
+            init_sent = True
+
+        # --- Ждём окончания генерации ---
+        generation_done.wait()
+
+        # --- Отправляем путь к файлу ---
+        send_data_to_jsx({
+            "type": "answer",
+            "message": generation_result["path"]
+        })
 
     threading.Thread(target=progress_watcher, daemon=True).start()
 
     try:
+        # --- Отправка POST на SD ---
         data = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(
             f"http://{SD_HOST}:{SD_PORT}/{api_endpoint}",
@@ -258,42 +301,34 @@ def call_generate_api(api_endpoint, payload, out_dir, stop_event, skipInit):
             result = json.loads(resp.read().decode())
 
         if stop_event.is_set():
-            print("[INFO] Генерация была прервана")
+            generation_done.set()
             return
 
+        # --- Сохраняем результат ---
         if "images" in result and result["images"]:
             last_path = None
             for i, image in enumerate(result["images"]):
                 save_path = os.path.join(out_dir, f"{timestamp()}-{i}.jpg")
                 decode_and_save_base64(image, save_path)
                 last_path = save_path
-            if not skipInit and not init_sent:
-                init_sent = True
-                send_data_to_jsx({"type": "answer", "message": "init"})
-            send_data_to_jsx({"type": "answer", "message": last_path})
+            generation_result["path"] = last_path
 
         elif "image" in result and result["image"]:
             save_path = os.path.join(out_dir, f"{timestamp()}.jpg")
             decode_and_save_base64(result["image"], save_path)
-            if not skipInit and not init_sent:
-                init_sent = True
-                send_data_to_jsx({"type": "answer", "message": "init"})
-            send_data_to_jsx({"type": "answer", "message": save_path})
+            generation_result["path"] = save_path
 
         else:
-            print("[WARN] SD вернул пустой результат")
-            send_data_to_jsx({"type": "answer", "message": None})
+            generation_result["path"] = None
 
-        print("[INFO] Генерация успешно завершена")
-
-        # Небольшая пауза чтобы Forge освободил CUDA
-        time.sleep(0.5)
+        print("[INFO] Генерация завершена")
 
     except Exception as e:
-        if not stop_event.is_set():
-            print(f"[ERROR] Ошибка генерации: {e}")
-            send_data_to_jsx({"type": "answer", "message": None})
+        print(f"[ERROR] Ошибка генерации: {e}")
+        generation_result["path"] = None
 
+    finally:
+        generation_done.set()
 
 # ==============================
 # WORKER
@@ -502,6 +537,11 @@ def handle_client(client_socket):
             result = get_data_from_SD(message["message"])
             if result is not None:
                 send_data_to_jsx(result)
+
+        #ACK
+        if msg_type == "ack":
+            print("[INFO] Получен ACK от JSX")
+            ack_event.set()
 
     except Exception as e:
         print(f"[ERROR] Ошибка клиента: {e}")

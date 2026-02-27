@@ -23,7 +23,7 @@ const ver = 0.463,
     API_FILE = 'sd-webui-api v2.pyw',
     LAYER_NAME = 'SD generated image',
     SD_INIT_DELAY = 7000,
-    SD_GET_OPTIONS_DELAY = 3500, // максимальное время ожидания ответа Stable Diffusion при запросе текущих параметров (при превышении скрипт завершит работу)
+    SD_GET_OPTIONS_DELAY = 3000, // максимальное время ожидания ответа Stable Diffusion при запросе текущих параметров (при превышении скрипт завершит работу)
     SD_RELOAD_CHECKPOINT_DELAY = 100000, // максимальное время ожидания загрузки checkpoint или vae (при превышении скрипт завершит работу)
     SD_GENERATION_DELAY = 120000, // максимальное время ожидания генерации изображения (при превышении скрипт завершит работу)
     EXT_KONTEXT = 'forge2_flux_kontext',
@@ -287,8 +287,15 @@ function main(selection) {
     app.doProgress('Progress', "mainProgress(result);");
     function mainProgress(result) {
         if (!app.doProgressSegmentTask(30, 0, 100, "stageOne(result);")) { return; }
-        if (result instanceof Object && result.message == 'init') { if (!app.doProgressSegmentTask(70, 30, 100, "stageTwo(result);")) { return; } } else { alert(result.toSource()) }
-        f = new File(result.message)
+        $.writeln('1: ' + result.toSource())
+
+        if (result instanceof Object && result.message == 'init') {
+            SD.acceptInit()
+            $.writeln('2: ' + 'acceptInit')
+            if (!app.doProgressSegmentTask(70, 30, 100, "stageTwo(result);")) { return; }
+        }
+        if (result) f = new File(result.message)
+        $.writeln('3: ' + result.toSource())
     }
     function stageOne(result) { return SD.initPayload(payload, result) }
     function stageTwo(result) { return SD.waitForPayload(result); }
@@ -1222,6 +1229,7 @@ function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
             throw new Error(str.errCancelling)
         } else { throw new Error(str.errTimeout) }
     }
+
     this.waitForPayload = function (result) {
         var answer = sendMessage({}, true, SD_GENERATION_DELAY, str.progressGenerate, dl.getDelay(cfg.sd_model_checkpoint), true)
         if (answer instanceof Object) {
@@ -1232,6 +1240,9 @@ function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
         } else if (answer == false) {
             throw new Error(str.errCancelling)
         } else { throw new Error(str.errTimeout) }
+    }
+    this.acceptInit = function () {
+        sendMessage({ type: 'ack', message: {} })
     }
     this.translate = function (s) {
         var result = sendMessage({ type: 'translate', message: s }, true, SD_RELOAD_CHECKPOINT_DELAY)
