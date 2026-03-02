@@ -14,7 +14,7 @@
 </javascriptresource>
 // END__HARVEST_EXCEPTION_ZSTRING
 */
-const ver = 0.463,
+const ver = 0.5,
     SD_HOST = '127.0.0.1',
     SD_PORT = 7860,
     API_HOST = '127.0.0.1',
@@ -22,10 +22,10 @@ const ver = 0.463,
     API_PORT_LISTEN = 6321,
     API_FILE = 'sd-webui-api v2.pyw',
     LAYER_NAME = 'SD generated image',
-    SD_INIT_DELAY = 7000,
-    SD_GET_OPTIONS_DELAY = 3000, // максимальное время ожидания ответа Stable Diffusion при запросе текущих параметров (при превышении скрипт завершит работу)
-    SD_RELOAD_CHECKPOINT_DELAY = 100000, // максимальное время ожидания загрузки checkpoint или vae (при превышении скрипт завершит работу)
-    SD_GENERATION_DELAY = 120000, // максимальное время ожидания генерации изображения (при превышении скрипт завершит работу)
+    SD_INIT_DELAY = 7000, // максимальное время ожидания запуска сервера python
+    SD_GET_OPTIONS_DELAY = 1500, // максимальное время ожидания ответа Stable Diffusion при запросе текущих параметров 
+    SD_RELOAD_CHECKPOINT_DELAY = 100000, // максимальное время ожидания загрузки checkpoint или vae 
+    SD_GENERATION_DELAY = 120000, // максимальное время ожидания генерации изображения 
     EXT_KONTEXT = 'forge2_flux_kontext',
     UUID = '338cc304-fb6f-4b1f-8ad4-13bbd65f117c',
     TILE_SIZE = 16;
@@ -45,27 +45,21 @@ var time = (new Date).getTime(),
     isCancelled = false,
     initialState = null;
 $.localize = true;
+//$.locale = 'ru'
 sts.getSettings();
 var ks = ScriptUI.environment.keyboardState;
 if (ks.shiftKey && playbackParameters.count != 1) $.setenv('dialogMode', true);
 if (ks.shiftKey && ks.altKey) sts.showStatistics();
 try {
-    init();
-    sts.finish(true);
+    init(); sts.finish(true);
 } catch (e) {
-    sts.finish(false)
+    sts.finish(false);
     activeDocument.activeHistoryState = initialState;
-    if (e.message == str.errCancelling.toString()) {
-        SD.interrupt()
-    } else {
-        alert(e, undefined, true)
-    }
+    if (e.message == str.errCancelling.toString()) { SD.interrupt() } else { alert(e, undefined, true) }
     $.setenv('dialogMode', true)
     isCancelled = true;
 }
-finally {
-    sts.putSettings()
-}
+finally { sts.putSettings() }
 isCancelled ? 'cancel' : undefined;
 function init() {
     if (!apl.getProperty('numberOfDocuments')) return
@@ -83,7 +77,7 @@ function init() {
             b.bottom = b.bottom - (dH - Math.floor(dH / 2))
             b.right = b.right - (dW - Math.floor(dW / 2))
         }
-        b.width = b.right - b.left
+        b.width = b.right - b.left;
         b.height = b.bottom - b.top
         if (!app.playbackParameters.count || app.playbackParameters.count == 1) {
             cfg.getSettings();
@@ -160,13 +154,20 @@ function init() {
     }
 }
 function main(selection) {
-    cfg.sd_model_checkpoint = cfg.sd_model_checkpoint.replace(/\s\[.+\]$/, '');
-    var checkpoint = (cfg.sd_model_checkpoint == SD['sd_model_checkpoint'] ? null : findOption(cfg.sd_model_checkpoint, SD['sd-models'], SD['sd_model_checkpoint'])),
-        vae = SD.forgeUI ? null : ((cfg.current.sd_vae == SD['sd_vae'] ? null : findOption(cfg.current.sd_vae, SD['sd-vaes'], SD['sd_vae']))),
-        encoders = checkEncoders(cfg.sd_model_checkpoint.match(/(qwen|flux|kontext|z.image)/i) ? cfg.current.encoders : [cfg.current.sd_vae], SD['forge_additional_modules'], SD['sd_modules']),
-        memory = cfg.control_memory ? (SD['forge_inference_memory'] == cfg.forge_inference_memory ? null : cfg.forge_inference_memory) : null,
-        scale;
-    if (checkpoint != cfg.sd_model_checkpoint && checkpoint != null) cfg.sd_model_checkpoint = checkpoint;
+    var apiMode = cfg.sd_model_checkpoint.match(/^API: \t/) ? true : false;
+    if (apiMode) {
+        var id = findEndpointByName(cfg.sd_model_checkpoint.replace(/^API: \t/, ''), cfg.apiEndpoints), apiSettings = null;
+        if (id) apiSettings = cfg.apiEndpoints[id]
+    }
+    if (!apiMode) {
+        cfg.sd_model_checkpoint = cfg.sd_model_checkpoint.replace(/\s\[.+\]$/, '');
+        var checkpoint = (cfg.sd_model_checkpoint == SD['sd_model_checkpoint'] ? null : findOption(cfg.sd_model_checkpoint, SD['sd-models'], SD['sd_model_checkpoint'])),
+            vae = SD.forgeUI ? null : ((cfg.current.sd_vae == SD['sd_vae'] ? null : findOption(cfg.current.sd_vae, SD['sd-vaes'], SD['sd_vae']))),
+            encoders = checkEncoders(cfg.sd_model_checkpoint.match(/(qwen|flux|kontext|z.image)/i) ? cfg.current.encoders : [cfg.current.sd_vae], SD['forge_additional_modules'], SD['sd_modules']),
+            memory = cfg.control_memory ? (SD['forge_inference_memory'] == cfg.forge_inference_memory ? null : cfg.forge_inference_memory) : null,
+            scale;
+        if (checkpoint != cfg.sd_model_checkpoint && checkpoint != null) cfg.sd_model_checkpoint = checkpoint;
+    }
     if (cfg.current.autoResize) {
         scale = isDitry ? cfg.current.resize : autoScale(selection.bounds)
     } else { scale = cfg.current.manualScale }
@@ -220,9 +221,9 @@ function main(selection) {
         doc.hideSelectedLayers();
     }
     doc.flatten()
-    if (cfg.current.inpaintingFill != -1) doc.pastePixels();
+    if (!apiMode && cfg.current.inpaintingFill != -1) doc.pastePixels();
     if (scale < 1) doc.imageSize(width, height)
-    if (cfg.current.inpaintingFill != -1) {
+    if (!apiMode && cfg.current.inpaintingFill != -1) {
         var f1 = new File(Folder.temp + '/SDH_MASK.jpg');
         doc.saveACopy(f1);
         lr.deleteLayer();
@@ -233,7 +234,7 @@ function main(selection) {
     doc.setProperty('center', c);
     var p = (new Folder(Folder.temp + '/outputs/img2img-images'))
     if (!p.exists) p.create()
-    if (checkpoint || (SD.forgeUI ? encoders != null : vae) || memory) {
+    if (!apiMode && (checkpoint || (SD.forgeUI ? encoders != null : vae) || memory)) {
         var vae_path = [];
         if (SD.forgeUI) {
             if (!cfg.sd_model_checkpoint.match(/(qwen|flux|kontext|z.image)/i)) {
@@ -247,26 +248,46 @@ function main(selection) {
         }
         if (!SD.setOptions(checkpoint, vae, vae_path, memory)) throw new Error(str.errUpdating)
     }
-    var payload = {
-        'input': f.fsName.replace(/\\/g, '\\\\'),
-        'output': p.fsName.replace(/\\/g, '\\\\'),
-        'prompt': cfg.current.prompt.toString().replace(/[^A-Za-z0-9.,()\-<>: ]/g, ''),
-        'negative_prompt': cfg.sd_model_checkpoint.match(/(flux|kontext)/i) ? '' : cfg.current.negative_prompt.toString().replace(/[^A-Za-z0-9.,()\-<>: ]/g, ''),
-        'sampler_name': cfg.current.sampler_name,
-        'scheduler': cfg.current.scheduler,
-        'cfg_scale': cfg.current.cfg_scale,
-        'seed': -1,
-        'steps': cfg.current.steps,
-        'width': width,
-        'height': height,
-        'denoising_strength': cfg.current.denoising_strength,
-        'n_iter': 1,
-    };
-    if (cfg.sd_model_checkpoint.match(/(flux|kontext)/i)) payload['flux'] = true;
-    if (cfg.sd_model_checkpoint.match(/(kontext|qwen.+edit|klein)/i) && (SD.extensions[EXT_KONTEXT] || cfg.forge_imageStitch)) {
-        if (!cfg.forge_imageStitch && cfg.sd_model_checkpoint.match(/kontext/i)) payload['kontext'] = true
+    if (!apiMode) {
+        var payload = {
+            'input': f.fsName.replace(/\\/g, '\\\\'),
+            'output': p.fsName.replace(/\\/g, '\\\\'),
+            'prompt': cfg.current.prompt.toString().replace(/[^A-Za-z0-9.,()\-<>: ]/g, ''),
+            'negative_prompt': cfg.sd_model_checkpoint.match(/(flux|kontext)/i) ? '' : cfg.current.negative_prompt.toString().replace(/[^A-Za-z0-9.,()\-<>: ]/g, ''),
+            'sampler_name': cfg.current.sampler_name,
+            'scheduler': cfg.current.scheduler,
+            'cfg_scale': cfg.current.cfg_scale,
+            'seed': -1,
+            'steps': cfg.current.steps,
+            'width': width,
+            'height': height,
+            'denoising_strength': cfg.current.denoising_strength,
+            'n_iter': 1,
+        };
+    } else if (apiSettings) {
+        var payload = {
+            'apiMode': true,
+            'apiKey': apiSettings.apiKey,
+            'apiEndpoint': apiSettings.apiEndpoint,
+            'input': f.fsName.replace(/\\/g, '\\\\'),
+            'output': p.fsName.replace(/\\/g, '\\\\'),
+            'prompt': cfg.current.prompt.toString().replace(/[^A-Za-z0-9.,()\-<>: ]/g, ''),
+        }
+        if (apiSettings.apiStatus != '') payload['apiStatus'] = apiSettings.apiStatus;
+        if (apiSettings.aspectRatio && cfg.current.aspectRatioSelected != '') {
+            payload['aspect_ratio'] = cfg.current.aspectRatioSelected == 'Auto' ? getAspectRatio(width, height, cfg.current.aspectRatiosList, apiSettings.aspectRatioMode) : cfg.current.aspectRatioSelected;
+        }
+        if (apiSettings.resolution && cfg.current.resolutionSelected != '') {
+            payload['resolution'] = cfg.current.resolutionSelected;
+        }
+        if (apiSettings.negativePrompt) payload['negative_prompt'] = cfg.current.negative_prompt.toString().replace(/[^A-Za-z0-9.,()\-<>: ]/g, '');
+    }
+    if (!apiMode && cfg.sd_model_checkpoint.match(/(flux|kontext)/i)) payload['flux'] = true;
+    if (apiMode || (cfg.sd_model_checkpoint.match(/(kontext|qwen.+edit|klein)/i) && (SD.extensions[EXT_KONTEXT] || cfg.forge_imageStitch))) {
+        if (!apiMode && !cfg.forge_imageStitch && cfg.sd_model_checkpoint.match(/kontext/i)) payload['kontext'] = true
+        if (apiMode && cfg.current.reference != '' && !apiSettings.reference) cfg.current.reference != ''
         if (cfg.current.reference != '' && new File(cfg.current.reference).exists) {
-            if (cfg.forge_imageStitch) payload['stitch'] = true
+            if (!apiMode && cfg.forge_imageStitch) payload['stitch'] = true
             var r = new File(cfg.current.reference),
                 r1 = new File(Folder.temp + '/SDH_REF.jpg');
             open(r);
@@ -277,7 +298,7 @@ function main(selection) {
             if (r.exists) payload['reference'] = r1.fsName.replace(/\\/g, '\\\\')
         }
     };
-    if (cfg.current.inpaintingFill != -1) {
+    if (!apiMode && cfg.current.inpaintingFill != -1) {
         payload['mask'] = f1.fsName.replace(/\\/g, '\\\\')
         payload['inpainting_fill'] = cfg.current.inpaintingFill + 1
     }
@@ -286,28 +307,31 @@ function main(selection) {
     var result = {}, f;
     app.doProgress('Progress', "mainProgress(result);");
     function mainProgress(result) {
-        if (!app.doProgressSegmentTask(30, 0, 100, "stageOne(result);")) { return; }
-        $.writeln('1: ' + result.toSource())
-
-        if (result instanceof Object && result.message == 'init') {
-            SD.acceptInit()
-            $.writeln('2: ' + 'acceptInit')
-            if (!app.doProgressSegmentTask(70, 30, 100, "stageTwo(result);")) { return; }
+        if (!apiMode) {
+            if (!app.doProgressSegmentTask(30, 0, 100, "stageOne(result);")) { return; }
+            if (result instanceof Object && result.message == 'init') {
+                SD.acceptInit()
+                if (!app.doProgressSegmentTask(70, 30, 100, "stageTwo(result);")) { return; }
+            }
+            if (result) f = new File(result.message)
+        } else {
+            if (!app.doProgressSegmentTask(100, 0, 100, "apiPayload(result);")) { return; }
+            if (result) f = new File(result.message)
         }
-        if (result) f = new File(result.message)
-        $.writeln('3: ' + result.toSource())
     }
-    function stageOne(result) { return SD.initPayload(payload, result) }
+    function stageOne(result) { return SD.localPayload(payload, result) }
     function stageTwo(result) { return SD.waitForPayload(result); }
+    function apiPayload(result) { return SD.apiPayload(payload, result); }
     if (f && f.exists) {
         activeDocument.suspendHistory('Generate image', 'generatedImageToLayer()')
     } else throw new Error(str.errGenerating + result.toSource())
     function generatedImageToLayer() {
         doc.place(f)
-        var placedBounds = doc.descToObject(lr.getProperty('bounds').value);
-        var dW = (selection.bounds.right - selection.bounds.left) / (placedBounds.right - placedBounds.left);
-        var dH = (selection.bounds.bottom - selection.bounds.top) / (placedBounds.bottom - placedBounds.top)
-        lr.transform(dW * 100, dH * 100);
+        var placedBounds = doc.descToObject(lr.getProperty('bounds').value),
+            dW = (selection.bounds.right - selection.bounds.left) / (placedBounds.right - placedBounds.left),
+            dH = (selection.bounds.bottom - selection.bounds.top) / (placedBounds.bottom - placedBounds.top),
+            k = dW > dH ? dH : dW;
+        if (!apiMode && !apiSettings.doNotTransform) { lr.transform(dW * 100, dH * 100) } else { lr.transform(k * 100, k * 100); }
         if (cfg.rasterizeImage) { try { lr.rasterize() } catch (e) { } }
         lr.setName(LAYER_NAME)
         doc.makeSelectionFromLayer('mask', selection.junk)
@@ -321,6 +345,41 @@ function main(selection) {
             doc.setBrushOpacity(cfg.brushOpacity)
         }
         f.remove();
+    }
+}
+function getAspectRatio(width, height, ratios, mode) {
+    if (!mode) {
+        var ratioItems = [];
+        for (var i = 0; i < ratios.length; i++) {
+            var parts = ratios[i].split(":");
+            ratioItems.push({
+                str: ratios[i],
+                value: parseFloat(parts[0]) / parseFloat(parts[1])
+            });
+        }
+        var targetRatio = width / height,
+            closest = ratioItems[0],
+            minDiff = Math.abs(ratioItems[0].value - targetRatio);
+        for (var i = 1; i < ratioItems.length; i++) {
+            var diff = Math.abs(ratioItems[i].value - targetRatio);
+            if (diff < minDiff) {
+                minDiff = diff;
+                closest = ratioItems[i];
+            }
+        }
+        return closest.str;
+    } else {
+        while (width % 2 === 0 && height % 2 === 0) {
+            width = width / 2;
+            height = height / 2;
+        }
+        var max = Math.max(width, height);
+        if (max > 10) {
+            var factor = max / 10;
+            width = Math.round(width / factor);
+            height = Math.round(height / factor);
+        }
+        return width + ":" + height;
     }
 }
 function findOption(s, o, def) {
@@ -356,6 +415,7 @@ function checkEncoders(encoders, loaded, modules) {
 }
 function dialogWindow(b, s) {
     cfg.sd_model_checkpoint = cfg.sd_model_checkpoint.replace(/\s\[.+\]$/, '');
+    apiChanged = false;
     var w = new Window("dialog{orientation:'column',alignChildren:['fill', 'top'],spacing:0,margins:15}"),
         grGlobal = w.add("group{orientation:'row',alignChildren:['left', 'center'],spacing:0,margins:0}"),
         stWH = grGlobal.add("statictext{preferredSize:[265,-1]}"),
@@ -378,12 +438,12 @@ function dialogWindow(b, s) {
         if (result == 1) {
             var changed = false;
             for (var a in tempSettings) {
-                if (!a.match(/(autoResize|Filter|forge_imageStitch)/)) continue;
+                if (!a.match(/(autoResize|Filter|forge_imageStitch|api)/)) continue;
                 if (typeof tempSettings[a] != 'object') {
                     if (tempSettings[a] != cfg[a]) {
                         changed = true
                     }
-                } else if (cfg[a] instanceof Array) {
+                } else if (tempSettings[a] instanceof Array) {
                     if (tempSettings[a].length != cfg[a].length) changed = true;
                     for (var b in tempSettings[a]) {
                         if (tempSettings[a][b] != cfg[a][b]) {
@@ -391,12 +451,19 @@ function dialogWindow(b, s) {
                             break;
                         }
                     }
+                } else if (tempSettings[a] instanceof Object) {
+                    $.writeln(apiChanged)
+                    if (apiChanged) {
+                        cfg[a] = tempSettings[a];
+                        changed = true;
+                        break;
+                    }
                 }
                 if (changed) break;
             }
             cloneObject(tempSettings, cfg)
             if (changed) {
-                showControls(grSettings)
+                grSettings.enabled = showControls(grSettings)
                 w.layout.layout(true)
             }
         }
@@ -404,29 +471,39 @@ function dialogWindow(b, s) {
     w.layout.layout(true)
     return w;
     function showControls(p) {
-        var len = p.children.length
-        for (var i = 0; i < len; i++) {
-            p.remove(p.children[0])
+        var len = p.children.length;
+        for (var i = 0; i < len; i++) { p.remove(p.children[0]) };
+        var enabled = checkpoint(p),
+            isApi = cfg.sd_model_checkpoint.match(/^API: \t/),
+            apiId = null;
+        if (isApi) { apiId = findEndpointByName(cfg.sd_model_checkpoint.replace(/^API: \t/, ''), cfg.apiEndpoints) }
+        if (!isApi) {
+            vae(p);
+            if ((cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') == -1 || !SD.extensions[EXT_KONTEXT]) && !cfg.sd_model_checkpoint.match(/qwen.+edit/i)) inpaintingFill(p)
         }
-        var enabled = checkpoint(p);
-        vae(p);
-        if ((cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') == -1 || !SD.extensions[EXT_KONTEXT]) && !cfg.sd_model_checkpoint.match(/qwen.+edit/i)) inpaintingFill(p)
-        prompt(p);
-        if (!cfg.sd_model_checkpoint.match(/(flux|kontext)/i)) negativePrompt(p);
-        sampler(p);
-        shelduler(p);
-        steps(p);
-        cfgScale(p);
+        prompt(p, isApi);
+        if (isApi && cfg.apiEndpoints[apiId].negativePrompt) { negativePrompt(p) } else if (!isApi && !cfg.sd_model_checkpoint.match(/(flux|kontext)/i)) { negativePrompt(p) }
+        if (isApi) {
+            if (cfg.apiEndpoints[apiId].aspectRatio) ratio(p)
+            if (cfg.apiEndpoints[apiId].resolution) resolution(p)
+        }
+        if (!isApi) {
+            sampler(p);
+            shelduler(p);
+            steps(p);
+            cfgScale(p);
+        }
         resizeScale(p);
-        denoisingStrength(p)
-        if ((cfg.sd_model_checkpoint.match(/kontext/i) && SD.extensions[EXT_KONTEXT]) || (cfg.sd_model_checkpoint.match(/(kontext|qwen.+edit|klein)/i) && cfg.forge_imageStitch)) imageReference(p)
+        if (!isApi) { denoisingStrength(p) }
+        if (isApi && cfg.apiEndpoints[apiId].reference) { imageReference(p) }
+        else if (!isApi && ((cfg.sd_model_checkpoint.match(/kontext/i) && SD.extensions[EXT_KONTEXT]) || (cfg.sd_model_checkpoint.match(/(kontext|qwen.+edit|klein)/i) && cfg.forge_imageStitch))) { imageReference(p) }
         return enabled;
         function checkpoint(p) {
             grCheckoint = p.add("group{orientation:'column',alignChildren:['fill', 'center'],spacing:0,margins:[0,10,0,5]}"),
                 stCheckpoint = grCheckoint.add('statictext'),
                 dlCheckpoint = grCheckoint.add('dropdownlist{preferredSize: [285, -1] }');
             stCheckpoint.text = str.checkpoint;
-            var checkpoints = filteredList(SD['sd-models'], cfg.checkpointFilter);
+            var checkpoints = filteredList(SD['sd-models'], cfg.checkpointFilter, true);
             if (checkpoints.length) {
                 for (var i = 0; i < checkpoints.length; i++) dlCheckpoint.add('item', checkpoints[i])
                 var bypass = cfg.sd_model_checkpoint == '' ? true : false;
@@ -530,7 +607,7 @@ function dialogWindow(b, s) {
                 }
             }
         }
-        function prompt(p) {
+        function prompt(p, isApi) {
             var grPrompt = p.add("group{orientation:'column',alignChildren:['fill', 'top'],spacing:0,margins:0}"),
                 stPrompt = grPrompt.add('statictext');
             var presets = addPresetPanel('positivePreset', grPrompt);
@@ -541,7 +618,7 @@ function dialogWindow(b, s) {
             presets.onChange(true)
             bnTranslate.text = str.translate + '-> en';
             bnLora.text = '+ ' + str.lora
-            bnLora.enabled = SD['loras'].length
+            bnLora.enabled = SD['loras'] && SD['loras'].length && !isApi
             etPrompt.onChange = function () { cfg.current.prompt = this.text }
             bnLora.onClick = function () {
                 var result = []
@@ -607,7 +684,7 @@ function dialogWindow(b, s) {
                 stSampler = grSampler.add('statictext'),
                 dlSampler = grSampler.add('dropdownlist{preferredSize:[285,-1]}');
             stSampler.text = str.sampling
-            if (SD['samplers'].length) for (var i = 0; i < SD['samplers'].length; i++) dlSampler.add('item', SD['samplers'][i])
+            if (SD['samplers'] && SD['samplers'].length) for (var i = 0; i < SD['samplers'].length; i++) dlSampler.add('item', SD['samplers'][i])
             dlSampler.onChange = function () { cfg.current.sampler_name = this.selection.text }
             var current = dlSampler.find(cfg.current.sampler_name);
             dlSampler.selection = current ? current.index : 0
@@ -617,7 +694,7 @@ function dialogWindow(b, s) {
                 stSheldue = grSheldue.add('statictext'),
                 dlSheldue = grSheldue.add('dropdownlist{preferredSize:[285,-1]}');
             stSheldue.text = str.schedule;
-            if (SD['schedulers'].length) for (var i = 0; i < SD['schedulers'].length; i++) dlSheldue.add('item', SD['schedulers'][i])
+            if (SD['schedulers'] && SD['schedulers'].length) for (var i = 0; i < SD['schedulers'].length; i++) dlSheldue.add('item', SD['schedulers'][i])
             dlSheldue.onChange = function () { cfg.current.scheduler = this.selection.text }
             var current = dlSheldue.find(cfg.current.scheduler);
             dlSheldue.selection = current ? current.index : 0
@@ -793,13 +870,75 @@ function dialogWindow(b, s) {
                 return null
             }
         }
+        function ratio(p) {
+            var gr = p.add("group{orientation:'column',alignChildren:['fill', 'center'],spacing:0,margins:0}"),
+                st = gr.add('statictext'),
+                grDl = p.add("group{orientation:'row',alignChildren:['fill', 'left'],spacing:0,margins:0}"),
+                dl = grDl.add('dropdownlist{preferredSize:[260,-1]}'),
+                bn = grDl.add('button{preferredSize:[20,-1]}');
+            st.text = str.apiAspectRatio
+            bn.text = '⚙';
+            bn.helpTip = str.settings
+            if (!cfg.current.aspectRatiosList.length) cfg.current.aspectRatiosList = cfg.defaultApiRatios
+            fillList()
+            bn.onClick = function () {
+                editWindow('aspectRatiosList', str.apiAspectRatio)
+                fillList()
+            }
+            dl.onChange = function () {
+                cfg.current.aspectRatioSelected = this.selection.text
+            }
+            function fillList() {
+                dl.removeAll()
+                dl.add('item', 'Auto')
+                for (var i = 0; i < cfg.current.aspectRatiosList.length; i++) dl.add('item', cfg.current.aspectRatiosList[i])
+                var cur = 0,
+                    found = dl.find(cfg.current.aspectRatioSelected);
+                dl.selection = found ? found : 0;
+            }
+        }
+        function resolution(p) {
+            var gr = p.add("group{orientation:'column',alignChildren:['fill', 'center'],spacing:0,margins:0}"),
+                st = gr.add('statictext'),
+                grDl = p.add("group{orientation:'row',alignChildren:['fill', 'left'],spacing:0,margins:0}"),
+                dl = grDl.add('dropdownlist{preferredSize:[260,-1]}'),
+                bn = grDl.add('button{preferredSize:[20,-1]}');
+            st.text = str.apiResolution
+            bn.text = '⚙';
+            bn.helpTip = str.settings
+            if (!cfg.current.resolutionList.length) cfg.current.resolutionList = cfg.defaultResolutions
+            fillList()
+            bn.onClick = function () {
+                editWindow('resolutionList', str.apiResolution)
+                fillList()
+            }
+            dl.onChange = function () {
+                cfg.current.resolutionSelected = this.selection.text
+            }
+            function fillList() {
+                dl.removeAll()
+                for (var i = 0; i < cfg.current.resolutionList.length; i++) dl.add('item', cfg.current.resolutionList[i])
+                var cur = 0,
+                    found = dl.find(cfg.current.resolutionSelected);
+                dl.selection = found ? found : 0;
+            }
+        }
     }
-    function settingsWindow(p, cfg) {
+    function settingsWindow(p, tmp) {
         var w = new Window("dialog{orientation:'column',alignChildren:['fill', 'top'],spacing:10,margins:16}"),
-            pnShow = w.add("panel{orientation:'row',alignChildren:['fill', 'top'],spacing:0,margins:10}"),
-            bnChk = pnShow.add('button'),
-            bnVae = pnShow.add('button'),
-            pnOutput = w.add("panel{orientation:'column',alignChildren:['fill', 'top'],spacing:5,margins:10}"),
+            pnApi = w.add("panel{orientation:'row',alignChildren:['fill', 'top'],spacing:0,margins:10}"),
+            bnApi = pnApi.add('button');
+        if (!SD.apiMode) {
+            var pnShow = w.add("panel{orientation:'row',alignChildren:['fill', 'top'],spacing:0,margins:10}"),
+                bnChk = pnShow.add('button'),
+                bnVae = pnShow.add('button');
+            pnShow.text = str.showItems
+            bnChk.text = str.checkpoint
+            bnVae.text = str.vae + (tmp.sd_model_checkpoint.match(/(qwen|flux|kontext|z.image)/i) ? '/Text encoder' : '')
+            bnChk.onClick = function () { selectWindow(SD['sd-models'], tmp.checkpointFilter, true, str.showItems); }
+            bnVae.onClick = function () { selectWindow(SD['sd-vaes'], tmp.vaeFilter, true, str.showItems); }
+        }
+        var pnOutput = w.add("panel{orientation:'column',alignChildren:['fill', 'top'],spacing:5,margins:10}"),
             chFlatten = pnOutput.add('checkbox'),
             chRasterize = pnOutput.add('checkbox'),
             pnBrush = w.add("panel{orientation:'column',alignChildren:['fill', 'top'],spacing:10,margins:10}"),
@@ -834,15 +973,15 @@ function dialogWindow(b, s) {
             chMemory.text = str.setMatrixMemory
             stMemoryTitle.text = str.setMemory
             chStitch.text = str.imageStitch
-            if (SD['forge_inference_memory'] == undefined) cfg.control_memory = chMemory.enabled = false
-            grMemory.enabled = chMemory.value = cfg.control_memory
-            slMemory.value = stMemoryValue.text = cfg.forge_inference_memory
-            chStitch.value = cfg.forge_imageStitch
+            if (SD['forge_inference_memory'] == undefined) tmp.control_memory = chMemory.enabled = false
+            grMemory.enabled = chMemory.value = tmp.control_memory
+            slMemory.value = stMemoryValue.text = tmp.forge_inference_memory
+            chStitch.value = tmp.forge_imageStitch
             slMemory.addEventListener('keydown', memoryHandler)
-            slMemory.onChange = function () { stMemoryValue.text = cfg.forge_inference_memory = mathTrunc(this.value / 32) * 32 }
+            slMemory.onChange = function () { stMemoryValue.text = tmp.forge_inference_memory = mathTrunc(this.value / 32) * 32 }
             slMemory.onChanging = function () { slMemory.onChange() }
-            chMemory.onClick = function () { cfg.control_memory = grMemory.enabled = this.value }
-            chStitch.onClick = function () { cfg.forge_imageStitch = this.value }
+            chMemory.onClick = function () { tmp.control_memory = grMemory.enabled = this.value }
+            chStitch.onClick = function () { tmp.forge_imageStitch = this.value }
             function memoryHandler(evt) {
                 if (evt.shiftKey) {
                     if (evt.keyIdentifier == 'Right' || evt.keyIdentifier == 'Up') {
@@ -856,8 +995,8 @@ function dialogWindow(b, s) {
         var chRecordSettings = w.add('checkbox'),
             grBn = w.add("group{orientation:'row',alignChildren:['center', 'center'],spacing:10,margins:[0, 10, 0, 0]}"),
             ok = grBn.add('button', undefined, undefined, { name: 'ok' });
-        bnChk.text = str.checkpoint
-        bnVae.text = str.vae + (cfg.sd_model_checkpoint.match(/(qwen|flux|kontext|z.image)/i) ? '/Text encoder' : '')
+        pnApi.text = str.externalApi
+        bnApi.text = str.externalApiManagement
         chFlatten.text = str.flatten
         chRasterize.text = str.rasterize
         chRecordSettings.text = str.actionMode
@@ -866,33 +1005,31 @@ function dialogWindow(b, s) {
         pnBrush.text = str.brush
         pnOutput.text = str.output
         pnResize.text = str.autoResizeOptions
-        pnShow.text = str.showItems
         stLessLabel.text = str.min + ' (px)'
         stAboveLabel.text = str.max + ' (px)'
         stOpacityTitle.text = str.opacity
         w.text = str.settings
-        chFlatten.value = cfg.flatten
-        chRasterize.value = cfg.rasterizeImage
-        chRecordSettings.value = !cfg.recordToAction
-        chSelectBrush.value = cfg.selectBrush
-        slAbove.value = cfg.autoResizeAbove;
-        slLess.value = cfg.autoResizeLess;
-        stAbove.text = cfg.autoResizeAbove;
-        stLess.text = cfg.autoResizeLess;
-        slOpacity.value = stOpacityValue.text = cfg.brushOpacity
-        chFlatten.onClick = function () { cfg.flatten = this.value }
-        chRasterize.onClick = function () { cfg.rasterizeImage = this.value }
-        chSelectBrush.onClick = function () { cfg.selectBrush = this.value }
-        slOpacity.onChange = function () { stOpacityValue.text = cfg.brushOpacity = mathTrunc(this.value) }
+        chFlatten.value = tmp.flatten
+        chRasterize.value = tmp.rasterizeImage
+        chRecordSettings.value = !tmp.recordToAction
+        chSelectBrush.value = tmp.selectBrush
+        slAbove.value = tmp.autoResizeAbove;
+        slLess.value = tmp.autoResizeLess;
+        stAbove.text = tmp.autoResizeAbove;
+        stLess.text = tmp.autoResizeLess;
+        slOpacity.value = stOpacityValue.text = tmp.brushOpacity
+        chFlatten.onClick = function () { tmp.flatten = this.value }
+        chRasterize.onClick = function () { tmp.rasterizeImage = this.value }
+        chSelectBrush.onClick = function () { tmp.selectBrush = this.value }
+        slOpacity.onChange = function () { stOpacityValue.text = tmp.brushOpacity = mathTrunc(this.value) }
         slOpacity.onChanging = function () { slOpacity.onChange() }
         slOpacity.addEventListener('keydown', commonHandler)
-        bnChk.onClick = function () { selectWindow(SD['sd-models'], cfg.checkpointFilter, true, str.showItems); }
-        bnVae.onClick = function () { selectWindow(SD['sd-vaes'], cfg.vaeFilter, true, str.showItems); }
+        bnApi.onClick = function () { apiManagerWindow(tmp) }
         slLess.onChange = function () {
-            stLess.text = (cfg.autoResizeLess = mathTrunc(this.value / 32) * 32)
+            stLess.text = (tmp.autoResizeLess = mathTrunc(this.value / 32) * 32)
         }
         slAbove.onChange = function () {
-            stAbove.text = (cfg.autoResizeAbove = mathTrunc(this.value / 32) * 32)
+            stAbove.text = (tmp.autoResizeAbove = mathTrunc(this.value / 32) * 32)
         }
         slLess.onChanging = function () { slLess.onChange() }
         slLess.addEventListener('keydown', resizeHandler)
@@ -907,8 +1044,32 @@ function dialogWindow(b, s) {
                 }
             }
         }
-        chRecordSettings.onClick = function () { cfg.recordToAction = !this.value }
+        chRecordSettings.onClick = function () { tmp.recordToAction = !this.value }
         return w
+    }
+    function editWindow(a, title) {
+        var w = new Window("dialog{orientation:'column',alignChildren:['fill', 'top'],spacing:10,margins:16}"),
+            et = w.add("editText{preferredSize:[200,150],properties:{multiline: true, scrollable: true}}"),
+            grBn = w.add("group{orientation:'row',alignChildren:['center', 'center'],spacing:10,margins:[0, 10, 0, 0]}"),
+            ok = grBn.add('button');
+        w.text = title
+        ok.text = str.apply;
+        if (cfg.current[a].length) et.text = cfg.current[a].join('\n')
+        ok.enabled = clearText(et.text).length;
+        et.onChanging = function () {
+            ok.enabled = clearText(this.text).length
+        }
+        ok.onClick = function () {
+            cfg.current[a] = clearText(et.text).split('\n')
+            w.close()
+        }
+        w.show()
+        function clearText(s) {
+            s = s.replace(/^[ \t]+|[ \t]+$/gm, '')
+            s = s.replace(/^\s*[\r\n]/gm, '')
+            s = s.replace(/(?:\r?\n)+$/, '');
+            return s
+        }
     }
     function selectWindow(s, e, filterMode, title) {
         var w = new Window("dialog{orientation:'column',alignChildren:['fill', 'top'],spacing:10,margins:16}"),
@@ -917,14 +1078,17 @@ function dialogWindow(b, s) {
             ok = grBn.add('button', undefined, undefined, { name: 'ok' });
         w.text = title
         ok.text = str.apply;
-        for (var i = 0; i < s.length; i++) list.add('item', s[i])
-        if (filterMode) {
-            for (var i = 0; i < s.length; i++) list.items[i].checked = true
-            for (var i = 0; i < e.length; i++) {
-                for (var x = 0; x < s.length; x++) {
-                    var cur = s[x].toLocaleUpperCase();
-                    if (e[i].toLocaleUpperCase() == cur) {
-                        list.items[x].checked = list.items[x].enabled = false
+        ok.enabled = s && s.length;
+        if (s) {
+            for (var i = 0; i < s.length; i++) list.add('item', s[i])
+            if (filterMode) {
+                for (var i = 0; i < s.length; i++) list.items[i].checked = true
+                for (var i = 0; i < e.length; i++) {
+                    for (var x = 0; x < s.length; x++) {
+                        var cur = s[x].toLocaleUpperCase();
+                        if (e[i].toLocaleUpperCase() == cur) {
+                            list.items[x].checked = list.items[x].enabled = false
+                        }
                     }
                 }
             }
@@ -1058,6 +1222,153 @@ function dialogWindow(b, s) {
             }
         }
     }
+    function apiManagerWindow(tmp) {
+        var w = new Window("dialog{orientation:'column',alignChildren:['fill', 'top'],spacing:10,margins:16}"),
+            list = w.add("listbox{preferredSize:[250,200]}"),
+            grBnApi = w.add("group{orientation:'row',alignChildren:['fill', 'center'],spacing:0,margins:0}"),
+            bnAdd = grBnApi.add('button'),
+            bnEdit = grBnApi.add('button'),
+            bnCopy = grBnApi.add('button'),
+            bnRemove = grBnApi.add('button'),
+            grBn = w.add("group{orientation:'row',alignChildren:['center', 'center'],spacing:10,margins:[0, 10, 0, 0]}"),
+            ok = grBn.add('button', undefined, undefined, { name: 'ok' });
+        w.text = str.externalApi
+        bnAdd.text = "+ " + str.presetAdd
+        bnEdit.text = "✏️ " + str.edit
+        bnCopy.text = "⧉ " + str.copy
+        bnRemove.text = "× " + str.presetDelete
+        ok.text = str.apply
+        list.onClick = function () {
+            bnEdit.enabled = bnRemove.enabled = list.selection
+        }
+        list.onDoubleClick = function () {
+            var cur = findEndpointByName(list.selection.text, tmp.apiEndpoints)
+            if (cur) {
+                endpointEdit(tmp.apiEndpoints[cur], tmp, cur);
+                fillList(list.selection ? list.selection.index : 0)
+            }
+        }
+        fillList()
+        bnEdit.enabled = bnRemove.enabled = list.items.length
+        bnAdd.onClick = function () {
+            endpointEdit(new cfg.newEndpoint(), tmp);
+            fillList(list.selection ? list.selection.index : 0)
+        };
+        bnCopy.onClick = function () {
+            var cur = findEndpointByName(list.selection.text, tmp.apiEndpoints)
+            if (cur) {
+                endpointEdit(tmp.apiEndpoints[cur], tmp);
+                fillList(list.selection ? list.selection.index : 0)
+            }
+        }
+        bnEdit.onClick = function () { list.onDoubleClick() }
+        bnRemove.onClick = function () {
+            if (tmp.apiEndpoints && list.selection) {
+                var cur = findEndpointByName(list.selection.text, tmp.apiEndpoints)
+                if (cur) delete tmp.apiEndpoints[cur]
+                fillList(list.selection.index > 1 ? list.selection.index - 1 : 0)
+                apiChanged = true
+            };
+        }
+        w.show()
+        function fillList(idx) {
+            idx = idx ? idx : 0
+            list.removeAll()
+            if (tmp.apiEndpoints) { for (var a in tmp.apiEndpoints) { list.add('item', tmp.apiEndpoints[a].title) } };
+            if (list.items.length) list.selection = idx
+            list.onClick()
+        }
+        function endpointEdit(o, tmp, idx) {
+            var w = new Window("dialog{orientation:'column',alignChildren:['fill','top'],spacing:10,margins:16,preferredSize:[350,-1]}"),
+                grTitle = w.add("group{orientation:'column',alignChildren:['fill','center'],spacing:0,margins:0}"),
+                stTitle = grTitle.add("statictext"),
+                etTitle = grTitle.add("edittext"),
+                grKey = w.add("group{orientation:'column',alignChildren:['fill','center'],spacing:0,margins:0}"),
+                stKey = grKey.add("statictext"),
+                etKey = grKey.add("edittext"),
+                grUrl = w.add("group{orientation:'column',alignChildren:['fill','center'],spacing:0,margins:0}"),
+                stUrl = grUrl.add("statictext"),
+                etUrl = grUrl.add("edittext"),
+                grStatus = w.add("group{orientation:'column',alignChildren:['fill','center'],spacing:0,margins:0}"),
+                stStatus = grStatus.add("statictext"),
+                etStatus = grStatus.add("edittext"),
+                grSettings = w.add("panel{orientation:'column',alignChildren:['fill','center'],margins:[5,15,5,10]}"),
+                chNegative = grSettings.add("checkbox"),
+                chReference = grSettings.add("checkbox"),
+                grRatio = grSettings.add("group{orientation:'row',alignChildren:['fill','center'],spacing:0,margins:0}"),
+                chRatio = grRatio.add("checkbox{preferredSize:[150,-1]}"),
+                dlRatio = grRatio.add("dropdownlist{preferredSize:[150,-1]}"),
+                chRes = grSettings.add('checkbox'),
+                chTransform = w.add("checkbox"),
+                grButtons = w.add("group{orientation:'row',alignChildren:['center','center'],spacing:10,margins:0}"),
+                bnOk = grButtons.add("button", undefined, undefined, { name: 'ok' });
+            w.text = str.apiEndpoint;
+            stTitle.text = str.apiTitle;
+            stKey.text = str.apiKey;
+            stUrl.text = str.apiEndpointURL;
+            stStatus.text = str.apiStatus;
+            chNegative.text = str.negativePrompt
+            chReference.text = str.imageRef
+            chRatio.text = str.apiAspectRatio
+            chRes.text = str.apiResolution
+            chTransform.text = str.apiDoNotTransform
+            grSettings.text = str.additional
+            dlRatio.add('item', str.autoSelectRatio)
+            dlRatio.add('item', str.autoCalcRatio)
+            bnOk.text = str.apply
+            etTitle.onChanging = function () { bnOk.enabled = this.text.replace(/\s/, '').length }
+            w.onShow = function () {
+                dlRatio.selection = o.aspectRatioMode != undefined ? o.aspectRatioMode : 0;
+                chRatio.value = dlRatio.enabled = o.aspectRatio
+                chRes.value = o.resolution
+                chTransform.value = o.doNotTransform
+                etTitle.active = true
+                etTitle.text = o.title
+                etKey.text = o.apiKey
+                etUrl.text = o.apiEndpoint
+                etStatus.text = o.apiStatus
+                chNegative.value = o.negativePrompt
+                chReference.value = o.reference
+                etTitle.onChanging()
+            }
+            chRatio.onClick = function () { dlRatio.enabled = this.value }
+            bnOk.onClick = function () {
+                var confirmed = true,
+                    title = etTitle.text.replace(/^[\s'"]+|[\s'"]+$/g, '');
+                if (!idx) {
+                    if (!tmp.apiEndpoints) tmp.apiEndpoints = {};
+                    var id = Math.floor(Math.random() * 1e8).toString(36),
+                        cur = findEndpointByName(title, tmp.apiEndpoints);
+                    if (cur) {
+                        if (confirm(localize(str.errEndpoint, title, false))) {
+                            id = cur
+                        } else { confirmed = false }
+                    }
+                } else {
+                    $.writeln('here')
+                    var id = idx
+                    if (tmp.apiEndpoints[idx].title != title)
+                        if (tmp.presets["API: \t" + tmp.apiEndpoints[idx].title]) tmp.presets["API: \t" + title] = tmp.presets["API: \t" + tmp.apiEndpoints[idx].title]
+                }
+                if (confirmed) {
+                    if (!tmp.apiEndpoints[id]) tmp.apiEndpoints[id] = {};
+                    tmp.apiEndpoints[id].title = title
+                    tmp.apiEndpoints[id].apiKey = etKey.text.replace(/^[\s'"]+|[\s'"]+$/g, '')
+                    tmp.apiEndpoints[id].apiEndpoint = etUrl.text.replace(/^[\s'"]+|[\s'"]+$/g, '')
+                    tmp.apiEndpoints[id].apiStatus = etStatus.text.replace(/^[\s'"]+|[\s'"]+$/g, '')
+                    tmp.apiEndpoints[id].negativePrompt = chNegative.value
+                    tmp.apiEndpoints[id].reference = chReference.value
+                    tmp.apiEndpoints[id].resolution = chRes.value
+                    tmp.apiEndpoints[id].aspectRatio = chRatio.value
+                    tmp.apiEndpoints[id].aspectRatioMode = dlRatio.selection.index
+                    tmp.apiEndpoints[id].doNotTransform = chTransform.value
+                    apiChanged = true
+                    w.close();
+                }
+            }
+            w.show();
+        }
+    }
 }
 function mathTrunc(val) {
     return val < 0 ? Math.ceil(val) : Math.floor(val);
@@ -1071,13 +1382,25 @@ function autoScale(b) {
     if (less >= cfg.autoResizeLess && above <= cfg.autoResizeAbove) scale = 1
     return (scale > 4 ? 4 : scale)
 }
-function cloneObject(o1, o2) {
-    var tmp = o1.reflect.properties;
-    for (var a in tmp) {
-        var k = tmp[a].name.toString();
-        if (k == '__proto__' || k == '__count__' || k == '__class__' || k == 'reflect') continue;
-        if (typeof o1[k] != 'object') { o2[k] = o1[k] } else if (o1[k] instanceof Array) { o2[k] = o1[k].slice() }
+function cloneObject(source, target) {
+    if (source === null || typeof source !== 'object') {
+        return source;
     }
+    var key, i, len;
+    if (source instanceof Array) {
+        target = target || new Array(source.length);
+        for (i = 0, len = source.length; i < len; i++) {
+            target[i] = cloneObject(source[i], target[i]);
+        }
+        return target;
+    }
+    target = target || {};
+    for (key in source) {
+        if (source.hasOwnProperty(key)) {
+            target[key] = cloneObject(source[key], target[key]);
+        }
+    }
+    return target;
 }
 function checkSelection(result) {
     if (apl.getProperty('numberOfDocuments')) {
@@ -1114,92 +1437,114 @@ function checkSelection(result) {
     }
     return
 }
-function filteredList(a, b) {
+function filteredList(a, b, addApi) {
     var result = [];
-    for (var i = 0; i < a.length; i++) {
-        var cur = a[i].toLocaleUpperCase(), found = false;
-        for (var x = 0; x < b.length; x++) {
-            if (cur == b[x].toLocaleUpperCase()) {
-                found = true;
-                break;
+    if (addApi) {
+        if (cfg.apiEndpoints) {
+            for (var c in cfg.apiEndpoints) {
+                result.push('API: \t' + cfg.apiEndpoints[c].title)
             }
         }
-        if (!found) result.push(a[i])
+    }
+    if (a) {
+        for (var i = 0; i < a.length; i++) {
+            var cur = a[i].toLocaleUpperCase(), found = false;
+            for (var x = 0; x < b.length; x++) {
+                if (cur == b[x].toLocaleUpperCase()) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) result.push(a[i])
+        }
     }
     return result;
+}
+function findEndpointByName(s, endpoints) {
+    s = s.toLocaleUpperCase();
+    for (var a in endpoints) {
+        if (endpoints[a].title.toLocaleUpperCase() == s) {
+            return a;
+        }
+    }
+    return null;
 }
 function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
     this.forgeUI = false;
     var SdCfg = this;
     SdCfg.extensions = {};
     SdCfg.extensions[EXT_KONTEXT] = false;
+    SdCfg.apiMode = false;
     this.initialize = function () {
         var lockFile = new File(Folder.temp + "/sd_helper.lock");
         if (!lockFile.exists || !checkConnection(apiHost, portSend)) {
             if (lockFile.exists) lockFile.remove();
             app.doForcedProgress('Starting python server... ', 'startServer()')
         }
-        var result = sendMessage({ type: 'get', message: 'sdapi/v1/options' }, true);
-        if (result) {
-            SdCfg['sd_model_checkpoint'] = result['sd_model_checkpoint']
-            SdCfg['sd_vae'] = result['sd_vae']
-            if (result['forge_additional_modules']) {
-                SdCfg.forgeUI = true;
-                SdCfg['forge_additional_modules'] = [];
-                for (var i = 0; i < result['forge_additional_modules'].length; i++) SdCfg['forge_additional_modules'].push(result['forge_additional_modules'][i].replace(/\\/g, '\\\\'))
-                SdCfg['forge_inference_memory'] = result['forge_inference_memory']
-            }
-        } else { throw new Error(str.errSettings + 'sdapi/v1/options' + str.errTimeout) }
-        var result = sendMessage({ type: 'get', message: 'sdapi/v1/sd-models' }, true);
-        if (result) {
-            SdCfg['sd-models'] = []
-            if (!result.length) throw new Error(str.errList + 'sdapi/v1/sd-models' + str.errExists)
-            for (var i = 0; i < result.length; i++) SdCfg['sd-models'].push(result[i].title.replace(/\s\[.+\]$/, ''))
-            SdCfg['sd-models'].sort()
-        } else { throw new Error(str.errSettings + 'sdapi/v1/sd-models' + str.errTimeout) }
-        var vaes = ['sdapi/v1/sd-vae', 'sdapi/v1/sd-modules']
-        cfg.vae = (SdCfg.forgeUI ? vaes[1] : vaes[0])
-        var result = sendMessage({ type: 'get', message: cfg.vae }, true);
-        if (result) {
-            var defaultVaes = [];
-            if (!SdCfg.forgeUI) defaultVaes.push('Automatic')
-            defaultVaes.push('none')
-            if (SdCfg.forgeUI) {
-                SdCfg['sd_modules'] = [];
-                for (var i = 0; i < result.length; i++) SdCfg['sd_modules'].push(result[i].filename.replace(/\\/g, '\\\\'))
-            }
-            var vaes = [];
-            for (var i = 0; i < result.length; i++) vaes.push(result[i].model_name)
-            vaes.sort();
-            SdCfg['sd-vaes'] = [].concat(defaultVaes, vaes)
-        } else { throw new Error(str.errSettings + cfg.vae + str.errTimeout) }
-        var result = sendMessage({ type: 'get', message: 'sdapi/v1/schedulers' }, true);
-        if (result) {
-            SdCfg['schedulers'] = []
-            if (!result.length) throw new Error(str.errList + 'sdapi/v1/schedulers' + str.errExists)
-            for (var i = 0; i < result.length; i++) SdCfg['schedulers'].push(result[i].label)
-        } else { throw new Error(str.errSettings + 'sdapi/v1/schedulers' + str.errTimeout) }
-        var result = sendMessage({ type: 'get', message: 'sdapi/v1/samplers' }, true);
-        if (result) {
-            SdCfg['samplers'] = []
-            if (!result.length) throw new Error(str.errList + 'sdapi/v1/samplers' + str.errExists)
-            for (var i = 0; i < result.length; i++) SdCfg['samplers'].push(result[i].name)
-        } else { throw new Error(str.errSettings + 'sdapi/v1/samplers' + str.errTimeout) }
-        if (SdCfg.forgeUI) {
-            var result = sendMessage({ type: 'get', message: 'sdapi/v1/extensions' }, true);
+        var result = sendMessage({ type: 'ping', message: {} }, true)
+        SdCfg.apiMode = !result.message
+        if (!SdCfg.apiMode) {
+            var result = sendMessage({ type: 'get', message: 'sdapi/v1/options' }, true);
             if (result) {
-                for (var i = 0; i < result.length; i++) if (SdCfg.extensions[result[i].name] != undefined) SdCfg.extensions[result[i].name] = result[i].enabled
-            } else { throw new Error(str.errSettings + 'sdapi/v1/extensions' + str.errTimeout) }
+                SdCfg['sd_model_checkpoint'] = result['sd_model_checkpoint']
+                SdCfg['sd_vae'] = result['sd_vae']
+                if (result['forge_additional_modules']) {
+                    SdCfg.forgeUI = true;
+                    SdCfg['forge_additional_modules'] = [];
+                    for (var i = 0; i < result['forge_additional_modules'].length; i++) SdCfg['forge_additional_modules'].push(result['forge_additional_modules'][i].replace(/\\/g, '\\\\'))
+                    SdCfg['forge_inference_memory'] = result['forge_inference_memory']
+                }
+            } else { throw new Error(str.errSettings + 'sdapi/v1/options' + str.errTimeout) }
+            var result = sendMessage({ type: 'get', message: 'sdapi/v1/sd-models' }, true);
+            if (result) {
+                SdCfg['sd-models'] = []
+                if (!result.length) throw new Error(str.errList + 'sdapi/v1/sd-models' + str.errExists)
+                for (var i = 0; i < result.length; i++) SdCfg['sd-models'].push(result[i].title.replace(/\s\[.+\]$/, ''))
+                SdCfg['sd-models'].sort()
+            } else { throw new Error(str.errSettings + 'sdapi/v1/sd-models' + str.errTimeout) }
+            var vaes = ['sdapi/v1/sd-vae', 'sdapi/v1/sd-modules']
+            cfg.vae = (SdCfg.forgeUI ? vaes[1] : vaes[0])
+            var result = sendMessage({ type: 'get', message: cfg.vae }, true);
+            if (result) {
+                var defaultVaes = [];
+                if (!SdCfg.forgeUI) defaultVaes.push('Automatic')
+                defaultVaes.push('none')
+                if (SdCfg.forgeUI) {
+                    SdCfg['sd_modules'] = [];
+                    for (var i = 0; i < result.length; i++) SdCfg['sd_modules'].push(result[i].filename.replace(/\\/g, '\\\\'))
+                }
+                var vaes = [];
+                for (var i = 0; i < result.length; i++) vaes.push(result[i].model_name)
+                vaes.sort();
+                SdCfg['sd-vaes'] = [].concat(defaultVaes, vaes)
+            } else { throw new Error(str.errSettings + cfg.vae + str.errTimeout) }
+            var result = sendMessage({ type: 'get', message: 'sdapi/v1/schedulers' }, true);
+            if (result) {
+                SdCfg['schedulers'] = []
+                if (!result.length) throw new Error(str.errList + 'sdapi/v1/schedulers' + str.errExists)
+                for (var i = 0; i < result.length; i++) SdCfg['schedulers'].push(result[i].label)
+            } else { throw new Error(str.errSettings + 'sdapi/v1/schedulers' + str.errTimeout) }
+            var result = sendMessage({ type: 'get', message: 'sdapi/v1/samplers' }, true);
+            if (result) {
+                SdCfg['samplers'] = []
+                if (!result.length) throw new Error(str.errList + 'sdapi/v1/samplers' + str.errExists)
+                for (var i = 0; i < result.length; i++) SdCfg['samplers'].push(result[i].name)
+            } else { throw new Error(str.errSettings + 'sdapi/v1/samplers' + str.errTimeout) }
+            if (SdCfg.forgeUI) {
+                var result = sendMessage({ type: 'get', message: 'sdapi/v1/extensions' }, true);
+                if (result) {
+                    for (var i = 0; i < result.length; i++) if (SdCfg.extensions[result[i].name] != undefined) SdCfg.extensions[result[i].name] = result[i].enabled
+                } else { throw new Error(str.errSettings + 'sdapi/v1/extensions' + str.errTimeout) }
+            }
+            var result = sendMessage({ type: 'get', message: 'sdapi/v1/loras' }, true);
+            if (result) {
+                SdCfg['loras'] = [];
+                for (var i = 0; i < result.length; i++) SdCfg['loras'].push(result[i].name)
+            } else { throw new Error(str.errSettings + 'sdapi/v1/loras' + str.errTimeout) }
         }
-        var result = sendMessage({ type: 'get', message: 'sdapi/v1/loras' }, true);
-        if (result) {
-            SdCfg['loras'] = [];
-            for (var i = 0; i < result.length; i++) SdCfg['loras'].push(result[i].name)
-        } else { throw new Error(str.errSettings + 'sdapi/v1/loras' + str.errTimeout) }
         return true
     }
     function startServer() {
-        if (!checkConnection(sdHost, sdPort)) throw new Error(str.errConnection + sdHost + ':' + sdPort + '\nStable Diffusion ' + str.errAnswer);
         if (!apiFile.exists) { apiFile = new File(apiFile.fsName.substring(0, apiFile.fsName.length - 1)); }
         if (!apiFile.exists) throw new Error(str.module + apiFile.fsName + str.notFound)
         apiFile.execute();
@@ -1218,25 +1563,35 @@ function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
         if (sendMessage({ type: 'update', message: message }, true, SD_RELOAD_CHECKPOINT_DELAY)) return true
         return false;
     }
-    this.initPayload = function (payload, result) {
-        var answer = sendMessage({ type: 'payload', message: payload }, true, SD_RELOAD_CHECKPOINT_DELAY, cfg.sd_model_checkpoint.replace(/\.[^\.]+$/, ''), SD_RELOAD_CHECKPOINT_DELAY)
+    this.localPayload = function (payload, result) {
+        var answer = sendMessage({ type: 'local', message: payload }, true, SD_RELOAD_CHECKPOINT_DELAY, cfg.sd_model_checkpoint.replace(/\.[^\.]+$/, ''), SD_RELOAD_CHECKPOINT_DELAY)
         if (answer instanceof Object) {
             if (answer['type'] == 'answer') {
                 result.message = answer['message']
                 return true
-            }
+            } else if (answer['type'] == 'error') throw new Error(answer['message'])
         } else if (answer == false) {
             throw new Error(str.errCancelling)
         } else { throw new Error(str.errTimeout) }
     }
-
     this.waitForPayload = function (result) {
         var answer = sendMessage({}, true, SD_GENERATION_DELAY, str.progressGenerate, dl.getDelay(cfg.sd_model_checkpoint), true)
         if (answer instanceof Object) {
             if (answer['type'] == 'answer') {
                 result.message = answer['message']
                 return true
-            }
+            } else if (answer['type'] == 'error') throw new Error(answer['message'])
+        } else if (answer == false) {
+            throw new Error(str.errCancelling)
+        } else { throw new Error(str.errTimeout) }
+    }
+    this.apiPayload = function (payload, result) {
+        var answer = sendMessage({ type: 'api', message: payload }, true, SD_GENERATION_DELAY, cfg.sd_model_checkpoint.replace(/\.[^\.]+$/, ''), dl.getDelay(cfg.sd_model_checkpoint), true)
+        if (answer instanceof Object) {
+            if (answer['type'] == 'answer') {
+                result.message = answer['message']
+                return true
+            } else if (answer['type'] == 'error') throw new Error(answer['message'])
         } else if (answer == false) {
             throw new Error(str.errCancelling)
         } else { throw new Error(str.errTimeout) }
@@ -1592,6 +1947,12 @@ function Config() {
         this.autoResize = true
         this.resize = 1
         this.manualScale = 1
+        this.apiNegative = false
+        this.apiReference = false
+        this.aspectRatiosList = []
+        this.aspectRatioSelected = ''
+        this.resolutionList = []
+        this.resolutionSelected = ''
     }
     var settingsObj = this;
     this.current = new settingsObj.checkpointSettings();
@@ -1612,9 +1973,27 @@ function Config() {
     this.forge_inference_memory = 1024
     this.forge_inference_memory_default = 1024
     this.forge_imageStitch = false
+    this.apiEndpoints = {}
     this.negativePreset = {
         'SD': '(deformed, distorted, disfigured:1.3), poorly drawn, bad anatomy, wrong anatomy, extra limb, missing limb, floating limbs, (mutated hands and fingers:1.4), disconnected limbs, mutation, mutated, ugly, disgusting, blurry, amputation',
         'Realistic': '(deformed iris, deformed pupils, semi-realistic, cgi, 3d, render, sketch, cartoon, drawing, anime), text, cropped, out of frame, worst quality, low quality, jpeg artifacts, ugly, duplicate, morbid, mutilated, extra fingers, mutated hands, poorly drawn hands, poorly drawn face, mutation, deformed, blurry, dehydrated, bad anatomy, bad proportions, extra limbs, cloned face, disfigured, gross proportions, malformed limbs, missing arms, missing legs, extra arms, extra legs, fused fingers, too many fingers, long neck'
+    }
+    this.cleanup = 0;
+    this.defaultApiRatios = ["1:1", "16:9", "2:1", "2:3", "21:9", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16"];
+    this.defaultResolutions = ['1K', '2K', '4k']
+    this.newEndpoint = function () {
+        var o = {};
+        o.title = ''
+        o.apiKey = ''
+        o.apiEndpoint = ''
+        o.apiStatus = ''
+        o.negativePrompt = false
+        o.reference = false
+        o.aspectRatio = false
+        o.aspectRatioMode = 0
+        o.resolution = false
+        o.doNotTransform = false
+        return o
     }
     this.getSettings = function (fromAction) {
         if (fromAction) { var d = playbackParameters }
@@ -1646,6 +2025,7 @@ function Config() {
         }
     }
     this.putSettings = function (toAction) {
+        if (!toAction && ++settingsObj.cleanup > 500) cleanup(settingsObj)
         settingsObj.presets[settingsObj.sd_model_checkpoint] = settingsObj.current
         var d = objectToDescriptor(settingsObj)
         if (toAction) playbackParameters = d else saveToFile(d)
@@ -1726,6 +2106,22 @@ function Config() {
         settingsObj[context] = {}
         for (var i = 0; i < output.length; i++) settingsObj[context][output[i].key] = output[i].val
         this.putSettings();
+    }
+    function cleanup(p) {
+        var o = {};
+        if (SD['sd-models']) {
+            for (var i = 0; i < SD['sd-models'].length; i++) {
+                var cur = SD['sd-models'][i];
+                if (p.presets[cur]) o[cur] = p.presets[cur]
+            }
+        }
+        if (p.apiEndpoints) {
+            for (var i in p.apiEndpoints) {
+                var cur = "API: \t" + p.apiEndpoints[i].title;
+                if (p.presets[cur]) o[cur] = p.presets[cur]
+            }
+        }
+        p.presets = o;
     }
     function getFromFile() {
         var d = new ActionDescriptor(),
@@ -1915,31 +2311,51 @@ function Statistics() {
     }
 }
 function Locale() {
+    this.additional = { ru: "Дополнительные параметры", en: "Additional options" }
     this.actionMode = { ru: 'Не записывать параметры генерации в экшен', en: 'Do not record generation settings to action' }
     this.advanced = { ru: 'Расширенные настройки', en: 'Advanced settings' }
+    this.autoSelectRatio = { ru: 'Авто выбор из списка', en: 'Auto select from list' }
+    this.autoCalcRatio = { ru: 'Авто расчёт фактического', en: 'Auto calculate' }
+    this.apiEndpoint = { ru: 'Точка доступа API', en: 'API endpoint' }
+    this.apiEndpointURL = { ru: 'URL точки доступа', en: 'Endpoint URL' }
+    this.apiKey = { ru: 'API ключ', en: 'API key' }
+    this.apiStatus = { ru: 'URL статуса (опционально)', en: 'Status URL (optional)' }
+    this.apiTitle = { ru: 'Название', en: 'Title' }
+    this.apiAspectRatio = { ru: 'Cоотношение сторон', en: 'Aspect ratio' }
+    this.apiResolution = { ru: 'Разрешение генерации', en: 'Generation resolition' }
+    this.apiDoNotTransform = { ru: 'Подгонять под размер выделения (сохраняя пропорции)', en: 'Fit result to selection (keep aspect ratio)' }
     this.apply = { ru: 'Применить настройки', en: 'Apply settings' }
     this.autoResize = { ru: 'Авто масштаб', en: 'Auto resize' }
     this.autoResizeOptions = { ru: 'Параметры авто масштаба', en: 'Auto resize options' }
+    this.browse = { ru: 'Обзор... ', en: 'Browse...' }
     this.brush = { ru: 'Настройки кисти', en: 'Brush settings' }
     this.cfgScale = 'CFG Scale'
     this.checkpoint = 'Checkpoint'
+    this.copy = { ru: 'Копировать', en: 'Copy' }
     this.distilledCfgScale = 'Distilled CFG Scale'
+    this.edit = { ru: 'Редактировать', en: 'Edit' }
     this.errAnswer = { ru: 'не отвечает!', en: 'not answering!' }
+    this.errCancelling = { ru: 'Генерация отменена!', en: 'User cancelled generation' }
     this.errConnection = { ru: 'Невозможно установить соединение c ', en: 'Impossible to establish a connection with ' }
     this.errDefaultPreset = { ru: 'Используйте другое имя при создании пресета!', en: 'Use a different name when creating a preset!' }
+    this.errEndpoint = { ru: 'Точка доступа с именем \'%1\' уже существует. Перезаписать?', en: 'A endpoint with the name \'%1\' already exists. Overwrite?' }
     this.errExists = { ru: ' пуст!\nУбедитесь что они добавлены в папку Stable Diffusion', en: ' is empty!\nMake sure that it exists in the Stable Diffusion folder' }
     this.errGenerating = { ru: 'Произошла ошибка в процессе генерации изображения!', en: 'An error occurred in the process of generating the image!' }
     this.errList = { ru: 'Список ', en: 'List ' }
+    this.errMode = { ru: 'Stable Diffusion работает только с RGB документами!', en: 'Stable Diffusion works only with RGB documents!' }
     this.errPreset = { ru: 'Набор с именем \'%1\' уже существует. Перезаписать?', en: 'A set with the name \'%1\' already exists. Overwrite?' }
     this.errSettings = { ru: 'Невозможно получить параметры ', en: 'Impossible to get the settings ' }
     this.errTimeout = { ru: '\nПревышено время ожидания ответа!', en: '\nExceeding the response time!' }
     this.errTranslate = { ru: 'Модуль перевода недоступен!', en: 'The translation module is not available!' }
     this.errUpdating = { ru: 'Переключение на выбранную модель завершилось с ошибкой!\nПревышено время ожидания ответа!', en: 'Switching to the selected checkpoint ended with the error!\nExceeded the response time!' }
-    this.errMode = { ru: 'Stable Diffusion работает только с RGB документами!', en: 'Stable Diffusion works only with RGB documents!' }
-    this.errCancelling = { ru: 'Генерация отменена!', en: 'User cancelled generation' }
+    this.externalApi = { ru: 'Вшнение API', en: 'External API' }
+    this.externalApiManagement = { ru: 'Управление точками доступа API', en: 'API endpoint management' }
     this.fill = 'Inpainting fill mode'
     this.flatten = { ru: 'Склеивать слои перед генерацией', en: 'Flatten layers before generation' }
     this.generate = { ru: 'Генерация', en: 'Generate' }
+    this.imageRef = { ru: 'Reference image', en: 'Reference image' }
+    this.imageStitch = { ru: 'imageStitch (extension) для референса', en: 'Use imageStitch (extension) for reference' }
+    this.lora = 'LoRA'
     this.max = { ru: 'Максимум', en: 'Maximum' }
     this.min = { ru: 'Минимум', en: 'Minimum' }
     this.module = { ru: 'Модуль sd-webui-api ', en: 'Module sd-webui-api ' }
@@ -1963,17 +2379,13 @@ function Locale() {
     this.schedule = 'Schedule type'
     this.selectBrush = { ru: 'Активировать кисть после генерации', en: 'Select brush after processing' }
     this.selection = { ru: 'Выделение: ', en: 'Selection: ' }
-    this.setMatrixMemory = { ru: 'Установить размер памяти для вычисления матриц:', en: 'Set memory size for matrix computation:' }
+    this.setMatrixMemory = { ru: 'Размер памяти для вычисления матриц:', en: 'Set memory size for matrix computation:' }
     this.setMemory = 'Inference memory (Mb):'
     this.settings = { ru: 'Настройки скрипта', en: 'Script settings' }
     this.showItems = { ru: 'Показывать опции', en: 'Show items' }
     this.steps = 'Sampling steps'
     this.strength = 'Denoising strength'
     this.translate = { ru: 'Перевести: ', en: 'Translate: ' }
-    this.lora = 'LoRA'
     this.vae = 'VAE'
-    this.imageRef = { ru: 'Reference image', en: 'Reference image' }
-    this.browse = { ru: 'Обзор... ', en: 'Browse...' }
     this.wxh = { ru: 'ширина и высота (px)', en: 'width and height (px)' }
-    this.imageStitch = { ru: 'Использовать imageStitch (extension) для референса', en: 'Use imageStitch (extension) for reference' }
 }
