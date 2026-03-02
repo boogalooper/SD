@@ -1271,7 +1271,7 @@ function dialogWindow(b, s) {
             };
         }
         w.onShow = function () {
-            var cur  = list.find(cfg.sd_model_checkpoint.replace(/^API: \t/, ''))
+            var cur = list.find(cfg.sd_model_checkpoint.replace(/^API: \t/, ''))
             if (cur) list.selection = cur
         }
         w.show()
@@ -2318,15 +2318,15 @@ function Locale() {
     this.additional = { ru: "Дополнительные параметры", en: "Additional options" }
     this.actionMode = { ru: 'Не записывать параметры генерации в экшен', en: 'Do not record generation settings to action' }
     this.advanced = { ru: 'Расширенные настройки', en: 'Advanced settings' }
-    this.autoSelectRatio = { ru: 'Авто выбор из списка', en: 'Auto select from list' }
-    this.autoCalcRatio = { ru: 'Авто расчёт фактического', en: 'Auto calculate' }
+    this.autoSelectRatio = { ru: 'Автовыбор из списка', en: 'Auto select from list' }
+    this.autoCalcRatio = { ru: 'Автоматический расчёт', en: 'Auto calculate' }
     this.apiEndpoint = { ru: 'Точка доступа API', en: 'API endpoint' }
     this.apiEndpointURL = { ru: 'URL точки доступа', en: 'Endpoint URL' }
-    this.apiKey = { ru: 'API ключ', en: 'API key' }
+    this.apiKey = { ru: 'API-ключ', en: 'API key' }
     this.apiStatus = { ru: 'URL статуса (опционально)', en: 'Status URL (optional)' }
     this.apiTitle = { ru: 'Название', en: 'Title' }
-    this.apiAspectRatio = { ru: 'Cоотношение сторон', en: 'Aspect ratio' }
-    this.apiResolution = { ru: 'Разрешение генерации', en: 'Generation resolition' }
+    this.apiAspectRatio = { ru: 'Соотношение сторон', en: 'Aspect ratio' }
+    this.apiResolution = { ru: 'Разрешение генерации', en: 'Generation resolution' }
     this.apiDoNotTransform = { ru: 'Подгонять под размер выделения (сохраняя пропорции)', en: 'Fit result to selection (keep aspect ratio)' }
     this.apply = { ru: 'Применить настройки', en: 'Apply settings' }
     this.autoResize = { ru: 'Авто масштаб', en: 'Auto resize' }
@@ -2342,14 +2342,14 @@ function Locale() {
     this.errCancelling = { ru: 'Генерация отменена!', en: 'User cancelled generation' }
     this.errConnection = { ru: 'Невозможно установить соединение c ', en: 'Impossible to establish a connection with ' }
     this.errDefaultPreset = { ru: 'Используйте другое имя при создании пресета!', en: 'Use a different name when creating a preset!' }
-    this.errEndpoint = { ru: 'Точка доступа с именем \'%1\' уже существует. Перезаписать?', en: 'A endpoint with the name \'%1\' already exists. Overwrite?' }
-    this.errExists = { ru: ' пуст!\nУбедитесь что они добавлены в папку Stable Diffusion', en: ' is empty!\nMake sure that it exists in the Stable Diffusion folder' }
+    this.errEndpoint = { ru: 'Точка доступа с именем \'%1\' уже существует. Перезаписать?', en: 'An endpoint with the name \'%1\' already exists. Overwrite?' }
+    this.errExists = { ru: ' пуст!\Убедитесь что они добавлены в папку Stable Diffusion', en: ' is empty!\nMake sure that it exists in the Stable Diffusion folder' }
     this.errGenerating = { ru: 'Произошла ошибка в процессе генерации изображения!', en: 'An error occurred in the process of generating the image!' }
     this.errList = { ru: 'Список ', en: 'List ' }
     this.errMode = { ru: 'Stable Diffusion работает только с RGB документами!', en: 'Stable Diffusion works only with RGB documents!' }
     this.errPreset = { ru: 'Набор с именем \'%1\' уже существует. Перезаписать?', en: 'A set with the name \'%1\' already exists. Overwrite?' }
     this.errSettings = { ru: 'Невозможно получить параметры ', en: 'Impossible to get the settings ' }
-    this.errTimeout = { ru: '\nПревышено время ожидания ответа!', en: '\nExceeding the response time!' }
+    this.errTimeout = { ru: '\nПревышено время ожидания ответа!', en: '\nResponse time exceeded!' }
     this.errTranslate = { ru: 'Модуль перевода недоступен!', en: 'The translation module is not available!' }
     this.errUpdating = { ru: 'Переключение на выбранную модель завершилось с ошибкой!\nПревышено время ожидания ответа!', en: 'Switching to the selected checkpoint ended with the error!\nExceeded the response time!' }
     this.externalApi = { ru: 'Вшнение API', en: 'External API' }
