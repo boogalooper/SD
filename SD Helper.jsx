@@ -1270,6 +1270,10 @@ function dialogWindow(b, s) {
                 apiChanged = true
             };
         }
+        w.onShow = function () {
+            var cur  = list.find(cfg.sd_model_checkpoint.replace(/^API: \t/, ''))
+            if (cur) list.selection = cur
+        }
         w.show()
         function fillList(idx) {
             idx = idx ? idx : 0
