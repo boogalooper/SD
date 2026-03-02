@@ -331,7 +331,7 @@ function main(selection) {
             dW = (selection.bounds.right - selection.bounds.left) / (placedBounds.right - placedBounds.left),
             dH = (selection.bounds.bottom - selection.bounds.top) / (placedBounds.bottom - placedBounds.top),
             k = dW > dH ? dH : dW;
-        if (!apiMode && !apiSettings.doNotTransform) { lr.transform(dW * 100, dH * 100) } else { lr.transform(k * 100, k * 100); }
+        if (apiMode && apiSettings.doNotTransform) { lr.transform(k * 100, k * 100); } else { lr.transform(dW * 100, dH * 100) }
         if (cfg.rasterizeImage) { try { lr.rasterize() } catch (e) { } }
         lr.setName(LAYER_NAME)
         doc.makeSelectionFromLayer('mask', selection.junk)
