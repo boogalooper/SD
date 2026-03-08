@@ -17,10 +17,6 @@ import requests
 # Отключаем print
 builtins.print = lambda *args, **kwargs: None
 
-# ==============================
-# НАСТРОЙКИ
-# ==============================
-
 API_HOST = "127.0.0.1"
 API_PORT_LISTEN = 6320
 API_PORT_SEND = 6321
@@ -37,10 +33,6 @@ worker_thread = None
 worker_stop_event = threading.Event()
 current_stop_event = None
 ack_event = threading.Event()
-
-# ==============================
-# ВСПОМОГАТЕЛЬНЫЕ
-# ==============================
 
 
 def timestamp():
@@ -76,11 +68,6 @@ def send_data_to_jsx(message):
         return False
 
 
-# ==============================
-# УСТАНОВКА МОДУЛЕЙ
-# ==============================
-
-
 def check_module(module_name):
     try:
         __import__(module_name)
@@ -101,11 +88,6 @@ def install_module(module_name):
         return False
 
 
-# ==============================
-# TIMEOUT
-# ==============================
-
-
 def timeout_watcher():
     global last_request_time
     while True:
@@ -115,11 +97,6 @@ def timeout_watcher():
             if os.path.exists(LOCK_PATH):
                 os.remove(LOCK_PATH)
             os._exit(0)
-
-
-# ==============================
-# INTERRUPT (безопасный)
-# ==============================
 
 
 def safe_interrupt():
@@ -141,11 +118,6 @@ def safe_interrupt():
         threading.Thread(target=worker, daemon=True).start()
     except Exception as e:
         print(f"[WARN] Ошибка запуска safe_interrupt: {e}")
-
-
-# ==============================
-# УСТОЙЧИВОСТЬ К ЗАНЯТОСТИ FORGE
-# ==============================
 
 
 def wait_until_sd_ready(timeout=60):
@@ -191,9 +163,6 @@ def post_with_retry(req, retries=3, delay=2):
                 raise
 
 
-# ==============================
-# ГЕНЕРАЦИЯ
-# ==============================
 def mask_large_data(obj, max_len=100):
     """
     Рекурсивно создает копию объекта, заменяя длинные строки на '<DATA OMITTED>'.
@@ -330,84 +299,196 @@ def call_generate_api(api_endpoint, payload, out_dir, stop_event, skipInit):
         generation_done.set()
 
 
+def find_image(obj):
+    """Рекурсивный поиск data:image"""
+    if isinstance(obj, dict):
+        for v in obj.values():
+            result = find_image(v)
+            if result:
+                return result
+    elif isinstance(obj, list):
+        for v in obj:
+            result = find_image(v)
+            if result:
+                return result
+    elif isinstance(obj, str):
+        if obj.startswith("data:image"):
+            return obj
+    return None
+
+
 def call_external_api(data, out_dir, stop_event):
+
+    provider = data.get("provider", "classic")
+
     headers = {"Authorization": f"Bearer {data['apiKey']}"}
 
-    # Формируем form-data
-    files = [("image_urls[]", open(data["input"], "rb"))]
-    if data.get("reference"):
-        files.append(("image_urls[]", open(data["reference"], "rb")))
-
-    num_images = str(len(files))
-
-    form_data = {
-        "prompt": str(data["prompt"]),
-        "num_images": num_images,
-        "output_format": "png",
-        "callback_url": None,
-    }
-
-    if data.get("resolution"):
-        form_data["resolution"] = data["resolution"]
-
-    if data.get("aspect_ratio"):
-        form_data["aspect_ratio"] = data["aspect_ratio"]
     try:
-        print("[INFO] Отправка запроса на внешнее API...")
-        resp = requests.post(
-            data["apiEndpoint"],
-            headers=headers,
-            data=form_data,
-            files=files,
-            timeout=180,
-        )
-        resp_json = resp.json()
-        print(f"[INFO] Ответ API: {resp_json}")
 
-        if resp_json.get("error"):
-            raise Exception(f"Invalid API response: {resp_json}")
+        print(f"[API] provider={provider}")
 
-        request_id = resp_json["request_id"]
+        if provider == "classic":
 
-        # Ожидание результата
-        while not stop_event.is_set():
-            status_resp = requests.get(
-                data["apiStatus"].format(request_id), headers=headers, timeout=30
+            files = [("image_urls[]", open(data["input"], "rb"))]
+
+            if data.get("reference"):
+                files.append(("image_urls[]", open(data["reference"], "rb")))
+
+            form_data = {
+                "prompt": str(data["prompt"]),
+                "num_images": str(len(files)),
+                "output_format": "png",
+                "callback_url": None,
+                "is_sync": not bool(data.get("apiStatus")),
+            }
+
+            if data.get("resolution"):
+                form_data["resolution"] = data["resolution"]
+
+            if data.get("aspect_ratio"):
+                form_data["aspect_ratio"] = data["aspect_ratio"]
+
+            print("[API] sending request")
+
+            resp = requests.post(
+                data["apiEndpoint"],
+                headers=headers,
+                data=form_data,
+                files=files,
+                timeout=180,
             )
-            status_json = status_resp.json()
-            status = status_json.get("status")
 
-            if status == "success":
-                result_url = status_json["result"][0]
-                break
-            elif status == "error":
-                raise Exception(f"Ошибка генерации: {status_json}")
-            time.sleep(3)
+            resp.raise_for_status()
+            resp_json = resp.json()
+
+            # ---------- sync ----------
+
+            if not data.get("apiStatus"):
+
+                result_url = resp_json["result"][0]
+
+            # ---------- async ----------
+
+            else:
+
+                request_id = resp_json["request_id"]
+
+                while not stop_event.is_set():
+
+                    status_resp = requests.get(
+                        data["apiStatus"].format(request_id),
+                        headers=headers,
+                        timeout=30,
+                    )
+
+                    status_json = status_resp.json()
+
+                    status = status_json.get("status")
+
+                    if status == "success":
+                        result_url = status_json["result"][0]
+                        break
+
+                    if status == "error":
+                        raise Exception(status_json)
+
+                    time.sleep(3)
+
+                else:
+                    print("[API] cancelled")
+                    return
+
+            print("[API] downloading result")
+
+            img_bytes = requests.get(result_url).content
+
+            output_path = os.path.join(out_dir, "output.png")
+
+            with open(output_path, "wb") as f:
+                f.write(img_bytes)
+
+            for _, f in files:
+                f.close()
+
+            send_data_to_jsx({"type": "answer", "message": output_path})
+
+            print("[API] done")
+
+        elif provider == "openai":
+
+            print("[API] encoding images")
+
+            content = [
+                {"type": "text", "text": str(data["prompt"])},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": encode_file_to_base64(data["input"])},
+                },
+            ]
+
+            if data.get("reference"):
+
+                content.append(
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": encode_file_to_base64(data["reference"])},
+                    }
+                )
+
+            payload = {
+                "model": str(data["model"]),
+                "messages": [{"role": "user", "content": content}],
+            }
+
+            # ----- image_config -----
+
+            image_config = {}
+
+            if data.get("aspect_ratio"):
+                image_config["aspect_ratio"] = data["aspect_ratio"]
+
+            if data.get("resolution"):
+                image_config["image_size"] = data["resolution"]
+
+            if image_config:
+                payload["image_config"] = image_config
+
+            headers["Content-Type"] = "application/json"
+
+            print("[API] sending request")
+
+            resp = requests.post(
+                data["apiEndpoint"], headers=headers, json=payload, timeout=300
+            )
+
+            resp.raise_for_status()
+
+            resp_json = resp.json()
+
+            data_url = find_image(resp_json)
+
+            if not data_url:
+                raise Exception("Image not found in response")
+
+            # удаляем префикс data:image/png;base64,
+            base64_data = data_url.split(",", 1)[1]
+
+            output_path = os.path.join(out_dir, "output.png")
+
+            decode_and_save_base64(base64_data, output_path)
+
+            send_data_to_jsx({"type": "answer", "message": output_path})
+
+            print("[API] done")
+
         else:
-            print("[INFO] Прерывание ожидания stop_event")
-            return
-
-        # Скачивание изображения
-        img_data = requests.get(result_url).content
-        output_path = os.path.join(out_dir, "output.png")
-        with open(output_path, "wb") as f:
-            f.write(img_data)
-
-        print(f"[INFO] Готово! Файл сохранён как {output_path}")
-        send_data_to_jsx({"type": "answer", "message": output_path})
+            raise Exception(f"Unknown provider: {provider}")
 
     except Exception as e:
-        print(f"[ERROR] {e}")
+
+        print("[API ERROR]", e)
+
         send_data_to_jsx({"type": "error", "message": str(e)})
-
-    finally:
-        for _, file_obj in files:
-            file_obj.close()
-
-
-# ==============================
-# WORKER
-# ==============================
 
 
 def generation_worker():
@@ -441,10 +522,6 @@ def enqueue_generation(task_type, entrypoint, payload, out_dir, skipInit):
     print(f"[QUEUE] Задача добавлена в очередь: {task_type}")
 
 
-# ==============================
-# ПОЛУЧЕНИЕ ДАННЫХ SD
-# ==============================
-
 
 def get_data_from_SD(api_name):
     global SD_HOST, SD_PORT
@@ -456,11 +533,6 @@ def get_data_from_SD(api_name):
     except Exception as e:
         print(f"[ERROR] Ошибка получения данных: {e}")
         return None
-
-
-# ==============================
-# ОБРАБОТКА КЛИЕНТА
-# ==============================
 
 
 def handle_client(client_socket):
@@ -596,9 +668,11 @@ def handle_client(client_socket):
 
             # Создаём payload для remote
             remote_payload = {
+                "provider": data["provider"],
                 "apiKey": data["apiKey"],
                 "apiEndpoint": data["apiEndpoint"],
                 "apiStatus": data.get("apiStatus"),
+                "model": data.get("model"),
                 "input": data["input"],
                 "reference": data.get("reference"),  # может быть None
                 "prompt": str(data["prompt"]),
@@ -663,11 +737,6 @@ def handle_client(client_socket):
 
     finally:
         client_socket.close()
-
-
-# ==============================
-# СЕРВЕР
-# ==============================
 
 
 def start_local_server():

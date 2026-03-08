@@ -14,7 +14,7 @@
 </javascriptresource>
 // END__HARVEST_EXCEPTION_ZSTRING
 */
-const ver = 0.5,
+const ver = 0.52,
     SD_HOST = '127.0.0.1',
     SD_PORT = 7860,
     API_HOST = '127.0.0.1',
@@ -266,13 +266,14 @@ function main(selection) {
         };
     } else if (apiSettings) {
         var payload = {
-            'apiMode': true,
+            'provider': apiSettings.openAi ? 'openai' : 'classic',
             'apiKey': apiSettings.apiKey,
-            'apiEndpoint': apiSettings.apiEndpoint,
+            'apiEndpoint': apiSettings.openAi ? apiSettings.apiBaseUrl : apiSettings.apiEndpoint,
             'input': f.fsName.replace(/\\/g, '\\\\'),
             'output': p.fsName.replace(/\\/g, '\\\\'),
             'prompt': cfg.current.prompt.toString().replace(/[^A-Za-z0-9.,()\-<>: ]/g, ''),
         }
+        if (apiSettings.openAi) payload['model']=apiSettings.apiModel
         if (apiSettings.apiStatus != '') payload['apiStatus'] = apiSettings.apiStatus;
         if (apiSettings.aspectRatio && cfg.current.aspectRatioSelected != '') {
             payload['aspect_ratio'] = cfg.current.aspectRatioSelected == 'Auto' ? getAspectRatio(width, height, cfg.current.aspectRatiosList, apiSettings.aspectRatioMode) : cfg.current.aspectRatioSelected;
@@ -280,7 +281,6 @@ function main(selection) {
         if (apiSettings.resolution && cfg.current.resolutionSelected != '') {
             payload['resolution'] = cfg.current.resolutionSelected;
         }
-        if (apiSettings.negativePrompt) payload['negative_prompt'] = cfg.current.negative_prompt.toString().replace(/[^A-Za-z0-9.,()\-<>: ]/g, '');
     }
     if (!apiMode && cfg.sd_model_checkpoint.match(/(flux|kontext)/i)) payload['flux'] = true;
     if (apiMode || (cfg.sd_model_checkpoint.match(/(kontext|qwen.+edit|klein)/i) && (SD.extensions[EXT_KONTEXT] || cfg.forge_imageStitch))) {
@@ -482,7 +482,7 @@ function dialogWindow(b, s) {
             if ((cfg.sd_model_checkpoint.toLocaleUpperCase().indexOf('KONTEXT') == -1 || !SD.extensions[EXT_KONTEXT]) && !cfg.sd_model_checkpoint.match(/qwen.+edit/i)) inpaintingFill(p)
         }
         prompt(p, isApi);
-        if (isApi && cfg.apiEndpoints[apiId].negativePrompt) { negativePrompt(p) } else if (!isApi && !cfg.sd_model_checkpoint.match(/(flux|kontext)/i)) { negativePrompt(p) }
+        if (!isApi && !cfg.sd_model_checkpoint.match(/(flux|kontext)/i)) { negativePrompt(p) }
         if (isApi) {
             if (cfg.apiEndpoints[apiId].aspectRatio) ratio(p)
             if (cfg.apiEndpoints[apiId].resolution) resolution(p)
@@ -1284,6 +1284,7 @@ function dialogWindow(b, s) {
         }
         function endpointEdit(o, tmp, idx) {
             var w = new Window("dialog{orientation:'column',alignChildren:['fill','top'],spacing:10,margins:16,preferredSize:[350,-1]}"),
+                dlType = w.add("dropdownlist"),
                 grTitle = w.add("group{orientation:'column',alignChildren:['fill','center'],spacing:0,margins:0}"),
                 stTitle = grTitle.add("statictext"),
                 etTitle = grTitle.add("edittext"),
@@ -1297,7 +1298,6 @@ function dialogWindow(b, s) {
                 stStatus = grStatus.add("statictext"),
                 etStatus = grStatus.add("edittext"),
                 grSettings = w.add("panel{orientation:'column',alignChildren:['fill','center'],margins:[5,15,5,10]}"),
-                chNegative = grSettings.add("checkbox"),
                 chReference = grSettings.add("checkbox"),
                 grRatio = grSettings.add("group{orientation:'row',alignChildren:['fill','center'],spacing:0,margins:0}"),
                 chRatio = grRatio.add("checkbox{preferredSize:[150,-1]}"),
@@ -1309,19 +1309,27 @@ function dialogWindow(b, s) {
             w.text = str.apiEndpoint;
             stTitle.text = str.apiTitle;
             stKey.text = str.apiKey;
-            stUrl.text = str.apiEndpointURL;
-            stStatus.text = str.apiStatus;
-            chNegative.text = str.negativePrompt
             chReference.text = str.imageRef
             chRatio.text = str.apiAspectRatio
             chRes.text = str.apiResolution
             chTransform.text = str.apiDoNotTransform
             grSettings.text = str.additional
+            dlType.add('item', str.openAi)
+            dlType.add('item', str.classic)
+
             dlRatio.add('item', str.autoSelectRatio)
             dlRatio.add('item', str.autoCalcRatio)
             bnOk.text = str.apply
             etTitle.onChanging = function () { bnOk.enabled = this.text.replace(/\s/, '').length }
+
+            dlType.onChange = function () {
+                stUrl.text = this.selection.index == 0 ? str.apiBaseUrl : str.apiEndpointURL
+                stStatus.text = this.selection.index == 0 ? str.apiModel : str.apiStatus
+                etUrl.text = this.selection.index == 0 ? (o.apiBaseUrl ? o.apiBaseUrl : '') : o.apiEndpoint
+                etStatus.text = this.selection.index == 0 ? (o.apiModel ? o.apiModel : '') : o.apiStatus
+            }
             w.onShow = function () {
+                dlType.selection = o.openAi ? 0 : 1;
                 dlRatio.selection = o.aspectRatioMode != undefined ? o.aspectRatioMode : 0;
                 chRatio.value = dlRatio.enabled = o.aspectRatio
                 chRes.value = o.resolution
@@ -1329,9 +1337,6 @@ function dialogWindow(b, s) {
                 etTitle.active = true
                 etTitle.text = o.title
                 etKey.text = o.apiKey
-                etUrl.text = o.apiEndpoint
-                etStatus.text = o.apiStatus
-                chNegative.value = o.negativePrompt
                 chReference.value = o.reference
                 etTitle.onChanging()
             }
@@ -1349,7 +1354,6 @@ function dialogWindow(b, s) {
                         } else { confirmed = false }
                     }
                 } else {
-                    $.writeln('here')
                     var id = idx
                     if (tmp.apiEndpoints[idx].title != title)
                         if (tmp.presets["API: \t" + tmp.apiEndpoints[idx].title]) tmp.presets["API: \t" + title] = tmp.presets["API: \t" + tmp.apiEndpoints[idx].title]
@@ -1358,14 +1362,19 @@ function dialogWindow(b, s) {
                     if (!tmp.apiEndpoints[id]) tmp.apiEndpoints[id] = {};
                     tmp.apiEndpoints[id].title = title
                     tmp.apiEndpoints[id].apiKey = etKey.text.replace(/^[\s'"]+|[\s'"]+$/g, '')
-                    tmp.apiEndpoints[id].apiEndpoint = etUrl.text.replace(/^[\s'"]+|[\s'"]+$/g, '')
-                    tmp.apiEndpoints[id].apiStatus = etStatus.text.replace(/^[\s'"]+|[\s'"]+$/g, '')
-                    tmp.apiEndpoints[id].negativePrompt = chNegative.value
+
+                    tmp.apiEndpoints[id].apiEndpoint = (dlType.selection.index == 1 ? etUrl.text.replace(/^[\s'"]+|[\s'"]+$/g, '') : '')
+                    tmp.apiEndpoints[id].apiStatus = (dlType.selection.index == 1 ? etStatus.text.replace(/^[\s'"]+|[\s'"]+$/g, '') : '')
+
+                    tmp.apiEndpoints[id].apiBaseUrl = (dlType.selection.index == 0 ? etUrl.text.replace(/^[\s'"]+|[\s'"]+$/g, '') : '')
+                    tmp.apiEndpoints[id].apiModel = (dlType.selection.index == 0 ? etStatus.text.replace(/^[\s'"]+|[\s'"]+$/g, '') : '')
+
                     tmp.apiEndpoints[id].reference = chReference.value
                     tmp.apiEndpoints[id].resolution = chRes.value
                     tmp.apiEndpoints[id].aspectRatio = chRatio.value
                     tmp.apiEndpoints[id].aspectRatioMode = dlRatio.selection.index
                     tmp.apiEndpoints[id].doNotTransform = chTransform.value
+                    tmp.apiEndpoints[id].openAi = dlType.selection.index == 0 ? true : false
                     apiChanged = true
                     w.close();
                 }
@@ -1991,12 +2000,14 @@ function Config() {
         o.apiKey = ''
         o.apiEndpoint = ''
         o.apiStatus = ''
-        o.negativePrompt = false
         o.reference = false
         o.aspectRatio = false
         o.aspectRatioMode = 0
         o.resolution = false
         o.doNotTransform = false
+        o.openAi = true
+        o.apiBaseUrl = ''
+        o.apiModel = ''
         return o
     }
     this.getSettings = function (fromAction) {
@@ -2392,4 +2403,8 @@ function Locale() {
     this.translate = { ru: 'Перевести: ', en: 'Translate: ' }
     this.vae = 'VAE'
     this.wxh = { ru: 'ширина и высота (px)', en: 'width and height (px)' }
+    this.classic = { ru: 'Классический endpoint', en: 'Classic endpoint' }
+    this.openAi = { ru: 'Совместимый с openAi: ', en: 'OpenAi compatible' }
+    this.apiBaseUrl = { ru: 'Базовый URL', en: 'Base URL' }
+    this.apiModel = { ru: 'Модель', en: 'Model' }
 }
