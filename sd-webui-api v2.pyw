@@ -402,15 +402,15 @@ def call_external_api(data, out_dir, stop_event):
 
             img_bytes = requests.get(result_url).content
 
-            output_path = os.path.join(out_dir, "output.png")
+            save_path = os.path.join(out_dir, f"{timestamp()}-{1}.png")
 
-            with open(output_path, "wb") as f:
+            with open(save_path, "wb") as f:
                 f.write(img_bytes)
 
             for _, f in files:
                 f.close()
 
-            send_data_to_jsx({"type": "answer", "message": output_path})
+            send_data_to_jsx({"type": "answer", "message": save_path})
 
             print("[API] done")
 
@@ -473,11 +473,11 @@ def call_external_api(data, out_dir, stop_event):
             # удаляем префикс data:image/png;base64,
             base64_data = data_url.split(",", 1)[1]
 
-            output_path = os.path.join(out_dir, "output.png")
+            save_path = os.path.join(out_dir, f"{timestamp()}-{1}.png")
 
-            decode_and_save_base64(base64_data, output_path)
+            decode_and_save_base64(base64_data, save_path)
 
-            send_data_to_jsx({"type": "answer", "message": output_path})
+            send_data_to_jsx({"type": "answer", "message": save_path})
 
             print("[API] done")
 
