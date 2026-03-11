@@ -12,7 +12,6 @@ import tempfile
 import queue
 import http.client
 import builtins
-import requests
 
 # Отключаем print
 builtins.print = lambda *args, **kwargs: None
@@ -319,13 +318,22 @@ def find_image(obj):
 
 def call_external_api(data, out_dir, stop_event):
 
+    if check_module("requests"):
+        import requests
+        
     provider = data.get("provider", "classic")
 
     headers = {"Authorization": f"Bearer {data['apiKey']}"}
 
+    files = []
+
     try:
 
         print(f"[API] provider={provider}")
+
+        # =====================================================
+        # CLASSIC API
+        # =====================================================
 
         if provider == "classic":
 
@@ -359,19 +367,26 @@ def call_external_api(data, out_dir, stop_event):
             )
 
             resp.raise_for_status()
+
             resp_json = resp.json()
 
             # ---------- sync ----------
 
             if not data.get("apiStatus"):
 
-                result_url = resp_json["result"][0]
+                result_url = resp_json.get("result", [None])[0]
+
+                if not result_url:
+                    raise Exception(f"Invalid API response: {resp_json}")
 
             # ---------- async ----------
 
             else:
 
-                request_id = resp_json["request_id"]
+                request_id = resp_json.get("request_id")
+
+                if not request_id:
+                    raise Exception(f"Invalid API response: {resp_json}")
 
                 while not stop_event.is_set():
 
@@ -386,7 +401,7 @@ def call_external_api(data, out_dir, stop_event):
                     status = status_json.get("status")
 
                     if status == "success":
-                        result_url = status_json["result"][0]
+                        result_url = status_json.get("result", [None])[0]
                         break
 
                     if status == "error":
@@ -402,17 +417,18 @@ def call_external_api(data, out_dir, stop_event):
 
             img_bytes = requests.get(result_url).content
 
-            save_path = os.path.join(out_dir, f"{timestamp()}-{1}.png")
+            save_path = os.path.join(out_dir, f"{timestamp()}-1.png")
 
             with open(save_path, "wb") as f:
                 f.write(img_bytes)
 
-            for _, f in files:
-                f.close()
-
             send_data_to_jsx({"type": "answer", "message": save_path})
 
             print("[API] done")
+
+        # =====================================================
+        # OPENAI STYLE API
+        # =====================================================
 
         elif provider == "openai":
 
@@ -427,7 +443,6 @@ def call_external_api(data, out_dir, stop_event):
             ]
 
             if data.get("reference"):
-
                 content.append(
                     {
                         "type": "image_url",
@@ -440,7 +455,7 @@ def call_external_api(data, out_dir, stop_event):
                 "messages": [{"role": "user", "content": content}],
             }
 
-            # ----- image_config -----
+            # ---------- image_config ----------
 
             image_config = {}
 
@@ -450,15 +465,23 @@ def call_external_api(data, out_dir, stop_event):
             if data.get("resolution"):
                 image_config["image_size"] = data["resolution"]
 
+            # Gemini-style параметры
             if image_config:
-                payload["image_config"] = image_config
+
+                payload["extra_body"] = {
+                    "image_config": image_config,
+                    "response_modalities": ["IMAGE"],
+                }
 
             headers["Content-Type"] = "application/json"
 
             print("[API] sending request")
 
             resp = requests.post(
-                data["apiEndpoint"], headers=headers, json=payload, timeout=300
+                data["apiEndpoint"],
+                headers=headers,
+                json=payload,
+                timeout=300,
             )
 
             resp.raise_for_status()
@@ -468,12 +491,11 @@ def call_external_api(data, out_dir, stop_event):
             data_url = find_image(resp_json)
 
             if not data_url:
-                raise Exception("Image not found in response")
+                raise Exception(f"Image not found in response: {resp_json}")
 
-            # удаляем префикс data:image/png;base64,
             base64_data = data_url.split(",", 1)[1]
 
-            save_path = os.path.join(out_dir, f"{timestamp()}-{1}.png")
+            save_path = os.path.join(out_dir, f"{timestamp()}-1.png")
 
             decode_and_save_base64(base64_data, save_path)
 
@@ -489,6 +511,14 @@ def call_external_api(data, out_dir, stop_event):
         print("[API ERROR]", e)
 
         send_data_to_jsx({"type": "error", "message": str(e)})
+
+    finally:
+
+        for _, f in files:
+            try:
+                f.close()
+            except:
+                pass
 
 
 def generation_worker():
@@ -520,7 +550,6 @@ def generation_worker():
 def enqueue_generation(task_type, entrypoint, payload, out_dir, skipInit):
     generation_queue.put((task_type, entrypoint, payload, out_dir, skipInit))
     print(f"[QUEUE] Задача добавлена в очередь: {task_type}")
-
 
 
 def get_data_from_SD(api_name):
