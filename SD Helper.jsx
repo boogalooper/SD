@@ -55,7 +55,9 @@ try {
 } catch (e) {
     sts.finish(false);
     activeDocument.activeHistoryState = initialState;
-    if (e.message == str.errCancelling.toString()) { SD.interrupt() } else { alert(e, undefined, true) }
+    if (e.message == str.errCancelling.toString()) { SD.interrupt() } else {
+        alert(e + '\n\nLine: ' + e.line + '\nCode: ' + e.source.split('\n')[e.line - 1], undefined, true)
+    }
     $.setenv('dialogMode', true)
     isCancelled = true;
 }
@@ -273,7 +275,7 @@ function main(selection) {
             'output': p.fsName.replace(/\\/g, '\\\\'),
             'prompt': cfg.current.prompt.toString().replace(/[^A-Za-z0-9.,()\-<>: ]/g, ''),
         }
-        if (apiSettings.openAi) payload['model']=apiSettings.apiModel
+        if (apiSettings.openAi) payload['model'] = apiSettings.apiModel
         if (apiSettings.apiStatus != '') payload['apiStatus'] = apiSettings.apiStatus;
         if (apiSettings.aspectRatio && cfg.current.aspectRatioSelected != '') {
             payload['aspect_ratio'] = cfg.current.aspectRatioSelected == 'Auto' ? getAspectRatio(width, height, cfg.current.aspectRatiosList, apiSettings.aspectRatioMode) : cfg.current.aspectRatioSelected;
@@ -1954,7 +1956,7 @@ function Config() {
         this.negative_prompt = ''
         this.inpaintingFill = -1
         this.positivePreset = ''
-        this.negativePreset = 'SD'
+        this.negativePreset = ''
         this.imageReferences = []
         this.reference = ''
         this.autoResize = true
@@ -2123,6 +2125,7 @@ function Config() {
         this.putSettings();
     }
     function cleanup(p) {
+        p.cleanup = 0
         var o = {};
         if (SD['sd-models']) {
             for (var i = 0; i < SD['sd-models'].length; i++) {
@@ -2375,7 +2378,7 @@ function Locale() {
     this.min = { ru: 'Минимум', en: 'Minimum' }
     this.module = { ru: 'Модуль sd-webui-api ', en: 'Module sd-webui-api ' }
     this.negativePrompt = 'Negative prompt'
-    this.notFound = { ru: '\nне найден!', en: 'not found!' }
+    this.notFound = { ru: ' не найден!', en: ' not found!' }
     this.opacity = { ru: 'Непрозрачность кисти', en: 'Brush opacity' }
     this.output = { ru: 'Параметры изображения', en: 'Image settings' }
     this.presetAdd = { ru: 'Добавить', en: 'Add new' }
