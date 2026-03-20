@@ -14,7 +14,7 @@
 </javascriptresource>
 // END__HARVEST_EXCEPTION_ZSTRING
 */
-const ver = 0.522,
+const ver = 0.523,
     SD_HOST = '127.0.0.1',
     SD_PORT = 7860,
     API_HOST = '127.0.0.1',
@@ -1616,7 +1616,7 @@ function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
         sendMessage({ type: 'ack', message: {} })
     }
     this.translate = function (s) {
-        var result = sendMessage({ type: 'translate', message: s }, true, SD_RELOAD_CHECKPOINT_DELAY)
+        var result = sendMessage({ type: 'translate', message: s.replace(/\s/g, ' ') }, true, SD_INIT_DELAY)
         if (result) return result['message']
         return null;
     }
