@@ -14,7 +14,7 @@
 </javascriptresource>
 // END__HARVEST_EXCEPTION_ZSTRING
 */
-const ver = 0.52,
+const ver = 0.522,
     SD_HOST = '127.0.0.1',
     SD_PORT = 7860,
     API_HOST = '127.0.0.1',
@@ -56,7 +56,7 @@ try {
     sts.finish(false);
     activeDocument.activeHistoryState = initialState;
     if (e.message == str.errCancelling.toString()) { SD.interrupt() } else {
-        alert(e + '\n\nLine: ' + e.line + '\nCode: ' + e.source.split('\n')[e.line - 1], undefined, true)
+        alert(e /*+ '\n\nLine: ' + e.line + '\nCode: ' + e.source.split('\n')[e.line - 1]*/, undefined, true)
     }
     $.setenv('dialogMode', true)
     isCancelled = true;
@@ -385,6 +385,7 @@ function getAspectRatio(width, height, ratios, mode) {
     }
 }
 function findOption(s, o, def) {
+    if (o == undefined) throw new Error(str.errConnection + ' Stable Diffusion')
     for (var a in o) if (o[a] == s) return s;
     return def;
 }

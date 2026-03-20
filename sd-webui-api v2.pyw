@@ -345,7 +345,7 @@ def call_external_api(data, out_dir, stop_event):
             form_data = {
                 "prompt": str(data["prompt"]),
                 "num_images": str(len(files)),
-                "output_format": "png",
+                #"output_format": "webp",
                 "callback_url": None,
                 "is_sync": not bool(data.get("apiStatus")),
             }
@@ -356,7 +356,7 @@ def call_external_api(data, out_dir, stop_event):
             if data.get("aspect_ratio"):
                 form_data["aspect_ratio"] = data["aspect_ratio"]
 
-            print("[API] sending request")
+            print(f"[API] sending request {form_data}")
 
             resp = requests.post(
                 data["apiEndpoint"],
@@ -467,15 +467,18 @@ def call_external_api(data, out_dir, stop_event):
 
             # Gemini-style параметры
             if image_config:
-
                 payload["extra_body"] = {
+                    "response_modalities": ["IMAGE"],
                     "image_config": image_config,
+                }
+            else:
+                payload["extra_body"] = {
                     "response_modalities": ["IMAGE"],
                 }
 
             headers["Content-Type"] = "application/json"
 
-            print("[API] sending request")
+            print(f"[API] sending request {payload}")
 
             resp = requests.post(
                 data["apiEndpoint"],
