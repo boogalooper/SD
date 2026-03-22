@@ -56,7 +56,7 @@ try {
     sts.finish(false);
     activeDocument.activeHistoryState = initialState;
     if (e.message == str.errCancelling.toString()) { SD.interrupt() } else {
-        alert(e /*+ '\n\nLine: ' + e.line + '\nCode: ' + e.source.split('\n')[e.line - 1]*/, undefined, true)
+        alert(e + '\n\nLine: ' + e.line + '\nCode: ' + e.source.split('\n')[e.line - 1], undefined, true)
     }
     $.setenv('dialogMode', true)
     isCancelled = true;
@@ -1498,7 +1498,7 @@ function SDApi(sdHost, apiHost, sdPort, portSend, portListen, apiFile) {
             app.doForcedProgress('Starting python server... ', 'startServer()')
         }
         var result = sendMessage({ type: 'ping', message: {} }, true)
-        SdCfg.apiMode = !result.message
+        SdCfg.apiMode = !(result && result.message)
         if (!SdCfg.apiMode) {
             var result = sendMessage({ type: 'get', message: 'sdapi/v1/options' }, true);
             if (result) {
