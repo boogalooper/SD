@@ -14,7 +14,7 @@
 </javascriptresource>
 // END__HARVEST_EXCEPTION_ZSTRING
 */
-const ver = 0.523,
+const ver = 0.524,
     SD_HOST = '127.0.0.1',
     SD_PORT = 7860,
     API_HOST = '127.0.0.1',
@@ -56,7 +56,7 @@ try {
     sts.finish(false);
     activeDocument.activeHistoryState = initialState;
     if (e.message == str.errCancelling.toString()) { SD.interrupt() } else {
-        alert(e + '\n\nLine: ' + e.line + '\nCode: ' + e.source.split('\n')[e.line - 1], undefined, true)
+        alert(e /*+ '\n\nLine: ' + e.line + '\nCode: ' + e.source.split('\n')[e.line - 1], undefined, true*/)
     }
     $.setenv('dialogMode', true)
     isCancelled = true;
@@ -156,7 +156,8 @@ function init() {
     }
 }
 function main(selection) {
-    var apiMode = cfg.sd_model_checkpoint.match(/^API: \t/) ? true : false;
+    var apiMode = cfg.sd_model_checkpoint.match(/^API: \t/) ? true : false,
+        scale;
     if (apiMode) {
         var id = findEndpointByName(cfg.sd_model_checkpoint.replace(/^API: \t/, ''), cfg.apiEndpoints), apiSettings = null;
         if (id) apiSettings = cfg.apiEndpoints[id]
@@ -166,8 +167,7 @@ function main(selection) {
         var checkpoint = (cfg.sd_model_checkpoint == SD['sd_model_checkpoint'] ? null : findOption(cfg.sd_model_checkpoint, SD['sd-models'], SD['sd_model_checkpoint'])),
             vae = SD.forgeUI ? null : ((cfg.current.sd_vae == SD['sd_vae'] ? null : findOption(cfg.current.sd_vae, SD['sd-vaes'], SD['sd_vae']))),
             encoders = checkEncoders(cfg.sd_model_checkpoint.match(/(qwen|flux|kontext|z.image)/i) ? cfg.current.encoders : [cfg.current.sd_vae], SD['forge_additional_modules'], SD['sd_modules']),
-            memory = cfg.control_memory ? (SD['forge_inference_memory'] == cfg.forge_inference_memory ? null : cfg.forge_inference_memory) : null,
-            scale;
+            memory = cfg.control_memory ? (SD['forge_inference_memory'] == cfg.forge_inference_memory ? null : cfg.forge_inference_memory) : null;
         if (checkpoint != cfg.sd_model_checkpoint && checkpoint != null) cfg.sd_model_checkpoint = checkpoint;
     }
     if (cfg.current.autoResize) {
@@ -211,8 +211,8 @@ function main(selection) {
         doc.copyPixels()
     }
     var len = doc.getProperty('numberOfLayers'),
-        from = lr.getProperty('itemIndex') + (doc.getProperty('hasBackgroundLayer') ? 0 : 1);
-    lrsList = [];
+        from = lr.getProperty('itemIndex') + (doc.getProperty('hasBackgroundLayer') ? 0 : 1),
+        lrsList = [];
     for (var i = from; i <= len; i++) {
         if (lr.getProperty('layerSection', false, i, true).value == 'layerSectionContent') {
             lrsList.push(lr.getProperty('layerID', false, i, true))
@@ -418,7 +418,7 @@ function checkEncoders(encoders, loaded, modules) {
 }
 function dialogWindow(b, s) {
     cfg.sd_model_checkpoint = cfg.sd_model_checkpoint.replace(/\s\[.+\]$/, '');
-    apiChanged = false;
+    var apiChanged = false;
     var w = new Window("dialog{orientation:'column',alignChildren:['fill', 'top'],spacing:0,margins:15}"),
         grGlobal = w.add("group{orientation:'row',alignChildren:['left', 'center'],spacing:0,margins:0}"),
         stWH = grGlobal.add("statictext{preferredSize:[265,-1]}"),
@@ -455,7 +455,6 @@ function dialogWindow(b, s) {
                         }
                     }
                 } else if (tempSettings[a] instanceof Object) {
-                    $.writeln(apiChanged)
                     if (apiChanged) {
                         cfg[a] = tempSettings[a];
                         changed = true;
@@ -502,7 +501,7 @@ function dialogWindow(b, s) {
         else if (!isApi && ((cfg.sd_model_checkpoint.match(/kontext/i) && SD.extensions[EXT_KONTEXT]) || (cfg.sd_model_checkpoint.match(/(kontext|qwen.+edit|klein)/i) && cfg.forge_imageStitch))) { imageReference(p) }
         return enabled;
         function checkpoint(p) {
-            grCheckoint = p.add("group{orientation:'column',alignChildren:['fill', 'center'],spacing:0,margins:[0,10,0,5]}"),
+            var grCheckoint = p.add("group{orientation:'column',alignChildren:['fill', 'center'],spacing:0,margins:[0,10,0,5]}"),
                 stCheckpoint = grCheckoint.add('statictext'),
                 dlCheckpoint = grCheckoint.add('dropdownlist{preferredSize: [285, -1] }');
             stCheckpoint.text = str.checkpoint;
@@ -612,12 +611,12 @@ function dialogWindow(b, s) {
         }
         function prompt(p, isApi) {
             var grPrompt = p.add("group{orientation:'column',alignChildren:['fill', 'top'],spacing:0,margins:0}"),
-                stPrompt = grPrompt.add('statictext');
-            var presets = addPresetPanel('positivePreset', grPrompt);
-            var etPrompt = grPrompt.add('edittext{preferredSize:[285,80],properties:{multiline: true, scrollable: true}}'),
+                stPrompt = grPrompt.add('statictext'),
+                presets = addPresetPanel('positivePreset', grPrompt),
+                etPrompt = grPrompt.add('edittext{preferredSize:[285,80],properties:{multiline: true, scrollable: true}}'),
                 grButtons = grPrompt.add("group{orientation:'row',alignChildren:['fill', 'top'],spacing:0,margins:0}"),
-                bnTranslate = grButtons.add('button{preferredSize:[230,-1]}');
-            bnLora = grButtons.add('button{preferredSize:[55,-1]}');
+                bnTranslate = grButtons.add('button{preferredSize:[230,-1]}'),
+                bnLora = grButtons.add('button{preferredSize:[55,-1]}');
             presets.onChange(true)
             bnTranslate.text = str.translate + '-> en';
             bnLora.text = '+ ' + str.lora
@@ -1176,8 +1175,8 @@ function dialogWindow(b, s) {
             cfg.checkPresetIntegrity(context, panel)
         }
         bnSaveAs.onClick = function () {
-            var cur = panel.children[2].text
-            nm = prompt(str.presetPromt, dlPreset.selection.text + str.presetCopy, str.presetNew);
+            var cur = panel.children[2].text,
+                nm = prompt(str.presetPromt, dlPreset.selection.text + str.presetCopy, str.presetNew);
             if (nm != null && nm != '') {
                 if (cfg.getPreset(context, nm) == '' && nm != str.presetDefault) {
                     cfg.putPreset(context, nm, cur, 'add')

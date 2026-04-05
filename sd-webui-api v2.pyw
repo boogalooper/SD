@@ -320,7 +320,7 @@ def call_external_api(data, out_dir, stop_event):
 
     if check_module("requests"):
         import requests
-        
+
     provider = data.get("provider", "classic")
 
     headers = {"Authorization": f"Bearer {data['apiKey']}"}
@@ -345,7 +345,7 @@ def call_external_api(data, out_dir, stop_event):
             form_data = {
                 "prompt": str(data["prompt"]),
                 "num_images": str(len(files)),
-                #"output_format": "webp",
+                # "output_format": "webp",
                 "callback_url": None,
                 "is_sync": not bool(data.get("apiStatus")),
             }
@@ -466,15 +466,9 @@ def call_external_api(data, out_dir, stop_event):
                 image_config["image_size"] = data["resolution"]
 
             # Gemini-style параметры
+            payload["response_modalities"] = ["IMAGE"]
             if image_config:
-                payload["extra_body"] = {
-                    "response_modalities": ["IMAGE"],
-                    "image_config": image_config,
-                }
-            else:
-                payload["extra_body"] = {
-                    "response_modalities": ["IMAGE"],
-                }
+                payload["image_config"] = image_config
 
             headers["Content-Type"] = "application/json"
 
