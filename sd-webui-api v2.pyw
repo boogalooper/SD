@@ -1,6 +1,7 @@
 import socket
 import json
 import urllib.request
+from urllib.parse import urlparse
 import sys
 import time
 import base64
@@ -14,7 +15,7 @@ import http.client
 import builtins
 
 # Отключаем print
-builtins.print = lambda *args, **kwargs: None
+# builtins.print = lambda *args, **kwargs: None
 
 API_HOST = "127.0.0.1"
 API_PORT_LISTEN = 6320
@@ -48,10 +49,28 @@ def encode_file_to_base64(path, remove=False):
     return f"data:image/png;base64,{encoded}"
 
 
-def decode_and_save_base64(base64_str, save_path):
-    print(f"[DEBUG] Сохранение изображения: {save_path}")
+def decode_and_save_base64(data, save_path_without_ext):
+    if isinstance(data, str):
+        image_bytes = base64.b64decode(data)
+    else:
+        image_bytes = data
+
+    if image_bytes.startswith(b"\x89PNG"):
+        ext = "png"
+    elif image_bytes.startswith(b"\xff\xd8"):
+        ext = "jpg"
+    elif image_bytes.startswith(b"RIFF") and b"WEBP" in image_bytes[:12]:
+        ext = "webp"
+    else:
+        ext = "bin"
+
+    save_path = f"{save_path_without_ext}.{ext}"
+    print(f"[DEBUG] Сохранение: {save_path}")
+
     with open(save_path, "wb") as f:
-        f.write(base64.b64decode(base64_str))
+        f.write(image_bytes)
+
+    return save_path
 
 
 def send_data_to_jsx(message):
@@ -274,18 +293,17 @@ def call_generate_api(api_endpoint, payload, out_dir, stop_event, skipInit):
         if "images" in result and result["images"]:
             last_path = None
             for i, image in enumerate(result["images"]):
-                save_path = os.path.join(out_dir, f"{timestamp()}-{i}.jpg")
-                decode_and_save_base64(image, save_path)
-                last_path = save_path
-            generation_result["path"] = last_path
+                save_path = os.path.join(out_dir, f"{timestamp()}-{i}")
+            generation_result["path"] = decode_and_save_base64(image, save_path)
 
         elif "image" in result and result["image"]:
-            save_path = os.path.join(out_dir, f"{timestamp()}.jpg")
-            decode_and_save_base64(result["image"], save_path)
+            save_path = os.path.join(out_dir, f"{timestamp()}")
             generation_result["path"] = save_path
 
         else:
-            generation_result["path"] = None
+            generation_result["path"] = decode_and_save_base64(
+                result["image"], save_path
+            )
 
         print("[INFO] Генерация завершена")
 
@@ -417,12 +435,14 @@ def call_external_api(data, out_dir, stop_event):
 
             img_bytes = requests.get(result_url).content
 
-            save_path = os.path.join(out_dir, f"{timestamp()}-1.png")
+            save_path = os.path.join(out_dir, f"{timestamp()}-1")
 
-            with open(save_path, "wb") as f:
-                f.write(img_bytes)
-
-            send_data_to_jsx({"type": "answer", "message": save_path})
+            send_data_to_jsx(
+                {
+                    "type": "answer",
+                    "message": decode_and_save_base64(img_bytes, save_path),
+                }
+            )
 
             print("[API] done")
 
@@ -466,7 +486,7 @@ def call_external_api(data, out_dir, stop_event):
                 image_config["image_size"] = data["resolution"]
 
             # Gemini-style параметры
-            payload["response_modalities"] = ["IMAGE"]
+            payload["modalities"] = ["image", "text"]
             if image_config:
                 payload["image_config"] = image_config
 
@@ -492,11 +512,14 @@ def call_external_api(data, out_dir, stop_event):
 
             base64_data = data_url.split(",", 1)[1]
 
-            save_path = os.path.join(out_dir, f"{timestamp()}-1.png")
+            save_path = os.path.join(out_dir, f"{timestamp()}-1")
 
-            decode_and_save_base64(base64_data, save_path)
-
-            send_data_to_jsx({"type": "answer", "message": save_path})
+            send_data_to_jsx(
+                {
+                    "type": "answer",
+                    "message": decode_and_save_base64(base64_data, save_path),
+                }
+            )
 
             print("[API] done")
 
