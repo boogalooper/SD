@@ -927,9 +927,7 @@ function dialogWindow(b, s) {
         }
     }
     function settingsWindow(p, tmp) {
-        var w = new Window("dialog{orientation:'column',alignChildren:['fill', 'top'],spacing:10,margins:16}"),
-            pnApi = w.add("panel{orientation:'row',alignChildren:['fill', 'top'],spacing:0,margins:10}"),
-            bnApi = pnApi.add('button');
+        var w = new Window("dialog{orientation:'column',alignChildren:['fill', 'top'],spacing:10,margins:16}");
         if (!SD.apiMode) {
             var pnShow = w.add("panel{orientation:'row',alignChildren:['fill', 'top'],spacing:0,margins:10}"),
                 bnChk = pnShow.add('button'),
@@ -940,7 +938,9 @@ function dialogWindow(b, s) {
             bnChk.onClick = function () { selectWindow(SD['sd-models'], tmp.checkpointFilter, true, str.showItems); }
             bnVae.onClick = function () { selectWindow(SD['sd-vaes'], tmp.vaeFilter, true, str.showItems); }
         }
-        var pnOutput = w.add("panel{orientation:'column',alignChildren:['fill', 'top'],spacing:5,margins:10}"),
+        var pnApi = w.add("panel{orientation:'row',alignChildren:['fill', 'top'],spacing:0,margins:10}"),
+            bnApi = pnApi.add('button'),
+            pnOutput = w.add("panel{orientation:'column',alignChildren:['fill', 'top'],spacing:5,margins:10}"),
             chFlatten = pnOutput.add('checkbox'),
             chRasterize = pnOutput.add('checkbox'),
             pnBrush = w.add("panel{orientation:'column',alignChildren:['fill', 'top'],spacing:10,margins:10}"),
@@ -1965,7 +1965,7 @@ function Config() {
         this.apiNegative = false
         this.apiReference = false
         this.aspectRatiosList = []
-        this.aspectRatioSelected = ''
+        this.aspectRatioSelected = 'Auto'
         this.resolutionList = []
         this.resolutionSelected = ''
     }

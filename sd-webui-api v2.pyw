@@ -38,7 +38,10 @@ ack_event = threading.Event()
 def timestamp():
     return datetime.now().strftime("%Y%m%d-%H%M%S")
 
-
+def read_file_bytes(path):
+    with open(path, "rb") as f:
+        return f.read()
+    
 def encode_file_to_base64(path, remove=False):
     print(f"[DEBUG] Кодировка файла в base64: {path}")
     with open(path, "rb") as f:
@@ -46,7 +49,7 @@ def encode_file_to_base64(path, remove=False):
     if remove:
         os.remove(path)
         print(f"[DEBUG] Временный файл удалён: {path}")
-    return f"data:image/png;base64,{encoded}"
+    return f"data:image/jpeg;base64,{encoded}"
 
 
 def decode_and_save_base64(data, save_path_without_ext):
@@ -291,16 +294,12 @@ def call_generate_api(api_endpoint, payload, out_dir, stop_event, skipInit):
 
         # --- Сохраняем результат ---
         if "images" in result and result["images"]:
-            last_path = None
             for i, image in enumerate(result["images"]):
                 save_path = os.path.join(out_dir, f"{timestamp()}-{i}")
             generation_result["path"] = decode_and_save_base64(image, save_path)
 
         elif "image" in result and result["image"]:
             save_path = os.path.join(out_dir, f"{timestamp()}")
-            generation_result["path"] = save_path
-
-        else:
             generation_result["path"] = decode_and_save_base64(
                 result["image"], save_path
             )
@@ -355,10 +354,10 @@ def call_external_api(data, out_dir, stop_event):
 
         if provider == "classic":
 
-            files = [("image_urls[]", open(data["input"], "rb"))]
+            files = [("image_urls[]", read_file_bytes(data["input"]))]
 
             if data.get("reference"):
-                files.append(("image_urls[]", open(data["reference"], "rb")))
+                files.append(("image_urls[]", read_file_bytes(data["input"])))
 
             form_data = {
                 "prompt": str(data["prompt"]),
@@ -374,7 +373,7 @@ def call_external_api(data, out_dir, stop_event):
             if data.get("aspect_ratio"):
                 form_data["aspect_ratio"] = data["aspect_ratio"]
 
-            print(f"[API] sending request {form_data}")
+            print(f"[API] sending request {mask_large_data(form_data)}")
 
             resp = requests.post(
                 data["apiEndpoint"],
@@ -395,7 +394,9 @@ def call_external_api(data, out_dir, stop_event):
                 result_url = resp_json.get("result", [None])[0]
 
                 if not result_url:
-                    raise Exception(f"Invalid API response: {resp_json}")
+                    raise Exception(
+                        f"Invalid API response: {mask_large_data(resp_json)}"
+                    )
 
             # ---------- async ----------
 
@@ -451,55 +452,79 @@ def call_external_api(data, out_dir, stop_event):
         # =====================================================
 
         elif provider == "openai":
-
-            print("[API] encoding images")
-
-            content = [
-                {"type": "text", "text": str(data["prompt"])},
-                {
-                    "type": "image_url",
-                    "image_url": {"url": encode_file_to_base64(data["input"])},
-                },
-            ]
-
-            if data.get("reference"):
-                content.append(
+            if data["apiEndpoint"].endswith("completions"):
+                print("[API] completions endpoint")
+                content = [
+                    {"type": "text", "text": str(data["prompt"])},
                     {
                         "type": "image_url",
-                        "image_url": {"url": encode_file_to_base64(data["reference"])},
-                    }
+                        "image_url": {"url": encode_file_to_base64(data["input"])},
+                    },
+                ]
+
+                if data.get("reference"):
+                    content.append(
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": encode_file_to_base64(data["reference"])
+                            },
+                        }
+                    )
+
+                payload = {
+                    "model": str(data["model"]),
+                    "messages": [{"role": "user", "content": content}],
+                    "modalities": ["image"],
+                    "response_modalities": ["IMAGE"],
+                }
+
+                # ---------- image_config ----------
+                image_config = {}
+                if data.get("aspect_ratio"):
+                    image_config["aspect_ratio"] = data["aspect_ratio"]
+
+                if data.get("resolution"):
+                    image_config["image_size"] = data["resolution"]
+
+                if image_config:
+                    payload["image_config"] = image_config
+                    payload["extra_body"] = image_config
+
+                headers["Content-Type"] = "application/json"
+
+                print(f"[API] sending request {mask_large_data(payload)}")
+
+                resp = requests.post(
+                    data["apiEndpoint"],
+                    headers=headers,
+                    json=payload,
+                    timeout=300,
                 )
 
-            payload = {
-                "model": str(data["model"]),
-                "messages": [{"role": "user", "content": content}],
-            }
+            elif data["apiEndpoint"].endswith("edits"):
+                print("[API] edits endpoint")
+                payload = {"prompt": str(data["prompt"]), "model": str(data["model"])}
 
-            # ---------- image_config ----------
+                files = {"image": read_file_bytes(data["input"])}
 
-            image_config = {}
+                if data.get("aspect_ratio"):
+                    payload["size"] = data["aspect_ratio"]
 
-            if data.get("aspect_ratio"):
-                image_config["aspect_ratio"] = data["aspect_ratio"]
+                if data.get("resolution"):
+                    payload["quality"] = data["resolution"]
 
-            if data.get("resolution"):
-                image_config["image_size"] = data["resolution"]
-
-            # Gemini-style параметры
-            payload["modalities"] = ["image", "text"]
-            if image_config:
-                payload["image_config"] = image_config
-
-            headers["Content-Type"] = "application/json"
-
-            print(f"[API] sending request {payload}")
-
-            resp = requests.post(
-                data["apiEndpoint"],
-                headers=headers,
-                json=payload,
-                timeout=300,
-            )
+                print(f"[API] sending request {mask_large_data(payload)}")
+                    
+                resp = requests.post(
+                    data["apiEndpoint"],
+                    headers=headers,
+                    files=files,
+                    data=payload,
+                    timeout=300,
+                )
+            else:
+                raise ValueError(f"Unsupported OpenAI endpoint: {data['apiEndpoint']}")
 
             resp.raise_for_status()
 
@@ -508,7 +533,9 @@ def call_external_api(data, out_dir, stop_event):
             data_url = find_image(resp_json)
 
             if not data_url:
-                raise Exception(f"Image not found in response: {resp_json}")
+                raise Exception(
+                    f"Image not found in response: {mask_large_data(resp_json)}"
+                )
 
             base64_data = data_url.split(",", 1)[1]
 
@@ -531,14 +558,6 @@ def call_external_api(data, out_dir, stop_event):
         print("[API ERROR]", e)
 
         send_data_to_jsx({"type": "error", "message": str(e)})
-
-    finally:
-
-        for _, f in files:
-            try:
-                f.close()
-            except:
-                pass
 
 
 def generation_worker():
@@ -748,7 +767,7 @@ def handle_client(client_socket):
 
         # UPDATE
         elif msg_type == "update":
-            print("[INFO] Обновление настроек SD {message}")
+            print(f"[INFO] Обновление настроек SD {message}")
             data = message["message"]
             with urllib.request.urlopen(
                 f"http://{SD_HOST}:{SD_PORT}/sdapi/v1/options"
