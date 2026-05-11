@@ -14,7 +14,7 @@
 </javascriptresource>
 // END__HARVEST_EXCEPTION_ZSTRING
 */
-const ver = 0.524,
+const ver = 0.525,
     SD_HOST = '127.0.0.1',
     SD_PORT = 7860,
     API_HOST = '127.0.0.1',
@@ -880,7 +880,7 @@ function dialogWindow(b, s) {
                 bn = grDl.add('button{preferredSize:[20,-1]}');
             st.text = str.apiAspectRatio
             bn.text = '⚙';
-            bn.helpTip = str.settings
+            bn.helpTip = str.dpopboxSettings
             if (!cfg.current.aspectRatiosList.length) cfg.current.aspectRatiosList = cfg.defaultApiRatios
             fillList()
             bn.onClick = function () {
@@ -907,7 +907,7 @@ function dialogWindow(b, s) {
                 bn = grDl.add('button{preferredSize:[20,-1]}');
             st.text = str.apiResolution
             bn.text = '⚙';
-            bn.helpTip = str.settings
+            bn.helpTip = str.dpopboxSettings
             if (!cfg.current.resolutionList.length) cfg.current.resolutionList = cfg.defaultResolutions
             fillList()
             bn.onClick = function () {
@@ -1403,7 +1403,7 @@ function cloneObject(source, target) {
     }
     var key, i, len;
     if (source instanceof Array) {
-        target = target || new Array(source.length);
+        target = new Array(source.length);
         for (i = 0, len = source.length; i < len; i++) {
             target[i] = cloneObject(source[i], target[i]);
         }
@@ -2400,6 +2400,7 @@ function Locale() {
     this.setMatrixMemory = { ru: 'Размер памяти для вычисления матриц:', en: 'Set memory size for matrix computation:' }
     this.setMemory = 'Inference memory (Mb):'
     this.settings = { ru: 'Настройки скрипта', en: 'Script settings' }
+    this.dpopboxSettings = { ru: 'Настройки', en: 'settings' }
     this.showItems = { ru: 'Показывать опции', en: 'Show items' }
     this.steps = 'Sampling steps'
     this.strength = 'Denoising strength'
